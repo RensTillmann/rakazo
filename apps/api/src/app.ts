@@ -576,6 +576,8 @@ export async function createApp(
       imageTag: env.imageTag,
       integrationsCatalogUrl: env.integrationsCatalogUrl,
       mcpAllowPrivateEndpoint: env.mcpAllowPrivateEndpoint,
+      flagBot: env.flagBot,
+      flagLabel: env.flagLabel,
     },
   });
   const rpc = new RPCHandler(router, {
