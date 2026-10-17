@@ -925,6 +925,7 @@ msgstr "Görselleri okuyamaz"
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/FlagMessageDialog.tsx
 #: src/components/markdown-link-prompt.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/Artifacts.tsx
@@ -1796,6 +1797,10 @@ msgstr "Sıfırlama e-postası gönderilemedi"
 msgid "Could not send that"
 msgstr "Gönderilemedi"
 
+#: src/components/FlagMessageDialog.tsx
+msgid "Could not send the message"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "OAuth başlatılamadı"
@@ -2168,6 +2173,7 @@ msgstr "Docker, ek güvenlik için bilgisayarına erişimi sınırlar. {hostLabe
 msgid "Don’t have an account?"
 msgstr "Hesabın yok mu?"
 
+#: src/components/FlagMessageDialog.tsx
 #: src/lib/ticket-status.ts
 #: src/pages/ActivityList.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -3395,6 +3401,10 @@ msgstr ""
 msgid "Not now"
 msgstr "Şimdi değil"
 
+#: src/components/FlagMessageDialog.tsx
+msgid "Note (optional)"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "Hâlâ çalışan bir şey yok"
@@ -4249,6 +4259,7 @@ msgstr "Bir bot seç"
 msgid "Select a connected model"
 msgstr "Bağlı bir model seçin"
 
+#: src/components/FlagMessageDialog.tsx
 #: src/pages/Shell.tsx
 msgid "Send"
 msgstr "Gönder"
@@ -4282,8 +4293,19 @@ msgid "Send with Enter"
 msgstr "Enter ile gönder"
 
 #: src/components/AskCard.tsx
+#: src/components/FlagMessageDialog.tsx
 msgid "Sending…"
 msgstr "Gönderiliyor…"
+
+#. placeholder {0}: flag.botName
+#: src/components/FlagMessageDialog.tsx
+msgid "Sends this message to {0}, with your note."
+msgstr ""
+
+#. placeholder {0}: flag.botName
+#: src/components/FlagMessageDialog.tsx
+msgid "Sent to {0}."
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -5151,6 +5173,10 @@ msgstr "Bu botun amacı"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "What to return"
 msgstr "Ne döndürülecek"
+
+#: src/components/FlagMessageDialog.tsx
+msgid "What went wrong, or what should be different?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "What to watch"

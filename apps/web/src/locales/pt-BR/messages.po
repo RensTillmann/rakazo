@@ -925,6 +925,7 @@ msgstr "Não pode ler imagens"
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/FlagMessageDialog.tsx
 #: src/components/markdown-link-prompt.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/Artifacts.tsx
@@ -1796,6 +1797,10 @@ msgstr "Não foi possível enviar o e-mail de redefinição"
 msgid "Could not send that"
 msgstr "Não foi possível enviar"
 
+#: src/components/FlagMessageDialog.tsx
+msgid "Could not send the message"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "Não foi possível iniciar o OAuth"
@@ -2168,6 +2173,7 @@ msgstr "O Docker limita o acesso ao seu computador para maior segurança. Usar {
 msgid "Don’t have an account?"
 msgstr "Não tem uma conta?"
 
+#: src/components/FlagMessageDialog.tsx
 #: src/lib/ticket-status.ts
 #: src/pages/ActivityList.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -3395,6 +3401,10 @@ msgstr ""
 msgid "Not now"
 msgstr "Agora não"
 
+#: src/components/FlagMessageDialog.tsx
+msgid "Note (optional)"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "Nada ainda está em execução"
@@ -4249,6 +4259,7 @@ msgstr "Selecione um bot"
 msgid "Select a connected model"
 msgstr "Selecione um modelo conectado"
 
+#: src/components/FlagMessageDialog.tsx
 #: src/pages/Shell.tsx
 msgid "Send"
 msgstr "Enviar"
@@ -4282,8 +4293,19 @@ msgid "Send with Enter"
 msgstr "Enviar com Enter"
 
 #: src/components/AskCard.tsx
+#: src/components/FlagMessageDialog.tsx
 msgid "Sending…"
 msgstr "Enviando…"
+
+#. placeholder {0}: flag.botName
+#: src/components/FlagMessageDialog.tsx
+msgid "Sends this message to {0}, with your note."
+msgstr ""
+
+#. placeholder {0}: flag.botName
+#: src/components/FlagMessageDialog.tsx
+msgid "Sent to {0}."
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -5151,6 +5173,10 @@ msgstr "Para que serve este bot"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "What to return"
 msgstr "O que devolver"
+
+#: src/components/FlagMessageDialog.tsx
+msgid "What went wrong, or what should be different?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "What to watch"
