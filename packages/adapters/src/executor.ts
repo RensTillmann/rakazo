@@ -371,6 +371,8 @@ import {
   attachWorkspaceFileToThread,
   currentTurnFilesInstruction,
   materializeCurrentTurnFiles,
+  materializeRecentThreadFiles,
+  recentThreadFilesInstruction,
 } from "./thread-artifacts.js";
 import type { TicketChangeNotifier } from "./ticket-changes.js";
 import { loadAgentTicketContext } from "./ticket-context.js";
@@ -384,12 +386,14 @@ import {
 import { advanceToolCallLoopGuard, loopGuardStopText } from "./tool-loop.js";
 import { textContentArg } from "./tool-text.js";
 import {
+  assistantTurnSeparator,
   botMessageOutcomeFromMidTurn,
   clampUserProgressMessage,
   extractNarrationText,
   finalBlocksAfterMidTurnProgress,
   isProgressMessageTruncated,
   isUserProgressClientNonce,
+  messageUserMaxLength,
   midTurnProgressBudgetAllows,
   userProgressClientNonce,
 } from "./user-progress.js";
@@ -3951,30 +3955,46 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(() =>
           checkpointRunComputerWorkspace(deps, storedComputer, computer, context),
         );
-        let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>>;
+        let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>> = [];
+        let recentThreadFiles: Awaited<ReturnType<typeof materializeRecentThreadFiles>> = [];
         try {
-          currentTurnFiles = deps.artifacts
-            ? await materializeCurrentTurnFiles(
-                {
-                  prisma: deps.prisma,
-                  artifacts: deps.artifacts,
-                  maxUploadSizeBytes: deps.maxUploadSizeBytes,
-                  sandbox: deps.sandbox,
-                },
-                turnBlocks,
-                {
-                  context,
-                  computer,
-                  computerMode,
-                  markWorkspaceDirty: workspaceCheckpoint.markDirty,
-                },
-              )
-            : [];
+          if (deps.artifacts) {
+            const fileDeps = {
+              prisma: deps.prisma,
+              artifacts: deps.artifacts,
+              maxUploadSizeBytes: deps.maxUploadSizeBytes,
+              sandbox: deps.sandbox,
+            };
+            const fileInput = {
+              context,
+              computer,
+              computerMode,
+              markWorkspaceDirty: workspaceCheckpoint.markDirty,
+            };
+            currentTurnFiles = await materializeCurrentTurnFiles(fileDeps, turnBlocks, fileInput);
+            recentThreadFiles = await materializeRecentThreadFiles(
+              fileDeps,
+              history,
+              historyMessages,
+              {
+                ...fileInput,
+                // Every run copies these again, so they need no checkpoint.
+                markWorkspaceDirty: undefined,
+                skipMessageId: currentTurnMessage?.id,
+                maxTurns: RECENT_TURN_IMAGE_TURNS,
+              },
+            );
+          }
         } catch (error) {
           await workspaceCheckpoint.flush().catch(() => undefined);
           throw error;
         }
-        const attachedFilesPrompt = currentTurnFilesInstruction(currentTurnFiles);
+        const attachedFilesPrompt = [
+          currentTurnFilesInstruction(currentTurnFiles),
+          recentThreadFilesInstruction(recentThreadFiles),
+        ]
+          .filter(Boolean)
+          .join("\n\n");
         const graphical =
           computer.kind !== "desktop" && deps.sandbox.describe().capabilities.graphical;
         // Gate on the model this run will actually call — the pair written to the run row
@@ -4177,6 +4197,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let pendingProgress = "";
         let lastProgressAt = 0;
         let hasStreamedText = false;
+        // Set by a tool call: the next text starts a new assistant turn and needs a break
+        // from the earlier text that stayed in this reply (held-back narration).
+        let assistantTurnBreakPending = false;
         let toolCallStreak: ToolCallStreak = { key: undefined, count: 0 };
         let lastComputerFrameId: string | undefined;
         let unchangedVisualStreak: UnchangedVisualStreak = { count: 0 };
@@ -6564,9 +6587,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "message_user") {
             const rawMessage = redactSecrets(String(args.message ?? ""), runSecrets);
-            const text = clampUserProgressMessage(rawMessage);
+            const maxLength = messageUserMaxLength();
+            const text = clampUserProgressMessage(rawMessage, maxLength);
             if (!text) return finish({ error: "message is required" });
-            const truncated = isProgressMessageTruncated(rawMessage);
+            const truncated = isProgressMessageTruncated(rawMessage, maxLength);
             await flushProgress();
             await publishMidTurnNarration();
             if (!canPublishDurableProgress()) {
@@ -6590,7 +6614,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 ? {
                     ok: true,
                     truncated: true,
-                    note: "This progress update was cut off at 500 characters and the user only saw the truncated version above — it did NOT deliver your full content. message_user is for short interim beats only, never the final answer. Put your complete answer in your normal final reply instead of relying on this truncated update.",
+                    note: `This progress update was cut off at ${maxLength} characters and the user only saw the truncated version above — it did NOT deliver your full content. message_user is for short interim beats only, never the final answer. Put your complete answer in your normal final reply instead of relying on this truncated update.`,
                   }
                 : { ok: true },
             );
@@ -7147,6 +7171,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
 
             if (event.type === "text") {
+              if (assistantTurnBreakPending && event.text) {
+                assistantTurnBreakPending = false;
+                const separator = assistantTurnSeparator(assembled, event.text);
+                if (separator) {
+                  assembled += separator;
+                  currentTextSegment += separator;
+                  pendingProgress += progressRedactor.push(separator);
+                }
+              }
               assembled += event.text;
               currentTextSegment += event.text;
               toolCallStreak = { key: undefined, count: 0 };
@@ -7291,6 +7324,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (event.name !== "message_user") {
                 await publishMidTurnNarration();
               }
+              assistantTurnBreakPending = true;
               await deps.events.append({
                 spaceId: run.spaceId,
                 threadId: thread.id,
@@ -8448,8 +8482,9 @@ export function mayOpenModelStream(
 
 export { isExactNoResponse, NO_RESPONSE, stripNoResponseReply };
 
-export const LONG_WORK_PROGRESS_GUIDANCE =
-  "Send progress updates only when the work will take minutes — long computer tasks or multi-step jobs — never for quick replies and never to announce that you are starting. Even then send at most a few brief updates (a sentence or two each), not one per tool call, and do not narrate routine steps. Thinking stays private. message_user is capped at 500 characters and will be silently cut off if you exceed it \u2014 never put your final answer, a report, or any long-form deliverable in it. Always put the complete final answer in your normal reply, never split across message_user calls, and never assume a message_user update already delivered your content.";
+export function longWorkProgressGuidance(maxLength = messageUserMaxLength()): string {
+  return `Send progress updates only when the work will take minutes — long computer tasks or multi-step jobs — never for quick replies and never to announce that you are starting. Even then send at most a few brief updates (a sentence or two each), not one per tool call, and do not narrate routine steps. Thinking stays private. message_user is capped at ${maxLength} characters and will be silently cut off if you exceed it \u2014 never put your final answer, a report, or any long-form deliverable in it. Always put the complete final answer in your normal reply, never split across message_user calls, and never assume a message_user update already delivered your content.`;
+}
 
 export const ROUTINE_SILENT_REPLY_GUIDANCE = `If this routine's prompt says to stay silent when there is nothing to report, the entire final assistant reply must be exactly ${NO_RESPONSE} — no surrounding prose, no variants, no progress updates, no all-clear, and no meta note that you are staying silent. Do not call message_user unless you have something to report.`;
 
@@ -8471,9 +8506,7 @@ export const TICKET_SILENT_REPLY_GUIDANCE =
 
 export function runReplyGuidance(trigger: string): string {
   if (isBackgroundRunTrigger(trigger)) return TICKET_SILENT_REPLY_GUIDANCE;
-  return runAllowsSilentEmpty(trigger)
-    ? ROUTINE_SILENT_REPLY_GUIDANCE
-    : LONG_WORK_PROGRESS_GUIDANCE;
+  return runAllowsSilentEmpty(trigger) ? ROUTINE_SILENT_REPLY_GUIDANCE : longWorkProgressGuidance();
 }
 
 function replyGuidanceForOfferedTools(
@@ -8481,7 +8514,7 @@ function replyGuidanceForOfferedTools(
   disabled?: ReadonlySet<string>,
 ): string | undefined {
   if (!disabled?.has("message_user")) return guidance;
-  if (guidance === LONG_WORK_PROGRESS_GUIDANCE) {
+  if (guidance === longWorkProgressGuidance()) {
     return "Always put the complete final answer in your normal reply.";
   }
   if (guidance === ROUTINE_SILENT_REPLY_GUIDANCE) {

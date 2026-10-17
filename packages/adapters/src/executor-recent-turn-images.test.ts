@@ -104,6 +104,10 @@ async function runWithModel(
     leaseFence: 0,
   };
   const get = vi.fn(async () => new Uint8Array([1, 2, 3, 4]));
+  const writeFile = vi.fn(async (..._args: unknown[]) => undefined);
+  const exportWorkspace = vi.fn(async function* () {
+    yield* [];
+  });
   const releaseScreen = vi.fn(async (..._args: unknown[]) => undefined);
   let request: AgentRunRequest | undefined;
   const runtimeRun = vi.fn(async function* (next: AgentRunRequest) {
@@ -220,10 +224,9 @@ async function runWithModel(
     sandbox: {
       describe: () => ({ capabilities: { graphical: false } }),
       releaseScreen,
-      writeFile: vi.fn(async () => undefined),
-      async *exportWorkspace() {
-        yield* [];
-      },
+      writeFile,
+      readFile: vi.fn().mockRejectedValue(new Error("missing")),
+      exportWorkspace,
     },
     home: { commit: vi.fn(async () => "fixture-revision") },
     memory: { read: async () => ({ documents: [] }) },
@@ -242,16 +245,37 @@ async function runWithModel(
   expect(runtimeRun).toHaveBeenCalled();
   expect(finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
   if (!request) throw new Error("runtime was not called");
-  return { request, get, prisma, run, releaseScreen, execution, notificationSend };
+  return {
+    request,
+    get,
+    writeFile,
+    exportWorkspace,
+    prisma,
+    run,
+    releaseScreen,
+    execution,
+    notificationSend,
+  };
 }
 
 describe("recent turn images follow model vision", () => {
   it("does not send history images to a text-only model", async () => {
-    const { request, get } = await runWithModel(TEXT_ONLY_MODEL);
+    const { request } = await runWithModel(TEXT_ONLY_MODEL);
 
     expect(request.model.id).toBe(TEXT_ONLY_MODEL);
     expect(request.history.find((entry) => entry.id === "earlier")?.images).toBeUndefined();
-    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("puts an earlier turn's image on the computer so the bot can upload it", async () => {
+    const { request, writeFile, exportWorkspace } = await runWithModel(TEXT_ONLY_MODEL);
+
+    expect(writeFile.mock.calls.map(([, file]) => file)).toEqual([
+      { path: "attachments/art-1.png", content: new Uint8Array([1, 2, 3, 4]) },
+    ]);
+    expect(request.prompt).toContain(
+      'Files attached earlier in this conversation are also on your computer:\n- "shot.png" (image/png, 4 bytes): "attachments/art-1.png"',
+    );
+    expect(exportWorkspace).not.toHaveBeenCalled();
   });
 
   it("attaches an earlier turn's image for a model that can see it", async () => {

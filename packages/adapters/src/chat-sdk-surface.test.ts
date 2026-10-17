@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+import { createSlackAdapter } from "@chat-adapter/slack";
 import { createMockAdapter, createTestMessage } from "@chat-adapter/tests";
 import type { AdapterContext, MessagingInboundEvent } from "@rakazo/adapter-kit";
 import type { Adapter, ChatInstance } from "chat";
@@ -8,6 +10,7 @@ import {
   type MessagingPlatform,
   providerOfThreadId,
 } from "./chat-sdk-surface.js";
+import { enrichSlackTeamRoom } from "./messaging-platforms.js";
 
 const context: AdapterContext = {
   operationId: "op-1",
@@ -96,6 +99,92 @@ function webhookRequest(payload: unknown): Request {
 }
 
 describe("ChatSdkMessagingSurface inbound", () => {
+  it.each([
+    ["UBOT", "mention"],
+    ["UOTHER", "ambient"],
+  ] as const)(
+    "classifies a plain Slack message mentioning %s as %s",
+    async (mentionedUser, kind) => {
+      const signingSecret = "test-slack-signing-secret";
+      const apiRequests: string[] = [];
+      const adapter = createSlackAdapter({
+        botToken: "xoxb-fake",
+        botUserId: "UBOT",
+        signingSecret,
+        // Stub HTTP transport so the real webhook/parser cannot reach Slack.
+        webClientOptions: {
+          adapter: async (config) => {
+            apiRequests.push(config.url ?? "");
+            return {
+              data: { ok: true, user: { name: "test-user", real_name: "Test User" } },
+              status: 200,
+              statusText: "OK",
+              headers: {},
+              config,
+              request: { path: "/api/users.info" },
+            };
+          },
+        },
+      });
+      const surface = new ChatSdkMessagingSurface([
+        {
+          provider: "slack",
+          capabilities: { direct: true, groups: true, typing: false },
+          adapter,
+          enrichTeamRoom: enrichSlackTeamRoom,
+        },
+      ]);
+      const events: MessagingInboundEvent[] = [];
+      surface.onInbound(async (event) => {
+        events.push(event);
+      });
+      const body = JSON.stringify({
+        type: "event_callback",
+        team_id: "TTEST",
+        event_id: "EvTEST",
+        authorizations: [{ user_id: "UBOT", is_bot: true }],
+        event: {
+          type: "message",
+          channel_type: "channel",
+          channel: "CTEST",
+          user: "USENDER",
+          text: `<@${mentionedUser}> ship it?`,
+          ts: "1700000000.000001",
+        },
+      });
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const signature = createHmac("sha256", signingSecret)
+        .update(`v0:${timestamp}:${body}`)
+        .digest("hex");
+
+      try {
+        const response = await surface.handleWebhook(
+          "slack",
+          new Request("https://rakazo.test/api/v1/messaging/webhook/slack", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-slack-request-timestamp": timestamp,
+              "x-slack-signature": `v0=${signature}`,
+            },
+            body,
+          }),
+        );
+
+        expect(response?.status).toBe(200);
+        expect(events).toEqual([
+          expect.objectContaining({ type: "message", provider: "slack", isDirect: false, kind }),
+        ]);
+        expect(apiRequests).toEqual([
+          "https://slack.com/api/users.info",
+          "https://slack.com/api/users.info",
+        ]);
+      } finally {
+        await surface.shutdown();
+      }
+    },
+  );
+
   it("normalizes a DM into a provider-neutral inbound message", async () => {
     const { surface, events } = createSurface();
     const response = await surface.handleWebhook(
@@ -118,6 +207,23 @@ describe("ChatSdkMessagingSurface inbound", () => {
         content: "hello",
         mediaUrl: null,
       },
+    ]);
+  });
+
+  it("flags group messages the SDK detects as bot mentions", async () => {
+    const { surface, events } = createSurface();
+    await surface.handleWebhook(
+      "mock",
+      webhookRequest({ threadId: "mock:C1:1", id: "m-1", text: "@mock-bot ship it?" }),
+    );
+    await surface.handleWebhook(
+      "mock",
+      webhookRequest({ threadId: "mock:C1:1", id: "m-2", text: "ship it?" }),
+    );
+
+    expect(events.map((event) => event.type === "message" && event.mentionsBot)).toEqual([
+      true,
+      undefined,
     ]);
   });
 

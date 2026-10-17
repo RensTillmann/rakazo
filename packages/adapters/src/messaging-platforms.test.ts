@@ -319,20 +319,15 @@ describe("enrichSlackTeamRoom", () => {
     expect(enrichment.kind).toBe("ambient");
   });
 
-  it("marks message events that mention the authorized bot as mention", () => {
-    const enrichment = enrichSlackTeamRoom(
-      {
-        team_id: "T1",
-        authorizations: [{ user_id: "U_BOT", is_bot: true }],
-        event: {
-          type: "message",
-          channel: "C1",
-          text: "hey <@U_BOT> ship Friday?",
-          user: "U_OTHER",
-        },
-      },
-      base,
-    );
-    expect(enrichment.kind).toBe("mention");
+  it("marks a plain message event as mention when the platform reports a bot mention", () => {
+    const raw = {
+      type: "message",
+      channel: "C1",
+      text: "<@U_BOT> respond back please?",
+      user: "U_OTHER",
+      team: "T1",
+    };
+    expect(enrichSlackTeamRoom(raw, { ...base, mentionsBot: true }).kind).toBe("mention");
+    expect(enrichSlackTeamRoom(raw, base).kind).toBe("ambient");
   });
 });

@@ -23,7 +23,12 @@ vi.mock("./bot-messages.js", () => ({
   returnBotMessageOutcome: vi.fn(async () => undefined),
 }));
 
-async function runTurn(finalText: string, silent = true) {
+async function runTurn(
+  finalText: string,
+  silent = true,
+  narration = "I will check that.",
+  secrets: string[] = [],
+) {
   const run = {
     id: "run-1",
     botId: "bot-1",
@@ -36,7 +41,6 @@ async function runTurn(finalText: string, silent = true) {
     sourceMessageId: "source-1",
     leaseFence: 0,
   };
-  const narration = "I will check that.";
   const runtimeRun = vi.fn(async function* (_request: AgentRunRequest) {
     yield { type: "text" as const, text: narration };
     yield {
@@ -132,6 +136,7 @@ async function runTurn(finalText: string, silent = true) {
   const finalizeRun = vi.fn(async (_input: { blocks: MessageBlock[] }) => ({
     continuationRunId: null,
   }));
+  const append = vi.fn(async (_event: { type: string; payload?: unknown }) => undefined);
   const executor = createRunExecutor({
     prisma,
     runtime: {
@@ -148,15 +153,15 @@ async function runTurn(finalText: string, silent = true) {
     home: { commit: vi.fn(async () => "fixture-revision") },
     memory: { read: async () => ({ documents: [] }) },
     memoryProviders: { resolve: async () => null },
-    events: { append: vi.fn(async () => undefined), finalizeRun },
+    events: { append, finalizeRun },
     jobs: { enqueue: vi.fn(async () => undefined) },
-    secrets: [],
+    secrets,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
 
   await executor.continueRun(run.id, "worker-1");
   expect(runtimeRun).toHaveBeenCalled();
   expect(finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
-  return { finalizeRun };
+  return { finalizeRun, append };
 }
 
 describe("withheld narration on short peer turns", () => {
@@ -187,6 +192,36 @@ describe("withheld narration on short reply-producing turns", () => {
     const text = finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")
       .map((block) => block.text)
       .join("");
-    expect(text).toBe(`I will check that.${finalText}`);
+    expect(text).toBe(`I will check that.${finalText ? `\n\n${finalText}` : ""}`);
+  });
+});
+
+describe("text from separate assistant turns", () => {
+  it.each(["The draft is posted.", "The draft is posted at https://example.com/drafts/42"])(
+    "keeps a paragraph break after %j in finalized blocks",
+    async (narration) => {
+      const { finalizeRun } = await runTurn("Nothing has changed since then.", false, narration);
+      const text = finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")
+        .map((block) => block.text)
+        .join("");
+      expect(text).toBe(`${narration}\n\nNothing has changed since then.`);
+    },
+  );
+
+  it("streams the break when the redactor holds all pre-tool text", async () => {
+    const narration = "I will check that.";
+    const finalText = "Checked: all clear.";
+    const { append } = await runTurn(finalText, false, narration, [
+      "fake-secret-longer-than-the-entire-reply-for-redactor-buffering",
+    ]);
+    const text = append.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.type === "thread.progress")
+      .map((event) => {
+        const payload = event.payload as { text?: string; delta?: string };
+        return payload.text ?? payload.delta ?? "";
+      })
+      .join("");
+    expect(text).toBe(`${narration}\n\n${finalText}`);
   });
 });
