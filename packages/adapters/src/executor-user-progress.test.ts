@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { loadBotMessageContext, returnBotMessageOutcome } from "./bot-messages.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
+import { createJobReconciler } from "./job-reconciler.js";
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
@@ -201,7 +202,7 @@ describe("withheld narration on short peer turns", () => {
 
 describe("held-back narration on peer requests", () => {
   it.each(["request", "question"] as const)(
-    "returns the last non-empty narration as status for an empty %s reply",
+    "saves the last non-empty narration as the final result for an empty %s reply",
     async (intent) => {
       vi.mocked(returnBotMessageOutcome).mockClear();
       const { finalizeRun, append } = await runTurn(
@@ -215,7 +216,7 @@ describe("held-back narration on peer requests", () => {
         expect.objectContaining({ outcome: "completed" }),
       );
       expect(finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")).toEqual(
-        [],
+        [{ kind: "text", text: "The draft is posted." }],
       );
       expect(append.mock.calls.map(([event]) => event.type)).not.toContain(
         "thread.message.created",
@@ -225,7 +226,45 @@ describe("held-back narration on peer requests", () => {
         expect.anything(),
         expect.anything(),
         "The draft is posted.",
-        "status",
+        "result",
+      );
+
+      // A worker stopping after finalizeRun leaves only these saved blocks for retry.
+      vi.mocked(returnBotMessageOutcome).mockClear();
+      const terminalRun = {
+        id: "run-1",
+        status: "completed",
+        botId: "bot-1",
+        bot: { name: "Assistant" },
+      };
+      const reconciler = createJobReconciler({
+        prisma: {
+          run: {
+            findMany: vi.fn(async ({ where }: { where: { trigger?: string } }) =>
+              where.trigger === "bot_message" ? [terminalRun] : [],
+            ),
+            updateMany: vi.fn(async () => ({ count: 1 })),
+          },
+          routine: { findMany: vi.fn(async () => []) },
+          computer: { findMany: vi.fn(async () => []) },
+          messagingOutbound: { findFirst: vi.fn(async () => null) },
+          message: {
+            findMany: vi.fn(async () => [
+              { blocks: finalizeRun.mock.calls[0]![0].blocks, clientNonce: null },
+            ]),
+          },
+        },
+        jobs: { enqueue: vi.fn() },
+        events: {},
+      } as unknown as Parameters<typeof createJobReconciler>[0]);
+      await reconciler.reconcileOnce();
+      expect(returnBotMessageOutcome).toHaveBeenCalledExactlyOnceWith(
+        expect.anything(),
+        terminalRun,
+        { id: "bot-1", name: "Assistant" },
+        "The draft is posted.",
+        "result",
+        { forceUnread: false },
       );
     },
   );
