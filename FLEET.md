@@ -24,6 +24,7 @@ was built from on 2026-10-15. On top of it:
 | Add a Forward to bot message action behind RAKAZO_FLAG_BOT (`bb6efae`, merged in `d8343bd`; flag never answers an ask: `fd363f3`, merged in `a55ea97`) | A bot message's More menu gets an extra item that opens a small window with an optional note and Send. Send posts one message, in Rens's name, in the chat of the bot named in the setting, and wakes that bot. The message holds the note, which bot and chat it came from, the message id, run id and time, a link to the message, and the first 500 characters of it. Without the setting the item is hidden and the server refuses. The forwarded message is always a new request: if that bot is busy or waiting on a question card (for example Apply / Later / Drop), the card stays open and the message waits, then starts its own run when the bot's current run ends. | `RAKAZO_FLAG_BOT` (bot name or id; unset = off), `RAKAZO_FLAG_LABEL` (menu label, default "Forward to bot…") | not yet |
 | Stop a run at a configurable budget and let the bot write one final line (`4b262a8`, merged in `85344bc`) | A run stops after a maximum number of model calls or minutes, whichever comes first. Then tools are off, the bot gets one last turn to write one line (what it did and what is blocked), and the run ends as completed with that line. If that last turn fails, the run ends with a fixed line instead ("I stopped because this task reached its limit…"). A tool that is already running is not cut off: a hung shell command runs until its own 5-minute timeout and that time counts. Only the bot's own model calls count, not a subagent's. | `RAKAZO_RUN_MAX_MODEL_CALLS`, `RAKAZO_RUN_MAX_MINUTES` (each unset = no limit) | not yet |
 | Refuse shell commands that start a browser for a bot without browser tools (`dccb3e1`, merged in `419b22b`) | For a bot whose browser is off (`browser_navigate` among its turned-off tools), the shell refuses a command that starts `chromium`, `chrome`, `google-chrome`, `firefox`, `playwright` or `puppeteer`, also by path (`/usr/bin/chromium`), after `timeout`, `xvfb-run`, `env` or `nohup`, through `npx`, or inside `bash -c`. The bot reads: "This bot has no browser. Hand the task to a teammate who has one (see your teammates list)." A browser word elsewhere (`git log --grep chrome`) is fine. Not caught: a browser started from inside a script. Bots with the browser on are unchanged. | none (follows the bot's browser switch) | not yet |
+| Mark mid-turn narration and let the user toggle it ("Show thoughts") (`285ba19`, merged in `db6ebaa`) | In runs Rens starts, text a bot writes just before a tool call is still saved as a chat message, but marked as narration. The chat header gets a "Show thoughts" button (lightbulb), stored per browser, default off: off hides that narration (and messages made only of it); on shows it small, grey and italic. `message_user` updates, question cards and final replies are never marked; older messages show as before. The live "working…" line is unchanged. Bot-to-bot and routine runs still drop narration. | none (per-browser toggle) | not yet |
 | Fleet: how to build, switch and update | This file. Never sent upstream. | — | — |
 
 Related upstream issues (no fleet patch): [#1454](https://github.com/elie222/rakazo/issues/1454)
@@ -36,13 +37,18 @@ merges, the rebase drops or shrinks the matching fleet commit.
 
 None of the patches touch the database. Every setting defaults to upstream behaviour,
 so an image built from `fleet` with no new settings behaves like upstream apart from the
-narration and `fyi` changes and the browser lock (bots with the browser off).
+narration and `fyi` changes, the browser lock (bots with the browser off) and the hidden
+thoughts (the "Show thoughts" toggle starts off).
 
 **Running now (17 Oct 2026):** image `rakazo-fleet/app:b0c611d` (fleet at `b0c611d6`), with
 `RAKAZO_MESSAGE_USER_MAX_CHARS=4000` in `D:/rakazo/.env`. Database backup taken just before
 the switch: `D:/rakazo/backups/pre-fleet-20261017.dump`.
 
-**Built and tested, not running (18 Oct 2026):** image `rakazo-fleet/app:419b22b` (fleet
+**Built and tested, not running (18 Oct 2026):** image `rakazo-fleet/app:db6ebaa` (fleet
+at `db6ebaa2`) = `419b22b` plus the "Show thoughts" toggle. No new setting; it uses the
+same `.env` lines as `419b22b` below.
+
+Previous build: image `rakazo-fleet/app:419b22b` (fleet
 at `419b22b2`). On top of `b0c611d` it adds the Forward to bot action (the forwarded
 message never answers an open question card), the run budget and the browser lock. It
 replaces `rakazo-fleet/app:a55ea97` (Forward to bot only) and `rakazo-fleet/app:d8343bd`
