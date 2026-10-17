@@ -4410,6 +4410,10 @@ msgstr "Show selected"
 msgid "Show settings"
 msgstr "Show settings"
 
+#: src/pages/Shell.tsx
+msgid "Show thoughts"
+msgstr "Show thoughts"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Show tool activity"
 msgstr "Show tool activity"

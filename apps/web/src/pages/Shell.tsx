@@ -100,6 +100,7 @@ import {
   FolderOpen,
   Gauge,
   LayoutGrid,
+  Lightbulb,
   Lock,
   LogOut,
   Maximize2,
@@ -173,6 +174,12 @@ import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
 import { TeachRecordingChrome, TeachStopButton } from "../components/teach/TeachRecordingChrome";
 import { readActivityMode, writeActivityMode } from "../lib/activity-mode";
+import {
+  readShowThoughts,
+  subscribeShowThoughts,
+  withThoughtsVisibility,
+  writeShowThoughts,
+} from "../lib/show-thoughts";
 import type { ArtifactTarget } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
 import {
@@ -517,6 +524,7 @@ function SpaceShell() {
     getToolActivityEnabled,
     () => true,
   );
+  const showThoughts = useSyncExternalStore(subscribeShowThoughts, readShowThoughts, () => false);
   const botsSidebarDensity = useSyncExternalStore(
     subscribeBotsSidebarDensity,
     getBotsSidebarDensity,
@@ -2051,8 +2059,11 @@ function SpaceShell() {
     rememberSeenRunErrorId(runId);
   }, []);
   const transcript = useMemo(
-    () => foldPeerReplies(activeSnapshot?.messages ?? [], { includePeerReceipts: true }),
-    [activeSnapshot?.messages],
+    () =>
+      foldPeerReplies(withThoughtsVisibility(activeSnapshot?.messages ?? [], showThoughts), {
+        includePeerReceipts: true,
+      }),
+    [activeSnapshot?.messages, showThoughts],
   );
   const transcriptRef = useRef(transcript);
   useLayoutEffect(() => {
@@ -3989,6 +4000,24 @@ function SpaceShell() {
                 <Phone size={17} strokeWidth={1.6} className="text-foreground/75" />
               </button>
             ) : null}
+            <button
+              type="button"
+              data-testid="show-thoughts-toggle"
+              aria-label={t`Show thoughts`}
+              aria-pressed={showThoughts}
+              title={t`Show thoughts`}
+              onClick={() => writeShowThoughts(!showThoughts)}
+              data-active={showThoughts ? "" : undefined}
+              className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
+            >
+              <Lightbulb
+                size={18}
+                strokeWidth={1.6}
+                fill={showThoughts ? "currentColor" : "none"}
+                className="text-foreground/75"
+                aria-hidden="true"
+              />
+            </button>
             {!inGroup && active ? (
               <button
                 type="button"
@@ -7247,6 +7276,12 @@ const MessageView = memo(function MessageView({
                   <div
                     key={i}
                     data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
+                    data-narration={block.kind === "text" && block.narration ? "" : undefined}
+                    className={
+                      block.kind === "text" && block.narration
+                        ? "text-[13.5px] italic text-muted-foreground"
+                        : undefined
+                    }
                   >
                     <ChatMarkdown streaming={block.kind === "progress"}>{block.text}</ChatMarkdown>
                   </div>
@@ -7526,7 +7561,12 @@ const MessageView = memo(function MessageView({
             >
               <div
                 data-testid="message-bot-bubble"
-                className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+                data-narration={block.narration ? "" : undefined}
+                className={`max-w-full rounded-[20px] bg-muted px-[18px] py-3 leading-[1.5] ${
+                  block.narration
+                    ? "text-[13.5px] italic text-muted-foreground"
+                    : "text-[15.5px] text-foreground/90"
+                }`}
                 dir="auto"
               >
                 <div data-quote-message-id={quoteMessageId}>
