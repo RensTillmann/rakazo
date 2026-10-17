@@ -2641,6 +2641,120 @@ export function desktopProtectionGuardMessage(reason: string): string {
   return `This command was not run: desktop-protection guard: ${reason}. Shell access is still available. Do not stop or restart browser or desktop processes.`;
 }
 
+/** Shell refusal for a bot whose browser tools are off (`browser_navigate` disabled). */
+export const NO_BROWSER_SHELL_MESSAGE =
+  "This bot has no browser. Hand the task to a teammate who has one (see your teammates list).";
+
+const BROWSER_PROGRAM_NAMES =
+  /^(?:chromium(?:-browser)?|chrome|google-chrome(?:-stable|-beta|-unstable)?|chrome-headless-shell|headless_shell|firefox(?:-esr)?|playwright|puppeteer)$/;
+const BROWSER_PACKAGE_NAMES = /^(?:playwright|puppeteer)$/;
+const PACKAGE_RUNNER_NAMES = /^(?:npx|bunx|pnpx)$/;
+/** Wrappers that run the next word as a command, with their options that take a value. */
+const COMMAND_WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  timeout: ["-s", "--signal", "-k", "--kill-after"],
+  "xvfb-run": [
+    "-n",
+    "--server-num",
+    "-s",
+    "--server-args",
+    "-e",
+    "--error-file",
+    "-f",
+    "--auth-file",
+    "-p",
+    "--xauth-protocol",
+    "-w",
+    "--wait",
+  ],
+  env: ["-u", "--unset", "-C", "--chdir"],
+  nohup: [],
+  exec: ["-a"],
+  setsid: [],
+  nice: ["-n", "--adjustment"],
+  sudo: ["-u", "--user", "-g", "--group"],
+};
+
+/** Whether one simple command, as its words, starts a browser. */
+function simpleCommandStartsBrowser(words: readonly string[]): boolean {
+  let index = 0;
+  let name = "";
+  for (;;) {
+    const word = words[index];
+    if (word === undefined) return false;
+    name = (word.split("/").at(-1) ?? "").toLowerCase();
+    if (/^[a-z_][a-z0-9_]*=/i.test(word)) {
+      index += 1;
+      continue;
+    }
+    const valueOptions = Object.hasOwn(COMMAND_WRAPPER_VALUE_OPTIONS, name)
+      ? COMMAND_WRAPPER_VALUE_OPTIONS[name]
+      : undefined;
+    if (!valueOptions) break;
+    index += 1;
+    while (words[index]?.startsWith("-")) {
+      index += valueOptions.includes(words[index] ?? "") ? 2 : 1;
+    }
+    // timeout's duration comes before the command.
+    if (name === "timeout") index += 1;
+  }
+  if (BROWSER_PROGRAM_NAMES.test(name)) return true;
+  if (SHELL_INTERPRETER_NAMES.test(name)) {
+    const program = shellCFlagProgram(words, index);
+    return program !== undefined && shellCommandStartsBrowser(program);
+  }
+  // `npx playwright`, `npx -y puppeteer@22`, `pnpm dlx playwright`, `python3 -m playwright`.
+  const rest = words.slice(index + 1);
+  let packageName: string | undefined;
+  if (PACKAGE_RUNNER_NAMES.test(name)) {
+    packageName = rest.find((word) => !word.startsWith("-"));
+  } else if ((name === "pnpm" || name === "yarn") && (rest[0] === "dlx" || rest[0] === "exec")) {
+    packageName = rest.slice(1).find((word) => !word.startsWith("-"));
+  } else if (/^python(?:3(?:\.\d+)?)?$/.test(name) && rest.includes("-m")) {
+    packageName = rest[rest.indexOf("-m") + 1];
+  }
+  return (
+    packageName !== undefined &&
+    BROWSER_PACKAGE_NAMES.test(packageName.toLowerCase().replace(/(?!^)@.*$/, ""))
+  );
+}
+
+/**
+ * Whether `command` starts a browser: as the command itself (also by path), after a
+ * wrapper such as timeout, xvfb-run or env, through npx, or inside `bash -c`.
+ * A browser word elsewhere (`git log --grep chrome`) does not count, and neither
+ * does a browser started from inside a script.
+ */
+export function shellCommandStartsBrowser(command: string): boolean {
+  let entries;
+  try {
+    entries = parseShellCommand(preserveShellCommandBoundaries(command), (name) => `$${name}`);
+  } catch {
+    return false;
+  }
+  let words: string[] = [];
+  let redirectTarget = false;
+  for (const entry of entries) {
+    if (typeof entry === "string") {
+      if (redirectTarget) redirectTarget = false;
+      else words.push(entry);
+      continue;
+    }
+    if ("comment" in entry) break;
+    if (entry.op === "glob") {
+      if ("pattern" in entry && typeof entry.pattern === "string") words.push(entry.pattern);
+      continue;
+    }
+    if (/^(?:&&|\|\||;;?|\|&?|&|\(|\))$/.test(entry.op)) {
+      if (simpleCommandStartsBrowser(words)) return true;
+      words = [];
+      redirectTarget = false;
+    } else {
+      redirectTarget = true;
+    }
+  }
+  return simpleCommandStartsBrowser(words);
+}
+
 /** Cap the roster so a large Space cannot flood the prompt. */
 const BOT_DIRECTORY_LIMIT = 40;
 /** A routine run stopped by a transient model error gets one more try this much later. */
@@ -5322,6 +5436,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "shell") {
             const command = String(args.command ?? args.cmd ?? "");
+            // No browser tools for this bot: shell must not start a browser instead.
+            if (disabledBuiltinTools.has("browser_navigate") && shellCommandStartsBrowser(command)) {
+              return finish({ error: NO_BROWSER_SHELL_MESSAGE });
+            }
             const refusal = protectedComputerLifecycleRefusal(command);
             if (graphical && refusal) {
               return finish({ error: desktopProtectionGuardMessage(refusal) });
