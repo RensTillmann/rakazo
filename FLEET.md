@@ -17,11 +17,19 @@ was built from on 2026-10-15. On top of it:
 
 | Commit | What it changes | Setting | Upstream PR |
 |---|---|---|---|
-| Drop mid-turn narration in bot-to-bot runs | Text a bot writes just before a tool call is no longer saved as a chat bubble in runs started by another bot's message (`bot_message`). It still shows briefly as the live "working…" line. Runs Rens starts are unchanged. | none | not opened yet |
-| Default message_bot to fyi and make the hop limit configurable | A `message_bot` call without an `intent` is sent as `fyi` (no automatic reply back), not `request`. The bot-to-bot chain limit can be changed. | `BOT_MESSAGE_MAX_HOPS` (default 6) | not opened yet |
-| Make the message_user length cap configurable | The 500-character cap on `message_user` can be raised. The tool schema, the tool description, the truncation note and the system-prompt guidance all state the configured number. Mid-turn narration keeps 500. | `RAKAZO_MESSAGE_USER_MAX_CHARS` (default 500) | not opened yet |
-| Keep the prompt cache when a user message arrives mid-run | Messages added during a run (the empty-reply continuation, steering, finished-shell notices) get their own slot instead of pushing the oldest history message out, so the earlier conversation stays byte-identical and is read from the prompt cache instead of re-written. History cap and tool-result shortening unchanged. Replay of the 17 Oct ticket: about 22% cheaper. | none | not opened yet |
+| Drop mid-turn narration in bot-to-bot runs | Text a bot writes just before a tool call is no longer saved as a chat bubble in runs started by another bot's message (`bot_message`). It still shows briefly as the live "working…" line. Runs Rens starts are unchanged. | none | [#1451](https://github.com/elie222/rakazo/pull/1451) |
+| Default message_bot to fyi and make the hop limit configurable | A `message_bot` call without an `intent` is sent as `fyi` (no automatic reply back), not `request`. The bot-to-bot chain limit can be changed. | `BOT_MESSAGE_MAX_HOPS` (default 6) | Hop limit only: [#1452](https://github.com/elie222/rakazo/pull/1452). The `fyi` default stays fleet-only. If #1452 merges, take upstream's version of the hop limit and keep only the `fyi` default in this commit. |
+| Make the message_user length cap configurable | The 500-character cap on `message_user` can be raised. The tool schema, the tool description, the truncation note and the system-prompt guidance all state the configured number. Mid-turn narration keeps 500. | `RAKAZO_MESSAGE_USER_MAX_CHARS` (default 500) | [#1453](https://github.com/elie222/rakazo/pull/1453) |
+| Keep the prompt cache when a user message arrives mid-run | Messages added during a run (the empty-reply continuation, steering, finished-shell notices) get their own slot instead of pushing the oldest history message out, so the earlier conversation stays byte-identical and is read from the prompt cache instead of re-written. History cap and tool-result shortening unchanged. Replay of the 17 Oct ticket: about 22% cheaper. | none | [#1450](https://github.com/elie222/rakazo/pull/1450) |
 | Fleet: how to build, switch and update | This file. Never sent upstream. | — | — |
+
+Related upstream issues (no fleet patch): [#1454](https://github.com/elie222/rakazo/issues/1454)
+(final reply joins text from separate turns) and
+[#1455](https://github.com/elie222/rakazo/issues/1455) (sidebar time shows the bot's last
+settings change). The PRs were opened from the `pr/*` branches on the fork, based on
+upstream `7f9b9ad`. `pr/message-user-max-chars` already resolves the known #1401 conflict
+(see "Take upstream updates"); copy that resolution when rebasing `fleet`. Once a PR
+merges, the rebase drops or shrinks the matching fleet commit.
 
 None of the patches touch the database. Every setting defaults to upstream behaviour,
 so an image built from `fleet` with no new settings behaves like upstream apart from the
