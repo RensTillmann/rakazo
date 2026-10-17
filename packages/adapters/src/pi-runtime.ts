@@ -97,6 +97,8 @@ interface ToolCallBudget {
 }
 // Optional fuse is process-local. continueRun on another worker starts at zero.
 const toolCallBudgetsByRun = new Map<string, ToolCallBudget>();
+/** Model calls and active time a run used before it paused, so a resume continues the count. */
+const runBudgetUsageByRun = new Map<string, { modelCalls: number; usedMs: number }>();
 // Built on first use, not at module load: entry points call loadRootEnv() after
 // their imports, and ESM hoists those imports, so module-level env reads here
 // would run before .env is loaded and miss the local provider entirely.
@@ -156,10 +158,55 @@ export function maxToolCallsPerTurn(env: NodeJS.ProcessEnv = process.env): numbe
   return Math.floor(parsed);
 }
 
+export interface RunBudgetLimits {
+  /** Top-level model calls per run; 0 means unlimited. */
+  maxModelCalls: number;
+  /** Active run time in milliseconds; 0 means unlimited. */
+  maxMs: number;
+}
+
+/**
+ * Optional per-run budget. Unset, empty, 0, or invalid means unlimited (default).
+ * RAKAZO_RUN_MAX_MINUTES may be fractional.
+ */
+export function runBudgetLimits(env: NodeJS.ProcessEnv = process.env): RunBudgetLimits {
+  const positive = (raw: string | undefined) => {
+    const parsed = Number(raw?.trim() || "0");
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
+  return {
+    maxModelCalls: Math.floor(positive(env.RAKAZO_RUN_MAX_MODEL_CALLS)),
+    maxMs: Math.round(positive(env.RAKAZO_RUN_MAX_MINUTES) * 60_000),
+  };
+}
+
+export const RUN_BUDGET_FINAL_PROMPT =
+  "Budget reached: this task hit its limit and tools are now off. Do not call any tools. In one line: what you did and what is blocked.";
+/** Published when the budget's final turn fails or writes nothing. */
+export const RUN_BUDGET_FALLBACK_TEXT =
+  "I stopped because this task reached its limit, before I could write a summary. Send another message to continue.";
+const RUN_BUDGET_TOOL_REFUSAL =
+  "Not run: this task reached its limit and tools are now off. Answer in one line without tools.";
+
+function runBudgetReachedReason(
+  limits: RunBudgetLimits,
+  usage: { modelCalls: number; usedMs: number },
+): string | undefined {
+  if (limits.maxModelCalls > 0 && usage.modelCalls >= limits.maxModelCalls) {
+    return `${limits.maxModelCalls} model calls`;
+  }
+  if (limits.maxMs > 0 && usage.usedMs >= limits.maxMs) {
+    return `${Math.round((limits.maxMs / 60_000) * 10) / 10} minutes`;
+  }
+  return undefined;
+}
+
 export interface PiAgentRuntimeOptions {
   /** Directory where Pi JSONL sessions are written. Omit to disable recording. */
   sessionRoot?: string;
   modelCallObserver?: ModelCallObserver;
+  /** Clock for the run budget (RAKAZO_RUN_MAX_MINUTES). Tests pass a fake one. */
+  now?: () => number;
   /** Sanitized per-call selection telemetry; never includes prompt or credentials. */
   onContextDecision?: (
     decision: RuntimeContextDecision & {
@@ -174,10 +221,12 @@ export class PiAgentRuntime implements AgentRuntime {
   private readonly sessionRecorder?: PiSessionRecorder;
   private readonly modelCallObserver?: ModelCallObserver;
   private readonly onContextDecision?: PiAgentRuntimeOptions["onContextDecision"];
+  private readonly now: () => number;
 
   constructor(options: PiAgentRuntimeOptions = {}) {
     this.modelCallObserver = options.modelCallObserver;
     this.onContextDecision = options.onContextDecision;
+    this.now = options.now ?? Date.now;
     this.sessionRecorder = options.sessionRoot
       ? new PiJsonlSessionRecorder(options.sessionRoot)
       : undefined;
@@ -240,6 +289,20 @@ export class PiAgentRuntime implements AgentRuntime {
     const work = withPiTelemetry(request, async (span) => {
       let trackedBudget: ToolCallBudget | undefined;
       let resumeHost: ToolHost | undefined;
+      // Run budget: counts top-level model requests and active time, carried over a pause.
+      const now = this.now;
+      const budgetLimits = runBudgetLimits();
+      const budgetStartedAt = now();
+      const budgetCarried = runBudgetUsageByRun.get(request.runId);
+      runBudgetUsageByRun.delete(request.runId);
+      let budgetModelCalls = budgetCarried?.modelCalls ?? 0;
+      const budgetUsage = () => ({
+        modelCalls: budgetModelCalls,
+        usedMs: (budgetCarried?.usedMs ?? 0) + now() - budgetStartedAt,
+      });
+      let budgetFinalTurn = false;
+      let budgetFinalMessage: AssistantMessage | undefined;
+      let streamedBeforeBudgetFinal = 0;
       try {
         const selectedModel = resolveRuntimeModel(request.model);
         if (!selectedModel.model) {
@@ -427,6 +490,11 @@ export class PiAgentRuntime implements AgentRuntime {
                 : request.model.maxImagesPerPrompt,
             ),
           finishTurn: async (turn, turnSignal) => {
+            if (budgetFinalTurn) {
+              // The budget's one final turn: end here, even if the model asked for tools.
+              budgetFinalMessage = turn.message;
+              return { action: "end" as const };
+            }
             await deliverFinishedShells(
               (text) => {
                 agent.followUp({
@@ -439,7 +507,36 @@ export class PiAgentRuntime implements AgentRuntime {
               turn,
               turnSignal,
             );
+            return undefined;
           },
+          // Every top-level model request passes here, so it is where the budget counts.
+          // Once a limit is reached, the request becomes the final turn.
+          prepareRequest: ({ context: requestContext }) => {
+            if (budgetFinalTurn) return undefined;
+            const reached = runBudgetReachedReason(budgetLimits, budgetUsage());
+            budgetModelCalls += 1;
+            if (!reached) return undefined;
+            budgetFinalTurn = true;
+            streamedBeforeBudgetFinal = streamed.length;
+            queue.push({
+              type: "progress",
+              text: `Stopped: this task reached its limit of ${reached}.`,
+            });
+            return {
+              context: {
+                ...requestContext,
+                messages: [
+                  ...requestContext.messages,
+                  { role: "user", content: RUN_BUDGET_FINAL_PROMPT, timestamp: Date.now() },
+                ],
+              },
+            };
+          },
+          beforeToolCall: async () =>
+            budgetFinalTurn ||
+            (budgetLimits.maxMs > 0 && budgetUsage().usedMs >= budgetLimits.maxMs)
+              ? { block: true, reason: RUN_BUDGET_TOOL_REFUSAL }
+              : undefined,
           prepareNextTurnWithContext: async () => {
             if (!request.claimSteering) return undefined;
             const steering = await request.claimSteering([...seenSteeringIds]);
@@ -489,7 +586,7 @@ export class PiAgentRuntime implements AgentRuntime {
             await piSession?.appendMessage(event.message);
           }
           if (event.type === "tool_execution_start") {
-            if (host.toolCallBudget.exceeded) return;
+            if (host.toolCallBudget.exceeded || budgetFinalTurn) return;
             toolCalls += 1;
             // Live activity feedback: without this the thread shows a bare
             // "working…" for the whole tool call with nothing actionable.
@@ -597,6 +694,31 @@ export class PiAgentRuntime implements AgentRuntime {
           }
         }
 
+        // The run budget's final turn ends the run as completed with its one line,
+        // or with a fixed line when that turn failed or wrote nothing.
+        if (budgetFinalTurn && !signal.aborted && !host.toolCallBudget.exceeded) {
+          const failed =
+            !budgetFinalMessage ||
+            Boolean(agent.state.errorMessage) ||
+            providerFailureText(budgetFinalMessage) !== undefined;
+          const reply = failed ? "" : assistantText(budgetFinalMessage).trim();
+          const sinceFinal = streamed.slice(streamedBeforeBudgetFinal);
+          let tail = reply;
+          if (!reply) {
+            tail = sinceFinal.trim() ? `\n\n${RUN_BUDGET_FALLBACK_TEXT}` : RUN_BUDGET_FALLBACK_TEXT;
+          } else if (sinceFinal.includes(reply)) {
+            tail = "";
+          } else if (sinceFinal && reply.startsWith(sinceFinal)) {
+            tail = reply.slice(sinceFinal.length);
+          }
+          if (tail) {
+            queue.push({ type: "text", text: tail });
+            streamed += tail;
+          }
+          queue.push({ type: "done", text: streamed });
+          return;
+        }
+
         // Budget abort stops the agent underneath the model, which leaves
         // errorMessage set. Treat that as a soft stop so the turn still ends
         // with a durable assistant message instead of a failed run.
@@ -676,6 +798,12 @@ export class PiAgentRuntime implements AgentRuntime {
           const keepForResume =
             (signal.aborted || Boolean(resumeHost?.pausePending)) && !trackedBudget.exceeded;
           releaseToolCallBudget(request.runId, keepForResume);
+        }
+        if (
+          (budgetLimits.maxModelCalls > 0 || budgetLimits.maxMs > 0) &&
+          (signal.aborted || Boolean(resumeHost?.pausePending))
+        ) {
+          runBudgetUsageByRun.set(request.runId, budgetUsage());
         }
       }
     });
