@@ -30,8 +30,9 @@ export function midTurnProgressBudgetAllows(publishedCount: number, turnAgeMs: n
  */
 export function messageUserMaxLength(): number {
   const value = process.env.RAKAZO_MESSAGE_USER_MAX_CHARS?.trim();
-  const raw = Number(value || USER_PROGRESS_MESSAGE_MAX_LENGTH);
-  return Number.isInteger(raw) && raw >= 1 ? raw : USER_PROGRESS_MESSAGE_MAX_LENGTH;
+  if (!value || !/^\d+$/.test(value)) return USER_PROGRESS_MESSAGE_MAX_LENGTH;
+  const raw = Number(value);
+  return Number.isSafeInteger(raw) && raw >= 1 ? raw : USER_PROGRESS_MESSAGE_MAX_LENGTH;
 }
 
 export function clampUserProgressMessage(

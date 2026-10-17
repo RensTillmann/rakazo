@@ -65,7 +65,7 @@ describe("messageUserMaxLength", () => {
     expect(longWorkProgressGuidance()).toContain("message_user is capped at 4000 characters");
   });
 
-  it.each(["", " ", "0", "-5", "12.5", "NaN", "Infinity", "lots", "4000chars"])(
+  it.each(["", " ", "0", "-5", "12.5", "NaN", "Infinity", "lots", "4000chars", "1e3", "0x10"])(
     "falls back to 500 for RAKAZO_MESSAGE_USER_MAX_CHARS=%j",
     (value) => {
       vi.stubEnv("RAKAZO_MESSAGE_USER_MAX_CHARS", value);
