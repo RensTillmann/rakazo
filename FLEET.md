@@ -21,7 +21,7 @@ was built from on 2026-10-15. On top of it:
 | Default message_bot to fyi and make the hop limit configurable | A `message_bot` call without an `intent` is sent as `fyi` (no automatic reply back), not `request`. The bot-to-bot chain limit can be changed. | `BOT_MESSAGE_MAX_HOPS` (default 6) | Hop limit only: [#1452](https://github.com/elie222/rakazo/pull/1452). The `fyi` default stays fleet-only. If #1452 merges, take upstream's version of the hop limit and keep only the `fyi` default in this commit. |
 | Make the message_user length cap configurable | The 500-character cap on `message_user` can be raised. The tool schema, the tool description, the truncation note and the system-prompt guidance all state the configured number. Mid-turn narration keeps 500. | `RAKAZO_MESSAGE_USER_MAX_CHARS` (default 500) | [#1453](https://github.com/elie222/rakazo/pull/1453) |
 | Keep the prompt cache when a user message arrives mid-run | Messages added during a run (the empty-reply continuation, steering, finished-shell notices) get their own slot instead of pushing the oldest history message out, so the earlier conversation stays byte-identical and is read from the prompt cache instead of re-written. History cap and tool-result shortening unchanged. Replay of the 17 Oct ticket: about 22% cheaper. | none | [#1450](https://github.com/elie222/rakazo/pull/1450) |
-| Add a Forward to bot message action behind RAKAZO_FLAG_BOT (`bb6efae`, merged in `d8343bd`) | A bot message's More menu gets an extra item that opens a small window with an optional note and Send. Send posts one message, in Rens's name, in the chat of the bot named in the setting, and wakes that bot. The message holds the note, which bot and chat it came from, the message id, run id and time, a link to the message, and the first 500 characters of it. Without the setting the item is hidden and the server refuses. | `RAKAZO_FLAG_BOT` (bot name or id; unset = off), `RAKAZO_FLAG_LABEL` (menu label, default "Forward to bot…") | not yet |
+| Add a Forward to bot message action behind RAKAZO_FLAG_BOT (`bb6efae`, merged in `d8343bd`; flag never answers an ask: `fd363f3`, merged in `a55ea97`) | A bot message's More menu gets an extra item that opens a small window with an optional note and Send. Send posts one message, in Rens's name, in the chat of the bot named in the setting, and wakes that bot. The message holds the note, which bot and chat it came from, the message id, run id and time, a link to the message, and the first 500 characters of it. Without the setting the item is hidden and the server refuses. The forwarded message is always a new request: if that bot is busy or waiting on a question card (for example Apply / Later / Drop), the card stays open and the message waits, then starts its own run when the bot's current run ends. | `RAKAZO_FLAG_BOT` (bot name or id; unset = off), `RAKAZO_FLAG_LABEL` (menu label, default "Forward to bot…") | not yet |
 | Fleet: how to build, switch and update | This file. Never sent upstream. | — | — |
 
 Related upstream issues (no fleet patch): [#1454](https://github.com/elie222/rakazo/issues/1454)
@@ -38,9 +38,11 @@ narration and `fyi` changes.
 
 **Running now (17 Oct 2026):** image `rakazo-fleet/app:b0c611d` (fleet at `b0c611d6`), with
 `RAKAZO_MESSAGE_USER_MAX_CHARS=4000` in `D:/rakazo/.env`. Database backup taken just before
-the switch: `D:/rakazo/backups/pre-fleet-20261017.dump`. Image `rakazo-fleet/app:d8343bd`
-(fleet at `d8343bd5`, adds the Forward to bot action) is built and tested but not running.
-To use it, switch to that tag and add to `D:/rakazo/.env`:
+the switch: `D:/rakazo/backups/pre-fleet-20261017.dump`. Image `rakazo-fleet/app:a55ea97`
+(fleet at `a55ea97c`, adds the Forward to bot action, and the forwarded message never
+answers an open question card) is built and tested but not running. It replaces
+`rakazo-fleet/app:d8343bd`, which lacks that fix; don't switch to `d8343bd`. To use it,
+switch to that tag and add to `D:/rakazo/.env`:
 
 ```env
 # Elena (dr-eggbot); the id keeps working if she is renamed
@@ -185,6 +187,21 @@ database migrations. After moving `fleet` to a newer upstream base that adds
 migrations, roll back by restoring the backup from step 2, not by switching images.
 
 ## Take upstream updates
+
+Before an upgrade or an image switch, take the fleet inspect views out of the way. The
+read-only "fleet inspect" service in `D:/fleet/rakazo/inspect` reads Rakazo's tables
+through Postgres views (schema `fleet_inspect`), and Postgres refuses to drop or change a
+column that a view uses, so a migration could stop with an error. In Git Bash:
+
+```bash
+cd D:/fleet/rakazo/inspect
+sql/apply.sh sql/drop.sql     # before: remove the views
+# ... upgrade Rakazo or switch the image ...
+sql/apply.sh                  # after: create the views again
+```
+
+If `sql/apply.sh` then stops with a missing column, the views need a fix; see "Rakazo
+upgrades" in `D:/fleet/rakazo/inspect/README.md`.
 
 1. Update `main` and look at what changed:
 
