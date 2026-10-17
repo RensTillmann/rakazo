@@ -32,6 +32,7 @@ import {
   createRepos,
   createThreadMessageInTransaction,
   expireComputerExecutionLeases,
+  FLAG_STEERING_ORIGIN,
   IsolationError,
   lockOwnedGroup,
   touchGroupUpdatedAt,
@@ -1173,9 +1174,15 @@ export function flagMessageText(input: {
 }
 
 /**
- * Forward one message from `source` into the flag bot's chat as a user message, so that bot
- * wakes the same way as when the user types there. The text carries everything the bot needs,
- * so it needs no access to the source chat.
+ * Forward one message from `source` into the flag bot's chat as the user's own message. The
+ * text carries everything the bot needs, so it needs no access to the source chat.
+ *
+ * A flag is a new request, never a reply. When the bot has no live run it starts one like a
+ * typed message. When the bot is busy or waiting — above all on an open ask card such as
+ * "Fleet fix #12" with Apply / Later / Drop — the message is held as pending steering with
+ * `FLAG_STEERING_ORIGIN`: it answers no ask, no running turn claims it, and it starts its own
+ * follow-up run once the bot's current run ends. It never runs beside the waiting run, because
+ * two turns of the same bot in one chat could both act on the open fix.
  */
 export async function flagThreadMessage(
   deps: {
@@ -1193,29 +1200,136 @@ export async function flagThreadMessage(
     label: string;
     webOrigin: string;
   },
-  releaseTakeover?: (runId: string) => Promise<void>,
 ) {
+  const replayed = await replayFlag(deps, target, input.clientNonce);
+  if (replayed) return replayed;
   const row = await deps.prisma.message.findFirst({
     where: { id: input.messageId, threadId: source.threadId },
     select: { id: true, role: true, botId: true, runId: true, blocks: true, createdAt: true },
   });
   if (!row) throw new IsolationError();
-  const blocks = MessageBlockSchema.array().safeParse(row.blocks);
+  const parsed = MessageBlockSchema.array().safeParse(row.blocks);
   const text = flagMessageText({
     label: input.label,
     note: input.note,
     source,
-    message: { ...row, blocks: blocks.success ? blocks.data : [] },
+    message: { ...row, blocks: parsed.success ? parsed.data : [] },
     webOrigin: input.webOrigin,
   });
-  const sent = await sendThreadMessage(
-    deps,
-    actor,
-    target,
-    { text, clientNonce: input.clientNonce },
-    releaseTakeover,
-  );
-  return { botId: target.botId, ...sent };
+  const blocks = buildUserMessageBlocks(text, []);
+
+  const commit = () =>
+    deps.prisma.$transaction(async (tx) => {
+      // Message first: its thread-row update serializes this send with every other send,
+      // ask answer, and run finalization in the chat, so the busy check below cannot race.
+      const message = await createThreadMessageInTransaction(tx, {
+        threadId: target.threadId,
+        role: "user",
+        blocks,
+        clientNonce: input.clientNonce,
+      });
+      const busy = await tx.run.findMany({
+        where: {
+          threadId: target.threadId,
+          botId: target.botId,
+          status: { in: [...ACTIVE_RUN_STATUSES] },
+        },
+        select: { id: true },
+      });
+      if (busy.length > 0) {
+        await tx.steeringMessage.create({
+          data: {
+            messageId: message.id,
+            botId: target.botId,
+            userId: actor.userId,
+            runId: null,
+            originTrigger: FLAG_STEERING_ORIGIN,
+          },
+        });
+        const event = await appendEventInTransaction(tx, {
+          spaceId: actor.spaceId,
+          threadId: target.threadId,
+          botId: target.botId,
+          type: "thread.message.created",
+          payload: { messageId: message.id, role: "user", blocks },
+        });
+        return { message, run: null, eventSeq: event.seq };
+      }
+      const task = await tx.task.create({
+        data: {
+          spaceId: actor.spaceId,
+          botId: target.botId,
+          threadId: target.threadId,
+          userId: actor.userId,
+          prompt: buildSendPrompt(text, []),
+          status: "queued",
+        },
+      });
+      const run = await tx.run.create({
+        data: {
+          spaceId: actor.spaceId,
+          botId: target.botId,
+          threadId: target.threadId,
+          taskId: task.id,
+          userId: actor.userId,
+          status: "queued",
+          trigger: "user",
+          clientNonce: sendRunClientNonce(input.clientNonce, message.id),
+          sourceMessageId: message.id,
+        },
+      });
+      await tx.message.update({ where: { id: message.id }, data: { runId: run.id } });
+      const event = await appendEventInTransaction(tx, {
+        spaceId: actor.spaceId,
+        threadId: target.threadId,
+        botId: target.botId,
+        type: "thread.message.created",
+        runId: run.id,
+        payload: { messageId: message.id, role: "user", blocks, runIds: [run.id] },
+      });
+      return { message, run, eventSeq: event.seq };
+    });
+
+  const committed = await withSerializableRetry(commit).catch(async (error) => {
+    const winner = await replayFlag(deps, target, input.clientNonce);
+    if (winner) return { replay: winner } as const;
+    throw error;
+  });
+  if ("replay" in committed) return committed.replay;
+  await deps.events.notify(target.threadId, committed.eventSeq).catch((error) => {
+    // Subscribers catch up from the durable event cursor after a missed realtime wake.
+    getLogger().error("thread flag realtime notification", error);
+  });
+  if (committed.run) await enqueueRunsNeedingContinue(deps.jobs, [committed.run]);
+  return flagResult(target, committed.message, committed.run);
+}
+
+function flagResult(
+  target: Extract<ThreadTarget, { kind: "bot" }>,
+  message: { seq: number },
+  run: { id: string; taskId: string } | null,
+) {
+  return {
+    botId: target.botId,
+    taskId: run?.taskId ?? null,
+    runId: run?.id ?? null,
+    seq: message.seq,
+    queued: run === null,
+  };
+}
+
+/** A retried flag returns its first outcome: the run it started, or that it is still held. */
+async function replayFlag(
+  deps: { prisma: PrismaClient; events: ThreadEvents; jobs: JobPublisher },
+  target: Extract<ThreadTarget, { kind: "bot" }>,
+  clientNonce: string | undefined,
+) {
+  if (!clientNonce) return null;
+  const message = await findSendReceipt(deps.prisma, target.threadId, clientNonce);
+  if (!message) return null;
+  const run = message.sourceRuns[0] ?? null;
+  if (run) await enqueueRunsNeedingContinue(deps.jobs, [run]);
+  return flagResult(target, message, run);
 }
 
 export async function stopThreadRuns(
