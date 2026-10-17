@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@rakazo/db";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   currentBotMessageHop,
   loadBotMessageContext,
@@ -96,6 +96,8 @@ function deps(
 }
 
 describe("messaging another bot", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("delivers into the target's own chat without marking either thread unread", async () => {
     const harness = deps();
     const sent = await messageBot(harness.deps, run, sender, {
@@ -161,6 +163,25 @@ describe("messaging another bot", () => {
       ([call]) => (call as { data?: { unread?: boolean } }).data?.unread === true,
     );
     expect(unreadWrites).toHaveLength(2);
+  });
+
+  it("sends a message without an intent as an FYI", async () => {
+    const harness = deps();
+    const sent = await messageBot(harness.deps, run, sender, {
+      bot_id: "bot-target",
+      message: "handed the draft to QA",
+    });
+    expect(sent.ok).toBe(true);
+    for (const [call] of harness.tx.message.create.mock.calls) {
+      expect(call).toMatchObject({
+        data: { blocks: [expect.objectContaining({ intent: "fyi" })] },
+      });
+    }
+    expect(harness.tx.task.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ prompt: expect.stringContaining("This is an FYI.") }),
+      }),
+    );
   });
 
   it("tells the sender to continue independent work", async () => {
@@ -404,6 +425,22 @@ describe("messaging another bot", () => {
       { bot_id: "bot-target", message: "still working", intent: "status" },
     );
     expect(sent.ok).toBe(false);
+  });
+
+  it("raises the chain limit from BOT_MESSAGE_MAX_HOPS", async () => {
+    vi.stubEnv("BOT_MESSAGE_MAX_HOPS", "10");
+    const harness = deps({
+      hopBlocks: [
+        { kind: "bot_message_received", fromBotId: "b", fromBotName: "B", text: "hi", hop: 6 },
+      ],
+    });
+    const sent = await messageBot(
+      harness.deps,
+      { ...run, sourceMessageId: "message-source" },
+      sender,
+      { bot_id: "bot-target", message: "again" },
+    );
+    expect(sent.ok).toBe(true);
   });
 
   it("keeps a person-started chain going", async () => {

@@ -6,6 +6,7 @@ import {
   botMessageHopExhausted,
   buildBotMessageWakePrompt,
   clampBotMessage,
+  DEFAULT_BOT_MESSAGE_INTENT,
   nextBotMessageHop,
   resolveBotAddress,
 } from "@rakazo/core";
@@ -92,7 +93,7 @@ export async function messageBot(
   }
 
   const sourceContext = await loadBotMessageContext(deps.prisma, run.sourceMessageId);
-  const intent = input.intent ?? "request";
+  const intent = input.intent ?? DEFAULT_BOT_MESSAGE_INTENT;
   const hop = nextBotMessageHop(sourceContext?.hop);
 
   const candidates = await deps.prisma.bot.findMany({
