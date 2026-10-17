@@ -1,5 +1,5 @@
 import { BOT_DESCRIPTION_MAX_LENGTH } from "@rakazo/contracts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BOT_DIRECTORY_DESCRIPTIONS_MAX_LENGTH,
   BOT_MESSAGE_MAX_LENGTH,
@@ -41,6 +41,7 @@ describe("bot message silence", () => {
 });
 
 describe("hop bounding", () => {
+  beforeEach(() => vi.stubEnv("BOT_MESSAGE_MAX_HOPS", undefined));
   afterEach(() => vi.unstubAllEnvs());
 
   it("starts a chain at 1 when a person's message woke the sender", () => {

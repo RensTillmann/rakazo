@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@rakazo/db";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   currentBotMessageHop,
   loadBotMessageContext,
@@ -96,6 +96,7 @@ function deps(
 }
 
 describe("messaging another bot", () => {
+  beforeEach(() => vi.stubEnv("BOT_MESSAGE_MAX_HOPS", undefined));
   afterEach(() => vi.unstubAllEnvs());
 
   it("delivers into the target's own chat without marking either thread unread", async () => {
