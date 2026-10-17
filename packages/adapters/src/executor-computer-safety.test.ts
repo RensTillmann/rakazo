@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   desktopProtectionGuardMessage,
   isProtectedComputerLifecycleCommand,
+  NO_BROWSER_SHELL_MESSAGE,
   protectedActivateScriptWriteRefusal,
   protectedComputerLifecycleRefusal,
+  shellCommandStartsBrowser,
 } from "./executor.js";
 
 describe("computer lifecycle command guard", () => {
@@ -591,5 +593,69 @@ describe("computer lifecycle command guard", () => {
     ]) {
       expect(protectedComputerLifecycleRefusal(command), command).toBe("heredoc");
     }
+  });
+});
+
+describe("browser lock for bots without a browser", () => {
+  it("recognizes commands that start a browser", () => {
+    for (const command of [
+      "chromium --headless --screenshot=/tmp/nu.png https://nu.nl",
+      "chrome https://nu.nl",
+      "google-chrome --headless https://nu.nl",
+      "google-chrome-stable --headless https://nu.nl",
+      "chromium-browser --headless https://nu.nl",
+      "firefox --screenshot https://nu.nl",
+      "/usr/bin/chromium --headless https://nu.nl",
+      "/opt/google/chrome/chrome --headless https://nu.nl",
+      "timeout 60 chromium --headless https://nu.nl",
+      "timeout -s KILL 60 chromium --headless https://nu.nl",
+      "timeout --signal=KILL 60s chromium --headless https://nu.nl",
+      "xvfb-run -a chromium https://nu.nl",
+      'xvfb-run -s "-screen 0 1280x720x24" firefox https://nu.nl',
+      "env DISPLAY=:1 chromium https://nu.nl",
+      "DISPLAY=:1 chromium https://nu.nl",
+      "nohup chromium https://nu.nl &",
+      "npx playwright screenshot https://nu.nl nu.png",
+      "npx -y playwright@1.47.0 screenshot https://nu.nl nu.png",
+      "npx puppeteer browsers install chrome",
+      "pnpm dlx playwright screenshot https://nu.nl nu.png",
+      "python3 -m playwright install chromium",
+      "playwright screenshot https://nu.nl nu.png",
+      "cd /tmp && chromium --headless https://nu.nl",
+      "ls; timeout 30 chromium https://nu.nl > out.txt 2>&1",
+      "bash -c 'chromium --headless https://nu.nl'",
+      "sh -lc 'timeout 30 firefox https://nu.nl'",
+    ]) {
+      expect(shellCommandStartsBrowser(command), command).toBe(true);
+    }
+  });
+
+  it("ignores a browser word that is not the command being run", () => {
+    for (const command of [
+      "git log --grep chrome",
+      "grep -r chromium .",
+      "echo chromium",
+      "cat chrome.log",
+      "ls /usr/bin/chromium",
+      "which chromium",
+      "command -v firefox",
+      "pkill chromium",
+      "echo done > chrome",
+      "npm test -- --browser=chromium",
+      "node shot.js",
+      "npx tsc --noEmit",
+      "python3 -m http.server",
+      "timeout 30 node shot.js",
+      "",
+    ]) {
+      expect(shellCommandStartsBrowser(command), command).toBe(false);
+    }
+  });
+
+  it("refuses with a hand-off message, without the shell-access suffix", () => {
+    expect(NO_BROWSER_SHELL_MESSAGE).toBe(
+      "This bot has no browser. Hand the task to a teammate who has one (see your teammates list).",
+    );
+    expect(NO_BROWSER_SHELL_MESSAGE).not.toContain("Shell access is still available");
   });
 });
