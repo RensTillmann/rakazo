@@ -4148,6 +4148,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         // Routine, background and bot-to-bot runs discard promoted narration instead of
         // posting it as chat.
         let discardedMidTurnNarration = false;
+        let lastDiscardedMidTurnNarration = "";
         const midTurnUserTexts: string[] = [];
         let midTurnProgressCount = 0;
         const turnStartedAtMs = run.startedAt?.getTime() ?? Date.now();
@@ -4247,6 +4248,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (!canPublish) {
             assembled = "";
             discardedMidTurnNarration = true;
+            lastDiscardedMidTurnNarration = narration;
             return;
           }
           assembled = "";
@@ -7278,6 +7280,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   publishedMidTurnUserMessage = true;
                 } else if (narration) {
                   discardedMidTurnNarration = true;
+                  lastDiscardedMidTurnNarration = narration;
                 }
                 assembled = "";
                 hasStreamedText = false;
@@ -7548,6 +7551,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const silentReply = runAllowsSilentEmpty(run.trigger)
             ? stripNoResponseReply(assembled, messageSegments)
             : { assembled, blocks: messageSegments };
+          // A peer request still needs a status when the model stops after tool calls.
+          // Keep held-back narration out of chat and return only its last non-empty text.
+          const heldBackPeerStatus =
+            run.trigger === "bot_message" && !allowSilentEmptyRun && !silentReply.assembled.trim()
+              ? lastDiscardedMidTurnNarration
+              : "";
           let completionBlocks = silentReply.blocks;
           if (!silentReply.assembled || isBackgroundRunTrigger(run.trigger)) {
             // Mid-turn progress already posted durable chat messages; skip the empty
@@ -7556,7 +7565,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             // only progress was posted, result when a final reply exists). Exact
             // NO_RESPONSE finals are treated as empty before this fallback runs.
             completionBlocks = completionMessageSegments(completionBlocks, {
-              allowSilentEmpty: allowSilentEmptyRun || publishedMidTurnUserMessage,
+              allowSilentEmpty:
+                allowSilentEmptyRun || publishedMidTurnUserMessage || Boolean(heldBackPeerStatus),
               emptyResponseText,
               suppressOutput: handedOff || isBackgroundRunTrigger(run.trigger),
               skipEmptyFallback: publishedTerminalSubagent || publishedMidTurnUserMessage,
@@ -7587,7 +7597,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (!(await renewRunLease(deps, runId, workerId, fence))) return;
           const botMessageOutcome =
             run.trigger === "bot_message"
-              ? botMessageOutcomeFromMidTurn(text, midTurnUserTexts)
+              ? botMessageOutcomeFromMidTurn(
+                  text,
+                  heldBackPeerStatus ? [heldBackPeerStatus] : midTurnUserTexts,
+                )
               : null;
           const completed = await deps.events.finalizeRun({
             spaceId: run.spaceId,

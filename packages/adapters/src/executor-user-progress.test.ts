@@ -1,7 +1,7 @@
 import type { AgentRunRequest } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { returnBotMessageOutcome } from "./bot-messages.js";
+import { loadBotMessageContext, returnBotMessageOutcome } from "./bot-messages.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
 
@@ -12,23 +12,33 @@ vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
 }));
 
 vi.mock("./bot-messages.js", () => ({
-  loadBotMessageContext: async () => ({
+  loadBotMessageContext: vi.fn(async () => ({
     fromBotId: "caller",
     fromBotName: "Caller",
     text: "FYI",
     intent: "fyi",
     hop: 1,
     repliesToRequest: false,
-  }),
+  })),
   returnBotMessageOutcome: vi.fn(async () => undefined),
 }));
 
 async function runTurn(
   finalText: string,
   silent = true,
-  narration = "I will check that.",
+  narration: string | string[] = "I will check that.",
   secrets: string[] = [],
+  intent: "fyi" | "request" | "question" = "fyi",
 ) {
+  vi.mocked(loadBotMessageContext).mockResolvedValue({
+    kind: "bot_message_received",
+    fromBotId: "caller",
+    fromBotName: "Caller",
+    text: "Look again",
+    intent,
+    hop: 1,
+    repliesToRequest: false,
+  });
   const run = {
     id: "run-1",
     botId: "bot-1",
@@ -42,15 +52,18 @@ async function runTurn(
     leaseFence: 0,
   };
   const runtimeRun = vi.fn(async function* (_request: AgentRunRequest) {
-    yield { type: "text" as const, text: narration };
-    yield {
-      type: "tool" as const,
-      name: "read_file",
-      args: {},
-      executionId: "call-1",
-    };
+    const narrations = Array.isArray(narration) ? narration : [narration];
+    for (const [index, text] of narrations.entries()) {
+      yield { type: "text" as const, text };
+      yield {
+        type: "tool" as const,
+        name: "read_file",
+        args: {},
+        executionId: `call-${index + 1}`,
+      };
+    }
     if (finalText) yield { type: "text" as const, text: finalText };
-    yield { type: "done" as const, text: narration + finalText };
+    yield { type: "done" as const, text: narrations.join("") + finalText };
   });
   const prisma = {
     run: {
@@ -184,6 +197,38 @@ describe("withheld narration on short peer turns", () => {
       expect(returnBotMessageOutcome).not.toHaveBeenCalled();
     }
   });
+});
+
+describe("held-back narration on peer requests", () => {
+  it.each(["request", "question"] as const)(
+    "returns the last non-empty narration as status for an empty %s reply",
+    async (intent) => {
+      vi.mocked(returnBotMessageOutcome).mockClear();
+      const { finalizeRun, append } = await runTurn(
+        "",
+        true,
+        ["I will check that.", "  The draft is posted.  ", "   "],
+        [],
+        intent,
+      );
+      expect(finalizeRun).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ outcome: "completed" }),
+      );
+      expect(finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")).toEqual(
+        [],
+      );
+      expect(append.mock.calls.map(([event]) => event.type)).not.toContain(
+        "thread.message.created",
+      );
+      expect(returnBotMessageOutcome).toHaveBeenCalledExactlyOnceWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        "The draft is posted.",
+        "status",
+      );
+    },
+  );
 });
 
 describe("withheld narration on short reply-producing turns", () => {
