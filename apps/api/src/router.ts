@@ -2333,20 +2333,13 @@ export function createRouter(deps: RouterDeps) {
         const target = await resolveThreadTarget(deps.prisma, context.actor, { botId: bot.id });
         if (target.kind !== "bot") throw new IsolationError();
         await assertTeachingSendAllowed(deps.prisma, context.actor.spaceId, target.botId);
-        return flagThreadMessage(
-          deps,
-          context.actor,
-          source,
-          target,
-          {
-            messageId: input.messageId,
-            note: input.note,
-            clientNonce: input.clientNonce,
-            label: deps.env.flagLabel ?? DEFAULT_FLAG_LABEL,
-            webOrigin: deps.env.webOrigin,
-          },
-          (runId) => releaseComputerControl(deps, context.actor, target.botId, "done", runId),
-        );
+        return flagThreadMessage(deps, context.actor, source, target, {
+          messageId: input.messageId,
+          note: input.note,
+          clientNonce: input.clientNonce,
+          label: deps.env.flagLabel ?? DEFAULT_FLAG_LABEL,
+          webOrigin: deps.env.webOrigin,
+        });
       }),
       stop: authed.threads.stop.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);

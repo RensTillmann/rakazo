@@ -417,7 +417,11 @@ export const appContract = {
         })
         .nullable(),
     ),
-    /** Forward one message, with an optional note, to the flag bot's chat as a user message. */
+    /**
+     * Forward one message, with an optional note, to the flag bot's chat as a user message.
+     * The flag never answers a pending ask: when the bot is busy or waiting it is `queued`
+     * (no run yet) and starts its own run after the current one ends.
+     */
     flag: oc
       .input(
         threadTarget.safeExtend({
@@ -429,10 +433,10 @@ export const appContract = {
       .output(
         z.object({
           botId: Id,
-          taskId: Id,
-          runId: Id,
+          taskId: Id.nullable(),
+          runId: Id.nullable(),
           seq: z.number().int(),
-          runIds: z.array(Id).optional(),
+          queued: z.boolean(),
         }),
       ),
     stop: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),

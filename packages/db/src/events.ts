@@ -1485,6 +1485,13 @@ export async function discardAnsweredSteering(
   });
 }
 
+/**
+ * `steering_messages.originTrigger` of a flagged message that arrived while its bot was busy or
+ * waiting on an ask. No running turn claims it (claims take only `originTrigger: null` app rows
+ * or messaging rows) and it never answers an ask; it resumes as its own run once the bot is idle.
+ */
+export const FLAG_STEERING_ORIGIN = "flag";
+
 /** Queue one follow-up when this bot still has unclaimed steering and no live run. */
 export async function createPendingSteeringRun(
   tx: Prisma.TransactionClient,
@@ -1539,13 +1546,15 @@ export async function createPendingSteeringRun(
       // A private continuation is a follow-up the owner wrote only when every message in it came
       // from the app; one direct-line delivery keeps it messaging, so it is never owner-started.
       // Rows queued before origins were recorded are recognized by their channel message.
+      // A forwarded flag is its own origin and always a follow-up.
       trigger:
         origin === "webhook"
           ? "webhook"
-          : origin === "private" &&
-              batch.every(
-                (item) => item.originTrigger === null && !hasChannelMessage(item.message.blocks),
-              )
+          : origin === FLAG_STEERING_ORIGIN ||
+              (origin === "private" &&
+                batch.every(
+                  (item) => item.originTrigger === null && !hasChannelMessage(item.message.blocks),
+                ))
             ? "follow_up"
             : "messaging",
       sourceMessageId: source.message.id,
@@ -1592,6 +1601,7 @@ function steeringOrigin(item: {
   message: { blocks: unknown };
 }): string {
   if (item.originTrigger === "webhook") return "webhook";
+  if (item.originTrigger === FLAG_STEERING_ORIGIN) return FLAG_STEERING_ORIGIN;
   if (item.originTrigger !== "messaging") return "private";
   const channelId = messagingChannelId(item.message.blocks as MessageBlock[] | undefined);
   return channelId ? `channel:${channelId}` : "private";
