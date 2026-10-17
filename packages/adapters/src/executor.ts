@@ -380,6 +380,7 @@ import {
   finalBlocksAfterMidTurnProgress,
   isProgressMessageTruncated,
   isUserProgressClientNonce,
+  messageUserMaxLength,
   userProgressClientNonce,
 } from "./user-progress.js";
 import { createWebProvider } from "./web-provider-factory.js";
@@ -6143,9 +6144,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "message_user") {
             const rawMessage = redactSecrets(String(args.message ?? ""), runSecrets);
-            const text = clampUserProgressMessage(rawMessage);
+            const maxLength = messageUserMaxLength();
+            const text = clampUserProgressMessage(rawMessage, maxLength);
             if (!text) return finish({ error: "message is required" });
-            const truncated = isProgressMessageTruncated(rawMessage);
+            const truncated = isProgressMessageTruncated(rawMessage, maxLength);
             await flushProgress();
             await publishMidTurnNarration();
             await publishMessage(
@@ -6163,7 +6165,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 ? {
                     ok: true,
                     truncated: true,
-                    note: "This progress update was cut off at 500 characters and the user only saw the truncated version above — it did NOT deliver your full content. message_user is for short interim beats only, never the final answer. Put your complete answer in your normal final reply instead of relying on this truncated update.",
+                    note: `This progress update was cut off at ${maxLength} characters and the user only saw the truncated version above — it did NOT deliver your full content. message_user is for short interim beats only, never the final answer. Put your complete answer in your normal final reply instead of relying on this truncated update.`,
                   }
                 : { ok: true },
             );
@@ -7897,8 +7899,9 @@ export function mayOpenModelStream(
 
 export { isExactNoResponse, NO_RESPONSE, stripNoResponseReply };
 
-export const LONG_WORK_PROGRESS_GUIDANCE =
-  "During long work, send a few short progress updates with message_user so the user can see what you are doing. Keep them brief and high-signal (a sentence or two, not a dump). Do not narrate every tool call. Thinking stays private. message_user is capped at 500 characters and will be silently cut off if you exceed it \u2014 never put your final answer, a report, or any long-form deliverable in it. Always put the complete final answer in your normal reply, never split across message_user calls, and never assume a message_user update already delivered your content.";
+export function longWorkProgressGuidance(maxLength = messageUserMaxLength()): string {
+  return `During long work, send a few short progress updates with message_user so the user can see what you are doing. Keep them brief and high-signal (a sentence or two, not a dump). Do not narrate every tool call. Thinking stays private. message_user is capped at ${maxLength} characters and will be silently cut off if you exceed it \u2014 never put your final answer, a report, or any long-form deliverable in it. Always put the complete final answer in your normal reply, never split across message_user calls, and never assume a message_user update already delivered your content.`;
+}
 
 export const ROUTINE_SILENT_REPLY_GUIDANCE = `If this routine's prompt says to stay silent when there is nothing to report, the entire final assistant reply must be exactly ${NO_RESPONSE} — no surrounding prose, no variants, no progress updates, no all-clear, and no meta note that you are staying silent. Do not call message_user unless you have something to report.`;
 
@@ -7920,9 +7923,7 @@ export const TICKET_SILENT_REPLY_GUIDANCE =
 
 export function runReplyGuidance(trigger: string): string {
   if (isBackgroundRunTrigger(trigger)) return TICKET_SILENT_REPLY_GUIDANCE;
-  return runAllowsSilentEmpty(trigger)
-    ? ROUTINE_SILENT_REPLY_GUIDANCE
-    : LONG_WORK_PROGRESS_GUIDANCE;
+  return runAllowsSilentEmpty(trigger) ? ROUTINE_SILENT_REPLY_GUIDANCE : longWorkProgressGuidance();
 }
 
 function replyGuidanceForOfferedTools(
@@ -7930,7 +7931,7 @@ function replyGuidanceForOfferedTools(
   disabled?: ReadonlySet<string>,
 ): string | undefined {
   if (!disabled?.has("message_user")) return guidance;
-  if (guidance === LONG_WORK_PROGRESS_GUIDANCE) {
+  if (guidance === longWorkProgressGuidance()) {
     return "Always put the complete final answer in your normal reply.";
   }
   if (guidance === ROUTINE_SILENT_REPLY_GUIDANCE) {
