@@ -4223,6 +4223,10 @@ msgstr ""
 msgid "Show settings"
 msgstr "Mostrar configurações"
 
+#: src/pages/Shell.tsx
+msgid "Show thoughts"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Show tool activity"
 msgstr ""

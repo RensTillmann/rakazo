@@ -4370,7 +4370,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             deps,
             run,
             "bot",
-            [{ kind: "text", text: narration }],
+            [{ kind: "text", text: narration, narration: true }],
             undefined,
             userProgressClientNonce(run.id, midTurnProgressCount++),
           );
@@ -7390,7 +7390,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     deps,
                     run,
                     "bot",
-                    [{ kind: "text", text: narration }],
+                    [{ kind: "text", text: narration, narration: true }],
                     undefined,
                     userProgressClientNonce(run.id, midTurnProgressCount++),
                   );
