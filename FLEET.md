@@ -20,12 +20,16 @@ was built from on 2026-10-15. On top of it:
 | Drop mid-turn narration in bot-to-bot runs | Text a bot writes just before a tool call is no longer saved as a chat bubble in runs started by another bot's message (`bot_message`). It still shows briefly as the live "working…" line. Runs Rens starts are unchanged. | none | not opened yet |
 | Default message_bot to fyi and make the hop limit configurable | A `message_bot` call without an `intent` is sent as `fyi` (no automatic reply back), not `request`. The bot-to-bot chain limit can be changed. | `BOT_MESSAGE_MAX_HOPS` (default 6) | not opened yet |
 | Make the message_user length cap configurable | The 500-character cap on `message_user` can be raised. The tool schema, the tool description, the truncation note and the system-prompt guidance all state the configured number. Mid-turn narration keeps 500. | `RAKAZO_MESSAGE_USER_MAX_CHARS` (default 500) | not opened yet |
-| Prompt-cache patch (stop shortening earlier tool results before every call) | Written separately; add it as its own commit, see "Adding a patch" below. | — | not opened yet |
+| Keep the prompt cache when a user message arrives mid-run | Messages added during a run (the empty-reply continuation, steering, finished-shell notices) get their own slot instead of pushing the oldest history message out, so the earlier conversation stays byte-identical and is read from the prompt cache instead of re-written. History cap and tool-result shortening unchanged. Replay of the 17 Oct ticket: about 22% cheaper. | none | not opened yet |
 | Fleet: how to build, switch and update | This file. Never sent upstream. | — | — |
 
 None of the patches touch the database. Every setting defaults to upstream behaviour,
 so an image built from `fleet` with no new settings behaves like upstream apart from the
 narration and `fyi` changes.
+
+**Running now (17 Oct 2026):** image `rakazo-fleet/app:b0c611d` (fleet at `b0c611d6`), with
+`RAKAZO_MESSAGE_USER_MAX_CHARS=4000` in `D:/rakazo/.env`. Database backup taken just before
+the switch: `D:/rakazo/backups/pre-fleet-20261017.dump`.
 
 To send a patch upstream as its own PR, start from current upstream `main`:
 
