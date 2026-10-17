@@ -9,6 +9,7 @@ import {
   claimSteering,
   clearThread,
   completedRunBlocks,
+  createPendingSteeringRun,
   discardAnsweredSteering,
   finalizeComputerControlRelease,
   finalizeRun,
@@ -358,6 +359,55 @@ describe("finalizeRun", () => {
     expect(tx.steeringMessage.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ["steer-channel"] }, runId: null },
       data: { runId: "run-reply", claimedAt: null },
+    });
+  });
+});
+
+describe("createPendingSteeringRun", () => {
+  it("starts a held flag as its own follow-up run, apart from other held app messages", async () => {
+    const tx = {
+      run: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async () => ({ id: "run-flag" })),
+      },
+      task: { create: vi.fn(async () => ({ id: "task-flag" })) },
+      steeringMessage: {
+        findMany: vi.fn(async () => [
+          {
+            id: "steer-flag",
+            userId: "user-1",
+            originTrigger: "flag",
+            message: { id: "message-flag", seq: 4, blocks: [{ kind: "text", text: "Flag" }] },
+          },
+          {
+            id: "steer-app",
+            userId: "user-1",
+            originTrigger: null,
+            message: { id: "message-app", seq: 5, blocks: [{ kind: "text", text: "Hi" }] },
+          },
+        ]),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+    };
+
+    await expect(
+      createPendingSteeringRun(tx as never, {
+        spaceId: "space-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+      }),
+    ).resolves.toBe("run-flag");
+
+    expect(tx.run.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        trigger: "follow_up",
+        sourceMessageId: "message-flag",
+        status: "queued",
+      }),
+    });
+    expect(tx.steeringMessage.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["steer-flag"] }, runId: null },
+      data: { runId: "run-flag", claimedAt: null },
     });
   });
 });
