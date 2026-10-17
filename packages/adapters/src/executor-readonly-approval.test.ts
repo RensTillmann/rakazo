@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isApprovalPausedResult } from "./approval-effect.js";
 import { MAX_SHARED_MEMORY_CHARS } from "./builtin-tools.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
-import { createRunExecutor } from "./executor.js";
+import { createRunExecutor, NO_BROWSER_SHELL_MESSAGE } from "./executor.js";
 import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
@@ -210,6 +210,7 @@ function fixture({
     actionApprovalRule: { findMany: vi.fn(async () => rules) },
     actionAutoReviewPreference: { findUnique: vi.fn(async () => ({ enabled: autoReview })) },
     externalEffect,
+    computer: { updateMany: vi.fn(async () => ({ count: 1 })) },
   };
   const pauseRunForInput = vi.fn(async () => {
     run.status = "waiting_input";
@@ -234,6 +235,10 @@ function fixture({
     }
     yield { type: "done" as const, text: "Done" };
   });
+  const sandboxExecute = vi.fn(async function* () {
+    yield { type: "stdout" as const, data: "ok\n" };
+    yield { type: "exit" as const, code: 0 };
+  });
   const executor = createRunExecutor({
     prisma,
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
@@ -255,7 +260,13 @@ function fixture({
         catalog ? resolveCatalogCall(call, catalogEntries([tool])) : undefined,
       execute,
     },
-    sandbox: { describe: () => ({ capabilities: { graphical: false } }) },
+    sandbox: {
+      describe: () => ({ capabilities: { graphical: false } }),
+      execute: sandboxExecute,
+      exportWorkspace: async function* () {},
+    },
+    // A shell command marks the workspace dirty; the end-of-run checkpoint stores it here.
+    home: { commit: vi.fn(async () => "revision-1") },
     memory: {
       read: async (request: { scope: string; path?: string }) => {
         const documents =
@@ -291,6 +302,7 @@ function fixture({
     effects,
     results,
     execute,
+    sandboxExecute,
     commit,
     sharedMemoryState,
     pauseRunForInput,
@@ -320,6 +332,33 @@ describe("disabled builtins", () => {
     expect(f.commit).not.toHaveBeenCalled();
     expect(f.execute).not.toHaveBeenCalled();
     expect(f.effects).toEqual([]);
+  });
+
+  it("refuses a shell command that starts a browser when the browser is off", async () => {
+    const f = fixture({
+      name: "shell",
+      builtin: true,
+      disabledBuiltinTools: ["browser_navigate", "browser_act"],
+    });
+    f.setCalls([
+      { args: { command: "timeout 60 chromium --headless https://nu.nl" }, executionId: "call-1" },
+      { args: { command: "git log --grep chrome" }, executionId: "call-2" },
+    ]);
+    await f.run();
+    expect(f.results[0]).toEqual({ error: NO_BROWSER_SHELL_MESSAGE });
+    expect(f.results[1]).not.toEqual({ error: NO_BROWSER_SHELL_MESSAGE });
+    expect(f.sandboxExecute).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(f.sandboxExecute.mock.calls[0])).toContain("git log --grep chrome");
+  });
+
+  it("lets a bot with the browser on start one from the shell", async () => {
+    const f = fixture({ name: "shell", builtin: true, disabledBuiltinTools: ["browser_act"] });
+    f.setCalls([
+      { args: { command: "timeout 60 chromium --headless https://nu.nl" }, executionId: "call-1" },
+    ]);
+    await f.run();
+    expect(f.results[0]).not.toEqual({ error: NO_BROWSER_SHELL_MESSAGE });
+    expect(f.sandboxExecute).toHaveBeenCalledTimes(1);
   });
 });
 
