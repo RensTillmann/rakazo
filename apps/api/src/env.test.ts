@@ -226,6 +226,18 @@ describe("loadEnv", () => {
       false,
     );
   });
+
+  it("leaves message flagging off unless a flag bot is set", () => {
+    expect(loadEnv(base).flagBot).toBeUndefined();
+    expect(loadEnv({ ...base, RAKAZO_FLAG_BOT: "  " }).flagBot).toBeUndefined();
+    const env = loadEnv({
+      ...base,
+      RAKAZO_FLAG_BOT: " Elena ",
+      RAKAZO_FLAG_LABEL: "Needs fleet improvement…",
+    });
+    expect(env.flagBot).toBe("Elena");
+    expect(env.flagLabel).toBe("Needs fleet improvement…");
+  });
 });
 
 describe("OIDC environment", () => {
