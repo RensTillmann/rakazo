@@ -108,6 +108,10 @@ export interface AppEnv {
   updaterToken: string | undefined;
   /** Current application image tag; used for compose manual-upgrade command selection. */
   imageTag: string | undefined;
+  /** Bot (name or id) that "Forward to bot…" sends flagged messages to; unset hides the action. */
+  flagBot: string | undefined;
+  /** Menu label for that action; defaults to "Forward to bot…". */
+  flagLabel: string | undefined;
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
@@ -244,6 +248,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     updaterUrl,
     updaterToken,
     imageTag: optional(source.RAKAZO_IMAGE_TAG),
+    flagBot: optional(source.RAKAZO_FLAG_BOT),
+    flagLabel: optional(source.RAKAZO_FLAG_LABEL),
   };
 }
 

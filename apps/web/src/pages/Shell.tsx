@@ -95,6 +95,7 @@ import {
   CircleAlert,
   Clock,
   Copy,
+  Flag,
   FolderOpen,
   Gauge,
   LayoutGrid,
@@ -151,6 +152,7 @@ import { CallCard } from "../components/call/CallCard";
 import { VoiceChatCard } from "../components/call/VoiceChatCard";
 import { ComputerWorkspace } from "../components/computer/ComputerWorkspace";
 import { lazyOverlay } from "../components/ErrorBoundary";
+import { FlagMessageDialog, type FlagTarget } from "../components/FlagMessageDialog";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import {
   LIVE_TOOL_STEP_WINDOW,
@@ -507,6 +509,12 @@ export function ShellPage() {
   const [peerConversation, setPeerConversation] = useState<{
     peerBotId: string;
     peerBotName: string;
+  } | null>(null);
+  // The deployment's "Forward to bot…" target; null hides the message action.
+  const [flagTarget, setFlagTarget] = useState<FlagTarget | null>(null);
+  const [flagging, setFlagging] = useState<{
+    messageId: string;
+    thread: { botId: string } | { groupId: string };
   } | null>(null);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [routinesBotId, setRoutinesBotId] = useState<string | null>(null);
@@ -2102,6 +2110,17 @@ export function ShellPage() {
     },
     [t],
   );
+  useEffect(() => {
+    // Optional feature: if the lookup fails the action stays hidden.
+    rpc.threads.flagTarget().then(setFlagTarget, () => undefined);
+  }, []);
+  const flagMessage = useCallback((message: ThreadMessage) => {
+    const groupId = activeGroupId.current;
+    const botId = activeBotId.current;
+    if (groupId) setFlagging({ messageId: message.id, thread: { groupId } });
+    else if (botId) setFlagging({ messageId: message.id, thread: { botId } });
+  }, []);
+  const closeFlagging = useCallback(() => setFlagging(null), []);
   const onAttachmentPick = useCallback(
     (files: FileList | null) => {
       const threadKey = activeGroupId.current ?? activeBotId.current;
@@ -3792,6 +3811,8 @@ export function ShellPage() {
               setReplyQuote(quote);
             }}
             onReact={reactToMessage}
+            flagLabel={flagTarget?.label}
+            onFlag={flagTarget ? flagMessage : undefined}
             onJumpToMessage={jumpToReplyMessage}
             onOpenPeerMessages={(peer) => {
               setPeerConversation(peer);
@@ -4737,6 +4758,14 @@ export function ShellPage() {
             onClose={() => setPeerConversation(null)}
           />
         ) : null}
+        {flagging && flagTarget ? (
+          <FlagMessageDialog
+            flag={flagTarget}
+            thread={flagging.thread}
+            messageId={flagging.messageId}
+            onClose={closeFlagging}
+          />
+        ) : null}
       </Suspense>
 
       {booting ? (
@@ -4941,6 +4970,8 @@ const Transcript = memo(function Transcript({
   onReply,
   onQuote,
   onReact,
+  flagLabel,
+  onFlag,
   onJumpToMessage,
   onOpenPeerMessages,
   memberName,
@@ -4970,6 +5001,8 @@ const Transcript = memo(function Transcript({
   onReply: (message: ThreadMessage) => void;
   onQuote: (message: ThreadMessage, quote: string) => void;
   onReact: (message: ThreadMessage, reaction: MessageReaction) => Promise<void>;
+  flagLabel?: string;
+  onFlag?: (message: ThreadMessage) => void;
   onJumpToMessage: (messageId: string) => void;
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   memberName?: (botId: string | undefined) => string | undefined;
@@ -5338,6 +5371,8 @@ const Transcript = memo(function Transcript({
                         side={message.role === "user" ? "start" : "end"}
                         onReply={onReply}
                         onReact={onReact}
+                        flagLabel={flagLabel}
+                        onFlag={onFlag}
                       />
                     )}
                   </div>
@@ -6549,11 +6584,15 @@ function MessageHoverActions({
   side,
   onReply,
   onReact,
+  flagLabel,
+  onFlag,
 }: {
   message: ThreadMessage;
   side: "start" | "end";
   onReply: (message: ThreadMessage) => void;
   onReact: (message: ThreadMessage, reaction: MessageReaction) => Promise<void>;
+  flagLabel?: string;
+  onFlag?: (message: ThreadMessage) => void;
 }) {
   const { t } = useLingui();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -6642,6 +6681,17 @@ function MessageHoverActions({
               <Copy size={14} strokeWidth={1.7} />
               <Trans>Copy</Trans>
             </DropdownMenuItem>
+            {onFlag && flagLabel && message.role === "bot" && canReactToThreadMessage(message) ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  setMoreOpen(false);
+                  onFlag(message);
+                }}
+              >
+                <Flag size={14} strokeWidth={1.7} />
+                {flagLabel}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

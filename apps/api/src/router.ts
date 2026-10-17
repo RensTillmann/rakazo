@@ -279,6 +279,9 @@ import {
   shouldForwardPeerThreadEvent,
 } from "./thread-message-pages.js";
 import {
+  DEFAULT_FLAG_LABEL,
+  findFlagBot,
+  flagThreadMessage,
   reactToThreadMessage,
   resolveThreadTarget,
   sendThreadMessage,
@@ -604,6 +607,10 @@ export interface RouterDeps {
     imageTag?: string;
     integrationsCatalogUrl?: string;
     mcpAllowPrivateEndpoint?: boolean;
+    /** `RAKAZO_FLAG_BOT`: bot (name or id) that receives flagged messages; unset turns it off. */
+    flagBot?: string;
+    /** `RAKAZO_FLAG_LABEL`: menu label for flagging a message. */
+    flagLabel?: string;
   };
 }
 
@@ -2218,6 +2225,46 @@ export function createRouter(deps: RouterDeps) {
           });
         }
         return { ok: true as const };
+      }),
+      flagTarget: authed.threads.flagTarget.handler(async ({ context }) => {
+        if (!deps.env.flagBot) return null;
+        const bot = await findFlagBot(deps.prisma, context.actor, deps.env.flagBot);
+        if (!bot) return null;
+        return {
+          botId: bot.id,
+          botName: bot.name,
+          label: deps.env.flagLabel ?? DEFAULT_FLAG_LABEL,
+        };
+      }),
+      flag: authed.threads.flag.handler(async ({ context, input }) => {
+        if (!deps.env.flagBot) {
+          throw new ORPCError("NOT_FOUND", { message: "Flagging messages is not set up." });
+        }
+        // Both chats resolve through the actor, so the source message and the receiving bot
+        // must be in the actor's own space and belong to the actor.
+        const source = await resolveThreadTarget(deps.prisma, context.actor, input);
+        const bot = await findFlagBot(deps.prisma, context.actor, deps.env.flagBot);
+        if (!bot) throw new IsolationError();
+        if ((await modelSetup(deps, context.actor)).needsModel) {
+          throw new ORPCError("BAD_REQUEST", { message: "Connect a model to start a run." });
+        }
+        const target = await resolveThreadTarget(deps.prisma, context.actor, { botId: bot.id });
+        if (target.kind !== "bot") throw new IsolationError();
+        await assertTeachingSendAllowed(deps.prisma, context.actor.spaceId, target.botId);
+        return flagThreadMessage(
+          deps,
+          context.actor,
+          source,
+          target,
+          {
+            messageId: input.messageId,
+            note: input.note,
+            clientNonce: input.clientNonce,
+            label: deps.env.flagLabel ?? DEFAULT_FLAG_LABEL,
+            webOrigin: deps.env.webOrigin,
+          },
+          (runId) => releaseComputerControl(deps, context.actor, target.botId, "done", runId),
+        );
       }),
       stop: authed.threads.stop.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);

@@ -119,6 +119,9 @@ export function truncateReplyQuote(value: string): string {
   return last >= 0xd800 && last <= 0xdbff ? truncated.slice(0, -1) : truncated;
 }
 
+/** A note sent with a flagged (forwarded) message. */
+export const FLAG_NOTE_MAX_LENGTH = 2_000;
+
 export const GROUP_MEMBER_MIN = 2;
 export const GROUP_MEMBER_MAX = 10;
 

@@ -883,6 +883,7 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/FlagMessageDialog.tsx
 #: src/components/markdown-link-prompt.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/Artifacts.tsx
@@ -1751,6 +1752,10 @@ msgstr "재설정 이메일을 보낼 수 없습니다"
 msgid "Could not send that"
 msgstr "메시지를 보내지 못했습니다."
 
+#: src/components/FlagMessageDialog.tsx
+msgid "Could not send the message"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "OAuth 인증을 시작하지 못했습니다."
@@ -2110,6 +2115,7 @@ msgstr "Docker는 보안을 위해 컴퓨터 접근을 제한합니다. {hostLab
 msgid "Don’t have an account?"
 msgstr "계정이 없나요?"
 
+#: src/components/FlagMessageDialog.tsx
 #: src/lib/ticket-status.ts
 #: src/pages/ActivityList.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -3260,6 +3266,10 @@ msgstr "플러그인 카탈로그에 없음"
 msgid "Not now"
 msgstr "나중에"
 
+#: src/components/FlagMessageDialog.tsx
+msgid "Note (optional)"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "실행 중인 작업 없음"
@@ -4075,6 +4085,7 @@ msgstr "대화할 Bot을 선택하세요"
 msgid "Select a connected model"
 msgstr "연결된 모델 선택"
 
+#: src/components/FlagMessageDialog.tsx
 #: src/pages/Shell.tsx
 msgid "Send"
 msgstr "보내기"
@@ -4104,8 +4115,19 @@ msgid "Send with Enter"
 msgstr "Enter 키로 전송"
 
 #: src/components/AskCard.tsx
+#: src/components/FlagMessageDialog.tsx
 msgid "Sending…"
 msgstr "보내는 중…"
+
+#. placeholder {0}: flag.botName
+#: src/components/FlagMessageDialog.tsx
+msgid "Sends this message to {0}, with your note."
+msgstr ""
+
+#. placeholder {0}: flag.botName
+#: src/components/FlagMessageDialog.tsx
+msgid "Sent to {0}."
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -4918,6 +4940,10 @@ msgstr "이 Bot을 언제, 어떤 일에 사용할지 적어주세요"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "What to return"
 msgstr "완료 후 전달할 결과"
+
+#: src/components/FlagMessageDialog.tsx
+msgid "What went wrong, or what should be different?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"

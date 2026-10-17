@@ -52,6 +52,7 @@ import {
   DeploymentSettingsSchema,
   ExportManifestSchema,
   ExternalConversationPolicySchema,
+  FLAG_NOTE_MAX_LENGTH,
   GroupDetailSchema,
   GroupSchema,
   IntegrationCatalogResultSchema,
@@ -382,6 +383,38 @@ export const appContract = {
         }),
       )
       .output(z.object({ ok: z.literal(true) })),
+    /**
+     * The bot this deployment forwards flagged messages to (`RAKAZO_FLAG_BOT`), or null when
+     * forwarding is off or the signed-in user does not own that bot.
+     */
+    flagTarget: oc.output(
+      z
+        .object({
+          botId: Id,
+          botName: z.string(),
+          /** Menu label, from `RAKAZO_FLAG_LABEL`. */
+          label: z.string(),
+        })
+        .nullable(),
+    ),
+    /** Forward one message, with an optional note, to the flag bot's chat as a user message. */
+    flag: oc
+      .input(
+        threadTarget.safeExtend({
+          messageId: Id,
+          note: z.string().max(FLAG_NOTE_MAX_LENGTH).optional(),
+          clientNonce: z.string().min(1).max(200).optional(),
+        }),
+      )
+      .output(
+        z.object({
+          botId: Id,
+          taskId: Id,
+          runId: Id,
+          seq: z.number().int(),
+          runIds: z.array(Id).optional(),
+        }),
+      ),
     stop: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
     followUp: oc
       .input(
