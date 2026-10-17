@@ -1407,6 +1407,13 @@ export async function discardAnsweredSteering(
   });
 }
 
+/**
+ * `steering_messages.originTrigger` of a flagged message that arrived while its bot was busy or
+ * waiting on an ask. No running turn claims it (claims take only `originTrigger: null` app rows
+ * or messaging rows) and it never answers an ask; it resumes as its own run once the bot is idle.
+ */
+export const FLAG_STEERING_ORIGIN = "flag";
+
 /** Queue one follow-up when this bot still has unclaimed steering and no live run. */
 export async function createPendingSteeringRun(
   tx: Prisma.TransactionClient,
@@ -1457,7 +1464,12 @@ export async function createPendingSteeringRun(
       taskId: task.id,
       userId: batch[0]!.userId,
       status: "queued",
-      trigger: origin === "app" ? "follow_up" : origin === "webhook" ? "webhook" : "messaging",
+      trigger:
+        origin === "app" || origin === FLAG_STEERING_ORIGIN
+          ? "follow_up"
+          : origin === "webhook"
+            ? "webhook"
+            : "messaging",
       sourceMessageId: source.message.id,
       ...(modelPin ?? {}),
     },
@@ -1498,6 +1510,7 @@ function steeringOrigin(item: {
   message: { blocks: unknown };
 }): string {
   if (item.originTrigger === "webhook") return "webhook";
+  if (item.originTrigger === FLAG_STEERING_ORIGIN) return FLAG_STEERING_ORIGIN;
   if (item.originTrigger !== "messaging") return "app";
   const channelId = messagingChannelId(item.message.blocks as MessageBlock[] | undefined);
   return channelId ? `channel:${channelId}` : "dm";
