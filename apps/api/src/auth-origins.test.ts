@@ -76,6 +76,19 @@ describe("CORS origins", () => {
     }
     expect(isTrustedOrigin(TAILNET_ORIGIN, env)).toBe(false);
   });
+
+  it("keeps the loopback address and its localhost twin with the tailnet primary", () => {
+    const tailnetPrimary = {
+      webOrigin: TAILNET_ORIGIN,
+      apiUrl: TAILNET_ORIGIN,
+      authUrl: TAILNET_ORIGIN,
+      extraOrigins: ["http://127.0.0.1:5173"],
+    };
+    for (const origin of [TAILNET_ORIGIN, "http://127.0.0.1:5173", "http://localhost:5173"])
+      expect(isTrustedOrigin(origin, tailnetPrimary), origin).toBe(true);
+    for (const origin of ["http://127.0.0.1:3100", "https://evil.example"])
+      expect(isTrustedOrigin(origin, tailnetPrimary), origin).toBe(false);
+  });
 });
 
 describe("mobile auth origins", () => {
