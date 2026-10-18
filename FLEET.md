@@ -5,10 +5,11 @@ This is Rens's fork of [elie222/rakazo](https://github.com/elie222/rakazo):
 
 - `main` follows upstream `main`. We never commit to it.
 - `fleet-next` (this branch) is a newer upstream plus our patches, one commit per patch. It is
-  **running** since 18 Oct 2026: image `rakazo-fleet/app:1fd5c20` (patch head `1fd5c20`, base
-  upstream `76f4259`), computers pinned to `rakazo-fleet/computer:7d5e64c`. Full suite, web tests
-  and `tsc` passed in that image. Rollback to the image before the sidebar patch: tag `5e8f647`,
-  no restore (that patch has no migration). Rollback to `fleet` needs the
+  **running** since 18 Oct 2026: image `rakazo-fleet/app:a02867b` (patch head `a02867b`, base
+  upstream `76f4259`) with `RAKAZO_WEBHOOK_HONORS_RULES=true`, computers pinned to
+  `rakazo-fleet/computer:7d5e64c`. Full suite (incl. `packages/db`), web tests and `tsc` for every
+  package passed in that image. Rollback to the image before the approval patches: tag `1fd5c20`,
+  no restore (no migrations since `5e8f647`). Rollback to `fleet` needs the
   `pre-fleet-next-20261018.dump` restore (upstream migrations ran).
 - `fleet` (`8896cd15`, image `rakazo-fleet/app:d93d461`) is the previous build. Adopt `fleet-next`
   as `fleet` once it has run well for a few days (see "Adopt `fleet-next`").
@@ -39,6 +40,8 @@ the `fleet` commit it came from.
 | `d52e947` Play attached screen recordings inline in the web chat (from `a67fd29`) | `attach_file` accepts `.webm` and `.mp4` (`.m4v` counts as mp4) as `file` blocks within the upload limit, which upstream #1440 made configurable (`MAX_UPLOAD_SIZE_MB`, default 10). The web chat plays them in an inline player; the mobile app shows them as a file. People can upload `.webm`/`.mp4` too. | none | not yet |
 | `9ac7fab` Pin session cookie security with RAKAZO_SECURE_COOKIES (from `2f4b717`) | Lets the tailnet address be the main address while `http://127.0.0.1:5173` stays an extra origin. With `false`, both addresses keep the plain `better-auth.session_token` cookie, so sessions stay valid. `true` forces secure cookies, unset keeps upstream's choice, any other value stops the API at start-up. | `RAKAZO_SECURE_COOKIES` (`true`/`false`, unset = upstream) | not yet |
 | `1fd5c20` Resizable bots sidebar that snaps to an avatar-only rail, then hides (new on `fleet-next`) | The sidebar edge drags like the right panel's: free widths from 220px to the viewport limit (at most 560px, leaving 320px each for the chat and the right panel). Below 148px it snaps to a 76px rail with only avatars (name as tooltip, unread dot on the avatar, thin section lines that fold a section; search, activity and archived hidden); below 38px it hides. Dragging back out reverses each step; a click still hides or shows it, and the arrow keys step through the same stops. Width is kept per user in the browser; the phone drawer is unchanged. The right panel reserves the real sidebar width. | none | not yet |
+| `c031e44` Approvals: Composio batches per action; owner's rules in webhook runs (new on `fleet-next`) | `COMPOSIO_MULTI_EXECUTE_TOOL` is approved per action it runs (`tools[].tool_slug`), not by the wrapper's name (which contains "execute", so even a read asked): the card and push name the actions, and "Always allow" stores each action, never the wrapper (which would allow every action, sending email included). A connector action named `fetch` counts as a read. With the setting on, the owner's rules also decide webhook-triggered runs: "Always allow" skips the card there; without a rule a side effect still asks, and Auto Review stays out. Also types the parsed shell entries (lint). | `RAKAZO_WEBHOOK_HONORS_RULES` (`true`; unset = upstream: every webhook-run side effect asks) | not yet |
+| `a02867b` Question and approval cards use the full chat width on phones (new on `fleet-next`) | The card was capped at 74% of the chat width on every screen, so a long tool name broke mid-word on a phone. It now uses the full width below the `sm` breakpoint and keeps 74% above it. | none | not yet |
 | Fleet: notes for `fleet-next` | This file. Never sent upstream. | — | — |
 
 ### Dropped patches (merged upstream)
