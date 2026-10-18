@@ -340,6 +340,8 @@ describe("inbound webhook HTTP route", () => {
           modelId: "private-model",
           thinkingLevel: "low",
         },
+        // One routine: the run is that routine's run, so it may finish silently.
+        routineId: "routine-1",
       }),
     );
   });
@@ -376,6 +378,8 @@ describe("inbound webhook HTTP route", () => {
     });
     expect(res.status).toBe(200);
     expect(deps.sendUserMessage.mock.calls[0]?.[0]).not.toHaveProperty("modelPin");
+    // Several routines share the run, so it belongs to none of them.
+    expect(deps.sendUserMessage.mock.calls[0]?.[0]).not.toHaveProperty("routineId");
   });
 
   it("accepts a plain text payload as untrusted delivery data", async () => {

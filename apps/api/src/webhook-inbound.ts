@@ -26,6 +26,7 @@ export type WebhookEvents = {
       modelId: string;
       thinkingLevel: string | null;
     };
+    routineId?: string;
   }): Promise<{ messageId: string; runId: string | null; seq: number }>;
 };
 
@@ -273,6 +274,7 @@ export async function deliverWebhookEvent(
   input: {
     prompt: string;
     routines: Array<{
+      id: string;
       name: string;
       prompt: string;
       modelProvider: string | null;
@@ -303,6 +305,8 @@ export async function deliverWebhookEvent(
 
   const clientNonce = inboundDeliveryClientNonce(input.source, target.bot.id, input.idempotencyKey);
   const pin = inboundRoutineModelPin(input.routines);
+  // A delivery that runs one routine is that routine's run: it may finish silently, like a scheduled one.
+  const routineId = input.routines.length === 1 ? input.routines[0]?.id : undefined;
 
   const sent = await deps.events.sendUserMessage({
     spaceId: target.bot.spaceId,
@@ -314,6 +318,7 @@ export async function deliverWebhookEvent(
     trigger: "webhook",
     clientNonce,
     ...(input.allowParallelRun ? { allowParallelRun: true } : {}),
+    ...(routineId ? { routineId } : {}),
     ...(pin.modelProvider && pin.modelId
       ? {
           modelPin: {

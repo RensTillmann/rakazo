@@ -13,6 +13,7 @@ import {
   REACTION_SILENT_REPLY_GUIDANCE,
   ROUTINE_SILENT_REPLY_GUIDANCE,
   runAllowsSilentEmpty,
+  runBehaviorTrigger,
   runIdentityInstruction,
   runPromotesMidTurnNarration,
   runReplyGuidance,
@@ -224,6 +225,26 @@ describe("completionMarksUnread", () => {
       expect(completionMarksUnread(trigger, completionNotificationBody("", blocks))).toBe(false);
     },
   );
+});
+
+describe("deliveries that run one routine", () => {
+  it("finish like that routine's run: silent, no narration, no unread", () => {
+    const gateWake = runBehaviorTrigger({ trigger: "webhook", routineId: "routine-1" });
+    expect(runAllowsSilentEmpty(gateWake)).toBe(true);
+    expect(runPromotesMidTurnNarration(gateWake)).toBe(false);
+    expect(runReplyGuidance(gateWake)).toBe(ROUTINE_SILENT_REPLY_GUIDANCE);
+    const silent = stripNoResponseReply(NO_RESPONSE, [{ kind: "text", text: NO_RESPONSE }]);
+    expect(completionMarksUnread(gateWake, silent.assembled)).toBe(false);
+    expect(completionMarksUnread(gateWake, "Urgent: payment failed")).toBe(true);
+  });
+
+  it("leaves a webhook without its routine, and every other trigger, as it was", () => {
+    expect(runAllowsSilentEmpty(runBehaviorTrigger({ trigger: "webhook", routineId: null }))).toBe(
+      false,
+    );
+    expect(runBehaviorTrigger({ trigger: "user", routineId: "routine-1" })).toBe("user");
+    expect(runBehaviorTrigger({ trigger: "routine", routineId: "routine-1" })).toBe("routine");
+  });
 });
 
 describe("background ticket runs", () => {
