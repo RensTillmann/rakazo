@@ -55,6 +55,7 @@ function fixture({
   rules = [] as ActionApprovalRule[],
   autoReview = false,
   trigger = "user",
+  routineId = null as string | null,
   secrets = [] as string[],
   prompt = "Read the item",
   bot = {
@@ -87,6 +88,7 @@ function fixture({
   rules?: ActionApprovalRule[];
   autoReview?: boolean;
   trigger?: string;
+  routineId?: string | null;
   secrets?: string[];
   prompt?: string;
   bot?: { name: string; title: string; description: string };
@@ -137,6 +139,7 @@ function fixture({
     userId: "user-1",
     status: "queued",
     trigger,
+    routineId,
     sourceMessageId: sourceRole ? "source-1" : null,
     leaseFence: 0,
   };
@@ -518,6 +521,19 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(reviewMock).not.toHaveBeenCalled();
     },
   );
+
+  it("forces owner approval when the webhook run carries its routine", async () => {
+    // The routine only changes how the run finishes in chat, never what it may do unasked.
+    const f = fixture({
+      name: "shell",
+      trigger: "webhook",
+      routineId: "routine-1",
+      rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "shell" }],
+    });
+    await f.run();
+    expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+    expect(isApprovalPausedResult(f.results[0])).toBe(true);
+  });
 
   describe("with RAKAZO_WEBHOOK_HONORS_RULES on", () => {
     const previous = process.env.RAKAZO_WEBHOOK_HONORS_RULES;

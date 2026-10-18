@@ -3687,6 +3687,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
       };
 
       const runSecrets = [...deps.secrets];
+      // Chat behaviour (silence, narration, thinking, unread); approvals keep the real trigger.
+      const behaviorTrigger = runBehaviorTrigger(run);
       try {
         const sourceBlocks =
           run.trigger === "messaging" && run.sourceMessageId
@@ -3893,7 +3895,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           peerMessage?.repliesToRequest,
         );
         const allowSilentEmptyRun =
-          allowSilentPeerMessage || messagingChannelRun || runAllowsSilentEmpty(run.trigger);
+          allowSilentPeerMessage || messagingChannelRun || runAllowsSilentEmpty(behaviorTrigger);
         const emptyResponseText = peerMessage
           ? peerMessage.intent === "result" ||
             peerMessage.intent === "status" ||
@@ -4276,7 +4278,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const canPublishDurableProgress = () =>
           midTurnProgressBudgetAllows(midTurnProgressCount, Date.now() - turnStartedAtMs);
         const canPublishDurableNarration = () =>
-          runPromotesMidTurnNarration(run.trigger) && canPublishDurableProgress();
+          runPromotesMidTurnNarration(behaviorTrigger) && canPublishDurableProgress();
         {
           const priorProgress = await deps.prisma.message.findMany({
             where: { runId: run.id, role: "bot" },
@@ -4356,7 +4358,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             narration &&
             !canPublish &&
             !allowSilentEmptyRun &&
-            runPromotesMidTurnNarration(run.trigger)
+            runPromotesMidTurnNarration(behaviorTrigger)
           ) {
             return;
           }
@@ -7157,7 +7159,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 pluginLine,
                 agentSkillsLine,
                 taughtSkillsLine,
-                replyGuidance: runReplyGuidance(run.trigger),
+                replyGuidance: runReplyGuidance(behaviorTrigger),
                 disabledBuiltinTools,
               })
                 .filter((instruction): instruction is string => Boolean(instruction))
@@ -7351,7 +7353,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 await flushProgress();
               }
             } else if (event.type === "thinking") {
-              if (!runRecordsThinking(run.trigger)) continue;
+              if (!runRecordsThinking(behaviorTrigger)) continue;
               const block = thinkingBlock(redactSecrets(event.text, runSecrets));
               if (!block) continue;
               // A model call's reasoning comes before its own output: settle the previous
@@ -7784,7 +7786,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             outcome: "completed",
             blocks,
             markUnread: completionMarksUnread(
-              run.trigger,
+              behaviorTrigger,
               text,
               peerMessage?.repliesToRequest === true,
             ),
@@ -8670,6 +8672,16 @@ export function longWorkProgressGuidance(maxLength = messageUserMaxLength()): st
 }
 
 export const ROUTINE_SILENT_REPLY_GUIDANCE = `If this routine's prompt says to stay silent when there is nothing to report, the entire final assistant reply must be exactly ${NO_RESPONSE} — no surrounding prose, no variants, no progress updates, no all-clear, and no meta note that you are staying silent. Do not call message_user unless you have something to report.`;
+
+/**
+ * The trigger whose chat behaviour a run follows. A webhook, GitHub or messaging delivery that runs
+ * exactly one routine records it on the run and behaves as that routine's run: it may finish
+ * silently, posts no narration or thinking, and only marks unread when it says something.
+ * Approvals still follow the real trigger.
+ */
+export function runBehaviorTrigger(run: { trigger: string; routineId: string | null }): string {
+  return run.trigger === "webhook" && run.routineId ? "routine" : run.trigger;
+}
 
 export function runAllowsSilentEmpty(trigger: string): boolean {
   return trigger === "routine" || isBackgroundRunTrigger(trigger);

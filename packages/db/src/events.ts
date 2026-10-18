@@ -238,6 +238,8 @@ export interface SendUserMessageInput {
     modelId: string;
     thinkingLevel: string | null;
   };
+  /** The routine an inbound delivery runs, when it runs exactly one; its run behaves as a routine run. */
+  routineId?: string;
 }
 
 export interface SendUserMessageResult {
@@ -461,6 +463,7 @@ export async function sendUserMessage(
             trigger: input.trigger,
             clientNonce: input.clientNonce ? `send:${message.id}` : undefined,
             sourceMessageId: message.id,
+            ...(input.routineId ? { routineId: input.routineId } : {}),
             ...(input.modelPin
               ? {
                   modelProvider: input.modelPin.modelProvider,
