@@ -67,7 +67,15 @@ function fixture(
     replyTo: null,
   }));
   const prisma = {
-    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({})),
+    // Upstream's dedicated-computer lease fence locks rows with $queryRaw, then bumps the lease.
+    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        $queryRaw: vi.fn(async () => [{ id: "row-1", scope: "dedicated" }]),
+        computerExecutionLease: {
+          updateManyAndReturn: vi.fn(async () => [{ fence: 1 }]),
+        },
+      }),
+    ),
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
