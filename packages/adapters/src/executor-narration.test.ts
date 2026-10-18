@@ -1,10 +1,12 @@
 import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
+import type { MessageBlock } from "@rakazo/contracts";
 import type * as DbModule from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
+import type * as BotMessagesModule from "./bot-messages.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
 
-type Published = { role: string; blocks: { kind: string; text?: string }[]; clientNonce?: string };
+type Published = { role: string; blocks: MessageBlock[]; clientNonce?: string };
 const published: Published[] = [];
 
 vi.mock("@rakazo/db", async (importOriginal) => ({
@@ -16,6 +18,12 @@ vi.mock("@rakazo/db", async (importOriginal) => ({
   appendEventInTransaction: vi.fn(async () => ({ seq: published.length })),
 }));
 
+const returnBotMessageOutcome = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("./bot-messages.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof BotMessagesModule>()),
+  returnBotMessageOutcome,
+}));
+
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
   acquireComputerExecutionLease: async () => null,
@@ -24,8 +32,14 @@ vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
 
 const NARRATION = "Label missing; create it.";
 
-/** One user-triggered run whose runtime yields `script` (tool events are executed). */
-function fixture(script: AgentRuntimeEvent[]) {
+/**
+ * One run whose runtime yields `script` (tool events are executed). User-triggered unless
+ * `trigger` says otherwise; `source` is the message that woke a bot_message run.
+ */
+function fixture(
+  script: AgentRuntimeEvent[],
+  options: { trigger?: string; source?: MessageBlock[] } = {},
+) {
   const run = {
     id: "run-1",
     botId: "bot-1",
@@ -34,7 +48,8 @@ function fixture(script: AgentRuntimeEvent[]) {
     spaceId: "space-1",
     userId: "user-1",
     status: "queued",
-    trigger: "user",
+    trigger: options.trigger ?? "user",
+    sourceMessageId: options.source ? "source-1" : null,
     leaseFence: 0,
   };
   const prisma = {
@@ -65,7 +80,13 @@ function fixture(script: AgentRuntimeEvent[]) {
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     thread: { findUniqueOrThrow: vi.fn(async () => ({ id: run.threadId, groupId: null })) },
-    message: { findMany: vi.fn(async () => []) },
+    message: {
+      findMany: vi.fn(async () => []),
+      findUnique: vi.fn(async () =>
+        options.source ? { blocks: options.source, replyTo: null } : null,
+      ),
+      findFirst: vi.fn(async () => null),
+    },
     task: { findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Tidy labels" })) },
     connection: { findMany: vi.fn(async () => []) },
     spaceModelPreference: { findFirst: vi.fn(async () => null) },
@@ -137,8 +158,12 @@ function fixture(script: AgentRuntimeEvent[]) {
     append,
     pauseRunForInput,
     finalizeRun,
+    /** Blocks of the run's final message (empty when the run finished with none). */
+    finalBlocks: () =>
+      (finalizeRun.mock.calls as unknown as [{ blocks: MessageBlock[] }][])[0]![0].blocks,
     async run() {
       published.length = 0;
+      returnBotMessageOutcome.mockClear();
       await executor.continueRun(run.id, "worker-1");
       expect(runtimeRun).toHaveBeenCalled();
       expect(finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
@@ -160,6 +185,18 @@ const toolTurn: AgentRuntimeEvent[] = [
   { type: "text", text: "Created the urgent label." },
   { type: "done", text: `${NARRATION}Created the urgent label.` },
 ];
+
+function peerMessage(intent: "fyi" | "request"): MessageBlock[] {
+  return [
+    {
+      kind: "bot_message_received",
+      fromBotId: "bot-2",
+      fromBotName: "Elena",
+      text: "Heads up: the labels were tidied.",
+      intent,
+    },
+  ];
+}
 
 describe("mid-turn narration in a user-triggered run", () => {
   it("flags narration but not message_user or the final reply", async () => {
@@ -194,5 +231,59 @@ describe("mid-turn narration in a user-triggered run", () => {
       expect.objectContaining({ kind: "ask", text: "Which colour?" }),
     ]);
     expect(pause.blocks[0]!.narration).toBeUndefined();
+  });
+});
+
+describe("NO_RESPONSE in a run woken by another bot's fyi", () => {
+  it("finishes with no message at all", async () => {
+    const f = fixture(
+      [
+        { type: "text", text: "NO_RESPONSE" },
+        { type: "done", text: "NO_RESPONSE" },
+      ],
+      { trigger: "bot_message", source: peerMessage("fyi") },
+    );
+    await f.run();
+
+    expect(published).toEqual([]);
+    expect(f.finalBlocks()).toEqual([]);
+    expect(returnBotMessageOutcome).not.toHaveBeenCalled();
+  });
+
+  it("finishes with no message when the sentinel repeats around tool calls", async () => {
+    const f = fixture(
+      [
+        { type: "text", text: "NO_RESPONSE" },
+        { type: "tool", name: "label_create", args: { name: "urgent" }, executionId: "call-1" },
+        { type: "text", text: "NO_RESPONSE" },
+        { type: "done", text: "NO_RESPONSENO_RESPONSE" },
+      ],
+      { trigger: "bot_message", source: peerMessage("fyi") },
+    );
+    await f.run();
+
+    expect(published).toEqual([]);
+    expect(f.finalBlocks()).toEqual([]);
+    expect(returnBotMessageOutcome).not.toHaveBeenCalled();
+  });
+
+  it("still returns NO_RESPONSE to the sender of a request", async () => {
+    const f = fixture(
+      [
+        { type: "text", text: "NO_RESPONSE" },
+        { type: "done", text: "NO_RESPONSE" },
+      ],
+      { trigger: "bot_message", source: peerMessage("request") },
+    );
+    await f.run();
+
+    expect(f.finalBlocks()).toEqual([{ kind: "text", text: "NO_RESPONSE" }]);
+    expect(returnBotMessageOutcome).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      "NO_RESPONSE",
+      "result",
+    );
   });
 });
