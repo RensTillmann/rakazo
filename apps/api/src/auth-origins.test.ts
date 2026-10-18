@@ -4,17 +4,19 @@ import { isTrustedOrigin, MOBILE_AUTH_ORIGINS } from "./app.js";
 
 // Better Auth skips its origin middleware under NODE_ENV=test, so check the
 // matcher that production uses for callback URLs and request origins.
-async function trusted(url: string) {
+async function trusted(url: string, extraOrigins: readonly string[] = []) {
   const auth = createAuth({} as never, {
     secret: "offline-auth-secret-at-least-32-characters",
     baseURL: "https://api.example.test",
     webOrigin: "https://app.example.test",
     signupsEnabled: undefined,
     signupAllowlist: undefined,
-    extraOrigins: MOBILE_AUTH_ORIGINS,
+    extraOrigins: [...MOBILE_AUTH_ORIGINS, ...extraOrigins],
   });
   return (await auth.$context).isTrustedOrigin(url);
 }
+
+const TAILNET_ORIGIN = "https://g16.tail5f04cd.ts.net:5173";
 
 const env = {
   webOrigin: "http://127.0.0.1:5173",
@@ -59,6 +61,21 @@ describe("CORS origins", () => {
       expect(isTrustedOrigin(origin, env), origin).toBe(false);
     }
   });
+
+  it("trusts each RAKAZO_EXTRA_ORIGINS entry like the web origin and nothing more", () => {
+    const withExtra = { ...env, extraOrigins: [TAILNET_ORIGIN] };
+    expect(isTrustedOrigin(TAILNET_ORIGIN, withExtra)).toBe(true);
+    expect(isTrustedOrigin("http://127.0.0.1:5173", withExtra)).toBe(true);
+    for (const origin of [
+      "https://g16.tail5f04cd.ts.net",
+      "http://g16.tail5f04cd.ts.net:5173",
+      "https://other.tail5f04cd.ts.net:5173",
+      "https://evil.example",
+    ]) {
+      expect(isTrustedOrigin(origin, withExtra), origin).toBe(false);
+    }
+    expect(isTrustedOrigin(TAILNET_ORIGIN, env)).toBe(false);
+  });
 });
 
 describe("mobile auth origins", () => {
@@ -80,5 +97,13 @@ describe("mobile auth origins", () => {
     ]) {
       expect(await trusted(url), url).toBe(true);
     }
+  });
+
+  it("trusts an extra web origin for sign-in callbacks only when it is listed", async () => {
+    expect(await trusted(`${TAILNET_ORIGIN}/app`, [TAILNET_ORIGIN])).toBe(true);
+    expect(await trusted(`${TAILNET_ORIGIN}/app`)).toBe(false);
+    expect(await trusted("https://other.tail5f04cd.ts.net:5173/app", [TAILNET_ORIGIN])).toBe(
+      false,
+    );
   });
 });

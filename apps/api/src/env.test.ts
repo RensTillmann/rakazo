@@ -43,6 +43,21 @@ describe("loadEnv", () => {
     expect(loadEnv({ ...base, PI_SESSION_RECORDING: "true" }).piSessionRecording).toBe(true);
   });
 
+  it("reads RAKAZO_EXTRA_ORIGINS as a list of origins and rejects anything else", () => {
+    expect(loadEnv(base).extraOrigins).toEqual([]);
+    expect(
+      loadEnv({
+        ...base,
+        RAKAZO_EXTRA_ORIGINS:
+          " https://g16.tail5f04cd.ts.net:5173/ ,, https://g16.tail5f04cd.ts.net:5173,http://pc.lan:5173",
+      }).extraOrigins,
+    ).toEqual(["https://g16.tail5f04cd.ts.net:5173", "http://pc.lan:5173"]);
+    for (const value of ["g16.tail5f04cd.ts.net", "https://host.example/app", "ftp://host.example"])
+      expect(() => loadEnv({ ...base, RAKAZO_EXTRA_ORIGINS: value }), value).toThrow(
+        "RAKAZO_EXTRA_ORIGINS",
+      );
+  });
+
   it("keeps explicit emulator settings for pnpm test", () => {
     const env = loadEnv({
       ...base,

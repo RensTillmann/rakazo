@@ -95,10 +95,17 @@ export function formatComputerCommand(command: ComputerCommand, labels: Computer
   return `${lines.join("\n").replace(/\r?\n/g, "\r\n")}\r\n`;
 }
 
-/** The sealed capability page and its websocket share one directory on the web origin. */
+/**
+ * The sealed capability page and its websocket share one directory on the web origin that
+ * loaded this page, even when the API sealed the URL onto another of its origins.
+ */
 export function terminalSocketUrl(capabilityUrl: string, base: string): string | null {
   try {
-    const url = new URL("websockify", new URL(capabilityUrl, base));
+    const capability = new URL(capabilityUrl, base);
+    const page = capability.pathname.startsWith("/novnc/session/")
+      ? new URL(capability.pathname, base)
+      : capability;
+    const url = new URL("websockify", page);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.search = "";
