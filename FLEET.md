@@ -5,10 +5,11 @@ This is Rens's fork of [elie222/rakazo](https://github.com/elie222/rakazo):
 
 - `main` follows upstream `main`. We never commit to it.
 - `fleet-next` (this branch) is a newer upstream plus our patches, one commit per patch. It is
-  **running** since 18 Oct 2026: image `rakazo-fleet/app:5e8f647` (head `5e8f6471`, base upstream
-  `76f4259`), computers pinned to `rakazo-fleet/computer:7d5e64c`. Full suite, web tests and `tsc`
-  for every package passed in that image. Rollback needs the `pre-fleet-next-20261018.dump`
-  restore (upstream migrations ran).
+  **running** since 18 Oct 2026: image `rakazo-fleet/app:1fd5c20` (patch head `1fd5c20`, base
+  upstream `76f4259`), computers pinned to `rakazo-fleet/computer:7d5e64c`. Full suite, web tests
+  and `tsc` passed in that image. Rollback to the image before the sidebar patch: tag `5e8f647`,
+  no restore (that patch has no migration). Rollback to `fleet` needs the
+  `pre-fleet-next-20261018.dump` restore (upstream migrations ran).
 - `fleet` (`8896cd15`, image `rakazo-fleet/app:d93d461`) is the previous build. Adopt `fleet-next`
   as `fleet` once it has run well for a few days (see "Adopt `fleet-next`").
 
@@ -37,6 +38,7 @@ the `fleet` commit it came from.
 | `6672bf7` Trust extra web origins from RAKAZO_EXTRA_ORIGINS (from `6d8921b`) | Each origin in the setting is trusted like `WEB_ORIGIN` for sign-in, sign-out, session and RPC calls; any other origin is still refused. The computer screen and terminal load from the address the page was opened on. The images compose file passes `RAKAZO_ALLOWED_HOSTS` to the web service. | `RAKAZO_EXTRA_ORIGINS` (origins, comma-separated) with `RAKAZO_ALLOWED_HOSTS` (host names, for Vite) | not yet |
 | `d52e947` Play attached screen recordings inline in the web chat (from `a67fd29`) | `attach_file` accepts `.webm` and `.mp4` (`.m4v` counts as mp4) as `file` blocks within the upload limit, which upstream #1440 made configurable (`MAX_UPLOAD_SIZE_MB`, default 10). The web chat plays them in an inline player; the mobile app shows them as a file. People can upload `.webm`/`.mp4` too. | none | not yet |
 | `9ac7fab` Pin session cookie security with RAKAZO_SECURE_COOKIES (from `2f4b717`) | Lets the tailnet address be the main address while `http://127.0.0.1:5173` stays an extra origin. With `false`, both addresses keep the plain `better-auth.session_token` cookie, so sessions stay valid. `true` forces secure cookies, unset keeps upstream's choice, any other value stops the API at start-up. | `RAKAZO_SECURE_COOKIES` (`true`/`false`, unset = upstream) | not yet |
+| `1fd5c20` Resizable bots sidebar that snaps to an avatar-only rail, then hides (new on `fleet-next`) | The sidebar edge drags like the right panel's: free widths from 220px to the viewport limit (at most 560px, leaving 320px each for the chat and the right panel). Below 148px it snaps to a 76px rail with only avatars (name as tooltip, unread dot on the avatar, thin section lines that fold a section; search, activity and archived hidden); below 38px it hides. Dragging back out reverses each step; a click still hides or shows it, and the arrow keys step through the same stops. Width is kept per user in the browser; the phone drawer is unchanged. The right panel reserves the real sidebar width. | none | not yet |
 | Fleet: notes for `fleet-next` | This file. Never sent upstream. | — | — |
 
 ### Dropped patches (merged upstream)
