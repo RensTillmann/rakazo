@@ -28,6 +28,8 @@ was built from on 2026-10-15. On top of it:
 | Show attach_file images and files from bot-to-bot runs (`5a6000d`, merged in `e2ae2d7`) | In runs started by another bot's message (`bot_message`), the `image` and `file` blocks a bot attaches with `attach_file` now show in the chat, in history and live without a page refresh, like its text reply and question cards already did. Before, they were saved in the thread but hidden. Steps, tool activity and narration of those runs stay hidden; background (ticket) runs, peer receipt chips and the sidebar preview are unchanged. | none | not yet |
 | Finish silently on NO_RESPONSE in every run that may finish empty (`db6b42d`, merged in `ad7ac73`) | A bot woken by a teammate's `fyi` (or by a messaging-channel message) that answers exactly `NO_RESPONSE`, once or repeated, now finishes with no chat bubble, as routines already did. Before, the word showed up as a message. Such a run that ends with only tool steps posts nothing either. A `request` or `question` still gets `NO_RESPONSE` back as its result, as before. | none | not yet |
 | Keep the model's thinking behind "Show thoughts" (`d5c7ece`, merged in `ad7ac73`) | The bot's own reasoning (what the model thinks before it writes or calls a tool) is now saved with its messages in runs Rens or another bot starts, in order: with a narration message, between the tool steps, and before the final reply. The lightbulb shows it small, grey and italic, folded to three lines with "Show more"; off hides it. It is never sent back to a model and never shows up in another bot's message, a notification, the sidebar preview, search or the bot export. Each piece is cut at 8,000 characters (marked as cut), and secrets the run knows are blanked out. Claude Sonnet 5.5 decides by itself when to think, so short easy replies often have none. Routine and ticket runs keep none, and a silent finish (`NO_RESPONSE`) keeps none either. The mobile app hides it. | none (the same per-browser toggle) | not yet |
+| Trust extra web origins from RAKAZO_EXTRA_ORIGINS (`6d8921b`, merged in `6d97ffa`) | The chat can be opened from a second address, here the phone over Tailscale (`https://g16.tail5f04cd.ts.net:5173`), next to `http://127.0.0.1:5173` on the PC. Each origin in the setting is trusted like `WEB_ORIGIN` for sign-in, sign-out, session and RPC calls; any other origin is still refused. `WEB_ORIGIN`, the cookie name and cookie settings stay as they were, so the PC session stays valid. The computer screen and terminal load from the address the page was opened on. The images compose file passes `RAKAZO_ALLOWED_HOSTS` to the web service. Still tied to `WEB_ORIGIN` (they open the PC address): the link in a "Forward to bot" message, connecting an app or an MCP server that signs in through OAuth (start those on the PC), and password-reset or verification e-mail links. | `RAKAZO_EXTRA_ORIGINS` (origins, comma-separated) with `RAKAZO_ALLOWED_HOSTS` (host names, for Vite) | not yet |
+| Play attached screen recordings inline in the web chat (`a67fd29`, merged in `6d97ffa`) | `attach_file` used to refuse `.webm` and `.mp4` ("unsupported attachment type"). They are now allowed as `file` blocks (`video/webm`, `video/mp4`; `.m4v` counts as mp4) within the existing 10 MiB attachment limit, so they also show from bot-to-bot runs. The web chat plays a video file block (a `video/*` type, or a video file name when the stored type is generic) in an inline player with controls, loaded once it scrolls near the screen, with name, size and a download button under it. Other files keep the download chip. People can also upload `.webm`/`.mp4` files to a bot themselves. The mobile app shows videos as a file. | none | not yet |
 | Fleet: how to build, switch and update | This file. Never sent upstream. | — | — |
 
 Related upstream issues (no fleet patch): [#1454](https://github.com/elie222/rakazo/issues/1454)
@@ -42,14 +44,31 @@ None of the patches touch the database. Every setting defaults to upstream behav
 so an image built from `fleet` with no new settings behaves like upstream apart from the
 narration and `fyi` changes, the browser lock (bots with the browser off), the hidden
 thoughts (the "Show thoughts" toggle starts off), the attachments shown from
-bot-to-bot runs, the silent `NO_RESPONSE` finish and the saved thinking.
+bot-to-bot runs, the silent `NO_RESPONSE` finish, the saved thinking and the
+`.webm`/`.mp4` attachments.
 
-**Running now (checked 18 Oct 2026):** image `rakazo-fleet/app:e2ae2d7` (see below). The
+**Running now (checked 18 Oct 2026):** image `rakazo-fleet/app:ad7ac73` (see below). The
 first switch to the fork was on 17 Oct to `rakazo-fleet/app:b0c611d`, with
 `RAKAZO_MESSAGE_USER_MAX_CHARS=4000` in `D:/rakazo/.env`. Database backup taken just before
 that switch: `D:/rakazo/backups/pre-fleet-20261017.dump`.
 
-**Built and tested, not running (18 Oct 2026):** image `rakazo-fleet/app:ad7ac73` (fleet
+**Built and tested, not running (18 Oct 2026):** image `rakazo-fleet/app:6d97ffa` (fleet
+at `6d97ffa3`) = `ad7ac73` plus the extra web origin (phone over Tailscale) and the videos
+in the chat. To use the phone address, add to `D:/rakazo/.env`:
+
+```env
+RAKAZO_EXTRA_ORIGINS=https://g16.tail5f04cd.ts.net:5173
+RAKAZO_ALLOWED_HOSTS=g16.tail5f04cd.ts.net
+```
+
+and give the `web` service in `D:/rakazo/docker-compose.images.yml` the line
+`RAKAZO_ALLOWED_HOSTS: ${RAKAZO_ALLOWED_HOSTS:-}` under `environment:`, as in
+`infra/compose/docker-compose.images.yml` on `fleet` (the `web` service does not read
+`.env` by itself; without that line the phone gets "Blocked request" from Vite). Then
+switch to the tag as usual. Without these lines the image behaves like `ad7ac73` apart from
+the videos.
+
+Previous build: image `rakazo-fleet/app:ad7ac73` (fleet
 at `ad7ac73c`) = `e2ae2d7` plus the silent `NO_RESPONSE` finish and the saved thinking.
 No new setting; it uses the same `.env` lines as `e2ae2d7`.
 
@@ -120,6 +139,12 @@ docker run --rm --user root --network none --entrypoint '' rakazo-fleet/app:$TAG
 
 All tests must pass before switching. (`pnpm test` in the repo runs the same tests, but
 needs pnpm and a full install on Windows; the image already has everything.)
+
+Web tests that render React need `NODE_ENV=test` (the image sets `production`): add
+`-e NODE_ENV=test` and list the web test files, for example
+`apps/web/src/components/ArtifactFileCard.test.tsx`.
+`apps/web/src/lib/desktop.test.ts` ("keeps conversation header controls clickable") already
+fails on `ad7ac73` (expects one match, finds two); the patches since do not touch it.
 
 ## Switch the deployment to the fork image
 
@@ -192,7 +217,9 @@ docker compose --env-file .env -f docker-compose.images.yml up -d --pull never
 
 The extra settings (`RAKAZO_MESSAGE_USER_MAX_CHARS`, `BOT_MESSAGE_MAX_HOPS`,
 `RAKAZO_FLAG_BOT`, `RAKAZO_FLAG_LABEL`, `RAKAZO_RUN_MAX_MODEL_CALLS`,
-`RAKAZO_RUN_MAX_MINUTES`) can stay; upstream ignores them.
+`RAKAZO_RUN_MAX_MINUTES`, `RAKAZO_EXTRA_ORIGINS`) can stay; upstream ignores them. Upstream
+reads `RAKAZO_ALLOWED_HOSTS` too, but its own compose file does not pass it to the web, so
+the phone address stops working after a rollback.
 
 For an emergency rollback without editing `.env` first (values on the command line win
 over `.env`; fix `.env` afterwards, or the next `up` switches back to the fork):
