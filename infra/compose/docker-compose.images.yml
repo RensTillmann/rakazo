@@ -273,6 +273,8 @@ services:
       NODE_ENV: production
       API_PROXY_TARGET: http://api:3100
       RAKAZO_HOST: ${RAKAZO_HOST:-localhost}
+      # More host names the web answers on (comma-separated), e.g. a tailnet name.
+      RAKAZO_ALLOWED_HOSTS: ${RAKAZO_ALLOWED_HOSTS:-}
       # Set only by the packaged desktop app. Its authenticated probe prevents a
       # source dev server on the same host port from impersonating this stack.
       RAKAZO_DESKTOP_STACK_TOKEN: ${RAKAZO_DESKTOP_STACK_TOKEN:-}

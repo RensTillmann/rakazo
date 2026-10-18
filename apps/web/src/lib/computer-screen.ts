@@ -32,6 +32,11 @@ export function embeddableScreenUrl(url: string | null): string | null {
   try {
     const parsed = new URL(url, window.location.href);
     const page = new URL(window.location.href);
+    // The API seals screen URLs onto WEB_ORIGIN, but the capability route is served by
+    // whichever web origin loaded this page (for example a second, tailnet address).
+    if (parsed.pathname.startsWith("/novnc/session/") && parsed.origin !== page.origin) {
+      return new URL(`${parsed.pathname}${parsed.search}${parsed.hash}`, page.origin).toString();
+    }
     const local = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
     const pagePort = page.port || (page.protocol === "https:" ? "443" : "80");
     if (local && parsed.port && parsed.port !== pagePort) {
