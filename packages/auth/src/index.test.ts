@@ -105,6 +105,20 @@ describe("buildTrustedOrigins", () => {
       "https://extra.example.test",
     ]);
   });
+
+  it("adds the localhost twin for a 127.0.0.1 extra origin next to an https primary", () => {
+    expect(
+      buildTrustedOrigins({
+        webOrigin: "https://g16.tail5f04cd.ts.net:5173",
+        baseURL: "https://g16.tail5f04cd.ts.net:5173",
+        extraOrigins: ["http://127.0.0.1:5173"],
+      }),
+    ).toEqual([
+      "https://g16.tail5f04cd.ts.net:5173",
+      "http://127.0.0.1:5173",
+      "http://localhost:5173",
+    ]);
+  });
 });
 
 describe("passwordResetEmail", () => {
