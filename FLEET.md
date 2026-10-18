@@ -30,6 +30,7 @@ was built from on 2026-10-15. On top of it:
 | Keep the model's thinking behind "Show thoughts" (`d5c7ece`, merged in `ad7ac73`) | The bot's own reasoning (what the model thinks before it writes or calls a tool) is now saved with its messages in runs Rens or another bot starts, in order: with a narration message, between the tool steps, and before the final reply. The lightbulb shows it small, grey and italic, folded to three lines with "Show more"; off hides it. It is never sent back to a model and never shows up in another bot's message, a notification, the sidebar preview, search or the bot export. Each piece is cut at 8,000 characters (marked as cut), and secrets the run knows are blanked out. Claude Sonnet 5.5 decides by itself when to think, so short easy replies often have none. Routine and ticket runs keep none, and a silent finish (`NO_RESPONSE`) keeps none either. The mobile app hides it. | none (the same per-browser toggle) | not yet |
 | Trust extra web origins from RAKAZO_EXTRA_ORIGINS (`6d8921b`, merged in `6d97ffa`) | The chat can be opened from a second address, here the phone over Tailscale (`https://g16.tail5f04cd.ts.net:5173`), next to `http://127.0.0.1:5173` on the PC. Each origin in the setting is trusted like `WEB_ORIGIN` for sign-in, sign-out, session and RPC calls; any other origin is still refused. `WEB_ORIGIN`, the cookie name and cookie settings stay as they were, so the PC session stays valid. The computer screen and terminal load from the address the page was opened on. The images compose file passes `RAKAZO_ALLOWED_HOSTS` to the web service. Still tied to `WEB_ORIGIN` (they open the PC address): the link in a "Forward to bot" message, connecting an app or an MCP server that signs in through OAuth (start those on the PC), and password-reset or verification e-mail links. | `RAKAZO_EXTRA_ORIGINS` (origins, comma-separated) with `RAKAZO_ALLOWED_HOSTS` (host names, for Vite) | not yet |
 | Play attached screen recordings inline in the web chat (`a67fd29`, merged in `6d97ffa`) | `attach_file` used to refuse `.webm` and `.mp4` ("unsupported attachment type"). They are now allowed as `file` blocks (`video/webm`, `video/mp4`; `.m4v` counts as mp4) within the existing 10 MiB attachment limit, so they also show from bot-to-bot runs. The web chat plays a video file block (a `video/*` type, or a video file name when the stored type is generic) in an inline player with controls, loaded once it scrolls near the screen, with name, size and a download button under it. Other files keep the download chip. People can also upload `.webm`/`.mp4` files to a bot themselves. The mobile app shows videos as a file. | none | not yet |
+| Pin session cookie security with RAKAZO_SECURE_COOKIES (`2f4b717`, merged in `d93d461`) | Lets the tailnet address be the main address (`BETTER_AUTH_URL`, `WEB_ORIGIN` and `API_URL` = `https://g16.tail5f04cd.ts.net:5173`) with `http://127.0.0.1:5173` kept as an extra origin. Normally an https `BETTER_AUTH_URL` makes Better Auth rename the session cookie to `__Secure-better-auth.session_token` and mark it `Secure`, which signs everyone out (the old cookie is no longer read). With the setting `false`, both addresses keep the plain `better-auth.session_token` cookie, so existing sessions stay valid and sign-in, sign-out, session and RPC work from both. `true` forces secure cookies, unset keeps upstream's choice, any other value stops the API at start-up. An extra loopback origin now also brings its `localhost` twin into the sign-in check (the CORS check already did), so `http://localhost:5173` keeps working. The links Rakazo writes (Forward to bot, connecting an app, reset and verification e-mails, the computer screen) then use the tailnet address, which opens on the phone and on the PC. Still main-address only: starting an MCP server's OAuth sign-in (from `127.0.0.1` it says "MCP OAuth redirect URI is not allowed"; open the tailnet address on the PC). | `RAKAZO_SECURE_COOKIES` (`true`/`false`, unset = upstream) | not yet |
 | Fleet: how to build, switch and update | This file. Never sent upstream. | — | — |
 
 Related upstream issues (no fleet patch): [#1454](https://github.com/elie222/rakazo/issues/1454)
@@ -47,26 +48,46 @@ thoughts (the "Show thoughts" toggle starts off), the attachments shown from
 bot-to-bot runs, the silent `NO_RESPONSE` finish, the saved thinking and the
 `.webm`/`.mp4` attachments.
 
-**Running now (checked 18 Oct 2026):** image `rakazo-fleet/app:ad7ac73` (see below). The
-first switch to the fork was on 17 Oct to `rakazo-fleet/app:b0c611d`, with
-`RAKAZO_MESSAGE_USER_MAX_CHARS=4000` in `D:/rakazo/.env`. Database backup taken just before
-that switch: `D:/rakazo/backups/pre-fleet-20261017.dump`.
+**Running now (checked 18 Oct 2026):** image `rakazo-fleet/app:6d97ffa`, with the phone
+address as an extra origin (see the previous build below). The first switch to the fork was
+on 17 Oct to `rakazo-fleet/app:b0c611d`, with `RAKAZO_MESSAGE_USER_MAX_CHARS=4000` in
+`D:/rakazo/.env`. Database backup taken just before that switch:
+`D:/rakazo/backups/pre-fleet-20261017.dump`.
 
-**Built and tested, not running (18 Oct 2026):** image `rakazo-fleet/app:6d97ffa` (fleet
-at `6d97ffa3`) = `ad7ac73` plus the extra web origin (phone over Tailscale) and the videos
-in the chat. To use the phone address, add to `D:/rakazo/.env`:
+**Built and tested, not running (18 Oct 2026):** image `rakazo-fleet/app:d93d461` (fleet
+at `d93d4611`) = `6d97ffa` plus `RAKAZO_SECURE_COOKIES`. To make the tailnet address the
+main one, change these lines in `D:/rakazo/.env` (`RAKAZO_ALLOWED_HOSTS` stays; the compose
+file needs no change):
+
+```env
+BETTER_AUTH_URL=https://g16.tail5f04cd.ts.net:5173
+WEB_ORIGIN=https://g16.tail5f04cd.ts.net:5173
+API_URL=https://g16.tail5f04cd.ts.net:5173
+RAKAZO_IMAGE_TAG=d93d461
+RAKAZO_EXTRA_ORIGINS=http://127.0.0.1:5173
+RAKAZO_SECURE_COOKIES=false
+```
+
+Then switch as usual. Never set the https URLs without `RAKAZO_SECURE_COOKIES=false`: that
+signs everyone out. The links then need `tailscale serve` to be running. With the old URL
+lines the image behaves like `6d97ffa`. To go back, restore the three URL lines and
+`RAKAZO_EXTRA_ORIGINS=https://g16.tail5f04cd.ts.net:5173`, drop `RAKAZO_SECURE_COOKIES`, and
+switch back to `6d97ffa` if you like; sessions stay valid both ways.
+
+Previous build: image `rakazo-fleet/app:6d97ffa` (fleet at `6d97ffa3`) = `ad7ac73` plus the
+extra web origin (phone over Tailscale) and the videos in the chat. The phone address needs
+in `D:/rakazo/.env`:
 
 ```env
 RAKAZO_EXTRA_ORIGINS=https://g16.tail5f04cd.ts.net:5173
 RAKAZO_ALLOWED_HOSTS=g16.tail5f04cd.ts.net
 ```
 
-and give the `web` service in `D:/rakazo/docker-compose.images.yml` the line
+and the `web` service in `D:/rakazo/docker-compose.images.yml` needs the line
 `RAKAZO_ALLOWED_HOSTS: ${RAKAZO_ALLOWED_HOSTS:-}` under `environment:`, as in
 `infra/compose/docker-compose.images.yml` on `fleet` (the `web` service does not read
-`.env` by itself; without that line the phone gets "Blocked request" from Vite). Then
-switch to the tag as usual. Without these lines the image behaves like `ad7ac73` apart from
-the videos.
+`.env` by itself; without that line the phone gets "Blocked request" from Vite). Without
+these lines the image behaves like `ad7ac73` apart from the videos.
 
 Previous build: image `rakazo-fleet/app:ad7ac73` (fleet
 at `ad7ac73c`) = `e2ae2d7` plus the silent `NO_RESPONSE` finish and the saved thinking.
@@ -217,9 +238,13 @@ docker compose --env-file .env -f docker-compose.images.yml up -d --pull never
 
 The extra settings (`RAKAZO_MESSAGE_USER_MAX_CHARS`, `BOT_MESSAGE_MAX_HOPS`,
 `RAKAZO_FLAG_BOT`, `RAKAZO_FLAG_LABEL`, `RAKAZO_RUN_MAX_MODEL_CALLS`,
-`RAKAZO_RUN_MAX_MINUTES`, `RAKAZO_EXTRA_ORIGINS`) can stay; upstream ignores them. Upstream
-reads `RAKAZO_ALLOWED_HOSTS` too, but its own compose file does not pass it to the web, so
-the phone address stops working after a rollback.
+`RAKAZO_RUN_MAX_MINUTES`, `RAKAZO_EXTRA_ORIGINS`, `RAKAZO_SECURE_COOKIES`) can stay;
+upstream ignores them. Upstream reads `RAKAZO_ALLOWED_HOSTS` too, but its own compose file
+does not pass it to the web, so the phone address stops working after a rollback. If the
+tailnet address is the main one (https `BETTER_AUTH_URL`), first put `BETTER_AUTH_URL`,
+`WEB_ORIGIN` and `API_URL` back to `http://127.0.0.1:5173`: upstream ignores
+`RAKAZO_SECURE_COOKIES`, so with an https `BETTER_AUTH_URL` it renames the session cookie
+and signs everyone out.
 
 For an emergency rollback without editing `.env` first (values on the command line win
 over `.env`; fix `.env` afterwards, or the next `up` switches back to the fork):
