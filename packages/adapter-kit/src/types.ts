@@ -540,6 +540,8 @@ export interface ModelCallObserver {
 
 export type AgentRuntimeEvent =
   | { type: "text"; text: string }
+  /** The model's reasoning for one model call, in order with its text. Never model input. */
+  | { type: "thinking"; text: string }
   | {
       type: "progress";
       text: string;

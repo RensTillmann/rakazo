@@ -93,9 +93,22 @@ const ChartBlock = z
 export const SecretAskPurpose = z.enum(["otp", "password", "api_key"]);
 export type SecretAskPurpose = z.infer<typeof SecretAskPurpose>;
 
+/** Longest stored `thinking` block; longer reasoning is cut and marked `truncated`. */
+export const THINKING_BLOCK_MAX_CHARS = 8_000;
+
 export const MessageBlock = z.discriminatedUnion("kind", [
   /** `narration`: text written mid-turn before a tool call; clients may hide it. */
   z.object({ kind: z.literal("text"), text: z.string(), narration: z.boolean().optional() }),
+  /**
+   * The model's own reasoning for one model call, shown only behind the client's
+   * "Show thoughts" toggle. Never sent back to a model, relayed, previewed, searched or
+   * exported. `truncated`: cut at THINKING_BLOCK_MAX_CHARS.
+   */
+  z.object({
+    kind: z.literal("thinking"),
+    text: z.string(),
+    truncated: z.literal(true).optional(),
+  }),
   z.object({
     kind: z.literal("card"),
     lines: z.array(z.object({ k: z.string(), v: z.string() })),
@@ -296,6 +309,29 @@ export const MessageBlock = z.discriminatedUnion("kind", [
   }),
 ]);
 export type MessageBlock = z.infer<typeof MessageBlock>;
+
+export type ThinkingBlock = Extract<MessageBlock, { kind: "thinking" }>;
+
+/** A stored thinking block for `text`, cut at THINKING_BLOCK_MAX_CHARS; null when empty. */
+export function thinkingBlock(text: string): ThinkingBlock | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= THINKING_BLOCK_MAX_CHARS) return { kind: "thinking", text: trimmed };
+  return {
+    kind: "thinking",
+    text: `${trimmed.slice(0, THINKING_BLOCK_MAX_CHARS - 1).trimEnd()}…`,
+    truncated: true,
+  };
+}
+
+/**
+ * Blocks a model, relay, notification, preview, search or export may see: everything but
+ * `thinking`. Returns the same array when there is nothing to drop.
+ */
+export function withoutThinkingBlocks<T extends { kind: string }>(blocks: readonly T[]): T[] {
+  if (!blocks.some((block) => block.kind === "thinking")) return blocks as T[];
+  return blocks.filter((block) => block.kind !== "thinking");
+}
 
 /**
  * Something the bot did on its computer, shown in the terminal's Activity view: a shell

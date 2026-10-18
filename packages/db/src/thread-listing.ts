@@ -33,6 +33,8 @@ export function previewFromBlocks(blocks: unknown): string {
     if (
       block &&
       typeof block === "object" &&
+      // The bot's thinking is never a chat preview.
+      !("kind" in block && block.kind === "thinking") &&
       "text" in block &&
       typeof (block as { text?: unknown }).text === "string"
     ) {

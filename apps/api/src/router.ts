@@ -148,6 +148,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   parseTicketRef,
   usableModelId,
+  withoutThinkingBlocks,
 } from "@rakazo/contracts";
 import {
   ACTIVE_RUN_STATUSES,
@@ -6082,7 +6083,11 @@ export function createRouter(deps: RouterDeps) {
             timezone: r.timezone,
           })),
           files,
-          history,
+          // The bot's thinking is never exported.
+          history: history.map((message) => ({
+            ...message,
+            blocks: withoutThinkingBlocks(message.blocks),
+          })),
         };
       }),
     },

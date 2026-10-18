@@ -1137,6 +1137,8 @@ export function blockText(message: MobileMessage) {
           .map((step) => `${step.label}${step.count > 1 ? ` ×${step.count}` : ""}`)
           .join(" · ");
       }
+      // The bot's thinking is web-only (behind Show thoughts); never shown or spoken here.
+      if (block.kind === "thinking") return "";
       return ("text" in block ? block.text : "state" in block ? block.state : "") ?? "";
     })
     .filter(Boolean)

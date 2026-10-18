@@ -4211,6 +4211,14 @@ msgstr "Show computer"
 msgid "Show list"
 msgstr "Show list"
 
+#: src/components/ThinkingText.tsx
+msgid "Cut at {THINKING_BLOCK_MAX_CHARS} characters."
+msgstr "Cut at {THINKING_BLOCK_MAX_CHARS} characters."
+
+#: src/components/ThinkingText.tsx
+msgid "Show less"
+msgstr "Show less"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Show more"
 msgstr "Show more"
