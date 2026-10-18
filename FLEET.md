@@ -26,6 +26,8 @@ was built from on 2026-10-15. On top of it:
 | Refuse shell commands that start a browser for a bot without browser tools (`dccb3e1`, merged in `419b22b`) | For a bot whose browser is off (`browser_navigate` among its turned-off tools), the shell refuses a command that starts `chromium`, `chrome`, `google-chrome`, `firefox`, `playwright` or `puppeteer`, also by path (`/usr/bin/chromium`), after `timeout`, `xvfb-run`, `env` or `nohup`, through `npx`, or inside `bash -c`. The bot reads: "This bot has no browser. Hand the task to a teammate who has one (see your teammates list)." A browser word elsewhere (`git log --grep chrome`) is fine. Not caught: a browser started from inside a script. Bots with the browser on are unchanged. | none (follows the bot's browser switch) | not yet |
 | Mark mid-turn narration and let the user toggle it ("Show thoughts") (`285ba19`, merged in `db6ebaa`) | In runs Rens starts, text a bot writes just before a tool call is still saved as a chat message, but marked as narration. The chat header gets a "Show thoughts" button (lightbulb), stored per browser, default off: off hides that narration (and messages made only of it); on shows it small, grey and italic. `message_user` updates, question cards and final replies are never marked; older messages show as before. The live "working…" line is unchanged. Bot-to-bot and routine runs still drop narration. | none (per-browser toggle) | not yet |
 | Show attach_file images and files from bot-to-bot runs (`5a6000d`, merged in `e2ae2d7`) | In runs started by another bot's message (`bot_message`), the `image` and `file` blocks a bot attaches with `attach_file` now show in the chat, in history and live without a page refresh, like its text reply and question cards already did. Before, they were saved in the thread but hidden. Steps, tool activity and narration of those runs stay hidden; background (ticket) runs, peer receipt chips and the sidebar preview are unchanged. | none | not yet |
+| Finish silently on NO_RESPONSE in every run that may finish empty (`db6b42d`, merged in `ad7ac73`) | A bot woken by a teammate's `fyi` (or by a messaging-channel message) that answers exactly `NO_RESPONSE`, once or repeated, now finishes with no chat bubble, as routines already did. Before, the word showed up as a message. Such a run that ends with only tool steps posts nothing either. A `request` or `question` still gets `NO_RESPONSE` back as its result, as before. | none | not yet |
+| Keep the model's thinking behind "Show thoughts" (`d5c7ece`, merged in `ad7ac73`) | The bot's own reasoning (what the model thinks before it writes or calls a tool) is now saved with its messages in runs Rens or another bot starts, in order: with a narration message, between the tool steps, and before the final reply. The lightbulb shows it small, grey and italic, folded to three lines with "Show more"; off hides it. It is never sent back to a model and never shows up in another bot's message, a notification, the sidebar preview, search or the bot export. Each piece is cut at 8,000 characters (marked as cut), and secrets the run knows are blanked out. Claude Sonnet 5.5 decides by itself when to think, so short easy replies often have none. Routine and ticket runs keep none, and a silent finish (`NO_RESPONSE`) keeps none either. The mobile app hides it. | none (the same per-browser toggle) | not yet |
 | Fleet: how to build, switch and update | This file. Never sent upstream. | — | — |
 
 Related upstream issues (no fleet patch): [#1454](https://github.com/elie222/rakazo/issues/1454)
@@ -39,16 +41,21 @@ merges, the rebase drops or shrinks the matching fleet commit.
 None of the patches touch the database. Every setting defaults to upstream behaviour,
 so an image built from `fleet` with no new settings behaves like upstream apart from the
 narration and `fyi` changes, the browser lock (bots with the browser off), the hidden
-thoughts (the "Show thoughts" toggle starts off) and the attachments shown from
-bot-to-bot runs.
+thoughts (the "Show thoughts" toggle starts off), the attachments shown from
+bot-to-bot runs, the silent `NO_RESPONSE` finish and the saved thinking.
 
-**Running now (17 Oct 2026):** image `rakazo-fleet/app:b0c611d` (fleet at `b0c611d6`), with
+**Running now (checked 18 Oct 2026):** image `rakazo-fleet/app:e2ae2d7` (see below). The
+first switch to the fork was on 17 Oct to `rakazo-fleet/app:b0c611d`, with
 `RAKAZO_MESSAGE_USER_MAX_CHARS=4000` in `D:/rakazo/.env`. Database backup taken just before
-the switch: `D:/rakazo/backups/pre-fleet-20261017.dump`.
+that switch: `D:/rakazo/backups/pre-fleet-20261017.dump`.
 
-**Built and tested, not running (18 Oct 2026):** image `rakazo-fleet/app:e2ae2d7` (fleet
-at `e2ae2d79`) = `db6ebaa` plus attachments from bot-to-bot runs. No new setting; it
-uses the same `.env` lines as `419b22b` below.
+**Built and tested, not running (18 Oct 2026):** image `rakazo-fleet/app:ad7ac73` (fleet
+at `ad7ac73c`) = `e2ae2d7` plus the silent `NO_RESPONSE` finish and the saved thinking.
+No new setting; it uses the same `.env` lines as `e2ae2d7`.
+
+Previous build: image `rakazo-fleet/app:e2ae2d7` (fleet at `e2ae2d79`) = `db6ebaa` plus
+attachments from bot-to-bot runs. No new setting; it uses the same `.env` lines as
+`419b22b` below.
 
 Previous build: image `rakazo-fleet/app:db6ebaa` (fleet at `db6ebaa2`) = `419b22b` plus
 the "Show thoughts" toggle.
