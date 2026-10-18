@@ -166,6 +166,25 @@ describe("messaging another bot", () => {
     expect(unreadWrites).toHaveLength(2);
   });
 
+  it("sends a message without an intent as an FYI", async () => {
+    const harness = deps();
+    const sent = await messageBot(harness.deps, run, sender, {
+      bot_id: "bot-target",
+      message: "handed the draft to QA",
+    });
+    expect(sent.ok).toBe(true);
+    for (const [call] of harness.tx.message.create.mock.calls) {
+      expect(call).toMatchObject({
+        data: { blocks: [expect.objectContaining({ intent: "fyi" })] },
+      });
+    }
+    expect(harness.tx.task.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ prompt: expect.stringContaining("This is an FYI.") }),
+      }),
+    );
+  });
+
   it("tells the sender to continue independent work", async () => {
     const harness = deps();
     const sent = await messageBot(harness.deps, run, sender, {
