@@ -213,7 +213,7 @@ describe("loopback trusted origins", () => {
 
 describe("switching the primary origin to https next to http://127.0.0.1", () => {
   const LOOPBACK = "http://127.0.0.1:5173";
-  const TAILNET = "https://g16.tail5f04cd.ts.net:5173";
+  const TAILNET = "https://pc.tailnet.ts.net:5173";
   const before = {
     delivery: false,
     baseURL: LOOPBACK,
