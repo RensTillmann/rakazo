@@ -97,6 +97,17 @@ describe("embeddableScreenUrl", () => {
       "https://screen.example:6080/vnc.html",
     );
   });
+
+  it("serves a sealed screen from the page's own origin", () => {
+    vi.stubGlobal("window", { location: { href: "https://g16.tail5f04cd.ts.net:5173/app" } });
+    expect(
+      embeddableScreenUrl("http://127.0.0.1:5173/novnc/session/view/1.abc/vnc.html?resize=scale"),
+    ).toBe("https://g16.tail5f04cd.ts.net:5173/novnc/session/view/1.abc/vnc.html?resize=scale");
+    vi.stubGlobal("window", { location: { href: "http://127.0.0.1:5173/app" } });
+    expect(embeddableScreenUrl("http://127.0.0.1:5173/novnc/session/view/1.abc/vnc.html")).toBe(
+      "http://127.0.0.1:5173/novnc/session/view/1.abc/vnc.html",
+    );
+  });
 });
 
 describe("screenIframeSandbox", () => {
