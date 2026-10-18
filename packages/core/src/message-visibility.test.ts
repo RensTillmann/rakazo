@@ -267,6 +267,49 @@ describe("user-visible messages", () => {
     ).toEqual(["ask", "reply", "answer"]);
   });
 
+  it("keeps a peer run's attached image and file but still hides its steps and tool activity", () => {
+    const messages = [
+      message("received", "run-peer", [
+        {
+          kind: "bot_message_received",
+          fromBotId: "riona",
+          fromBotName: "Riona",
+          text: "Media id for the nu.nl screenshot.",
+        },
+      ]),
+      message("steps", "run-peer", [{ kind: "steps", steps: [{ label: "Attach", count: 1 }] }]),
+      message("activity", "run-peer", [
+        { kind: "progress", text: "Attaching nu_article.png", activity: true },
+      ]),
+      message("image", "run-peer", [
+        { kind: "image", artifactId: "art-1", mimeType: "image/png", name: "nu_article.png" },
+      ]),
+      message("file", "run-peer", [
+        {
+          kind: "file",
+          artifactId: "art-2",
+          mimeType: "application/pdf",
+          name: "nu_article.pdf",
+          size: 1024,
+        },
+      ]),
+      message("reply", "run-peer", [{ kind: "text", text: "Here is the nu.nl screenshot." }]),
+    ];
+
+    expect(userVisibleMessages(messages).map((item) => item.id)).toEqual([
+      "image",
+      "file",
+      "reply",
+    ]);
+    expect(
+      userVisibleMessages(messages, { includePeerReceipts: true }).map((item) => item.id),
+    ).toEqual(["received", "image", "file", "reply"]);
+    // Sidebar previews stay ask-only.
+    expect(
+      userVisibleMessages(messages, { includeDelegatedReplyText: false }).map((item) => item.id),
+    ).toEqual([]);
+  });
+
   it("hides background ticket-run output except user-input cards", () => {
     const background = [
       message("wake", "run-ticket", [{ kind: "text", text: "Ticket check prompt" }]),

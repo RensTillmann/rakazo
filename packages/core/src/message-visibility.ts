@@ -24,8 +24,9 @@ export type UserVisibleMessagesOptions = {
   backgroundRunIds?: Iterable<string>;
   /**
    * Surface a peer-run's own `text` reply (e.g. a delegating bot's summary to the user)
-   * alongside `ask` cards. Defaults to true for chat-thread rendering; set false for
-   * contexts like sidebar previews that should stay ask-only and never echo peer chatter.
+   * and the `image` / `file` blocks it attached with `attach_file`, alongside `ask` cards.
+   * Defaults to true for chat-thread rendering; set false for contexts like sidebar
+   * previews that should stay ask-only and never echo peer chatter.
    */
   includeDelegatedReplyText?: boolean;
 };
@@ -55,6 +56,23 @@ function isAskBlock(block: MessageBlock): boolean {
   return block.kind === "ask";
 }
 
+/**
+ * Peer-run (bot_message) blocks the user still sees besides receipts: ask cards, the
+ * bot's own text reply, and files it attached with `attach_file` (`image` / `file`).
+ * Steps, progress and other tool activity stay hidden.
+ */
+export function isPeerRunReplyBlock(block: unknown): boolean {
+  return (
+    !!block &&
+    typeof block === "object" &&
+    "kind" in block &&
+    (block.kind === "ask" ||
+      block.kind === "text" ||
+      block.kind === "image" ||
+      block.kind === "file")
+  );
+}
+
 export type FoldedTranscript<T> = {
   messages: T[];
   /** Peer-run replies keyed by the id of the `bot_message_received` marker they fold under. */
@@ -65,7 +83,8 @@ export type FoldedTranscript<T> = {
 
 /**
  * Drop peer-run activity; optionally keep sent/received receipt rows. With receipts kept, a
- * peer run's bot text replies fold under its received marker; its user-input cards stay inline.
+ * peer run's bot replies (text and attached files) fold under its received marker; its
+ * user-input cards stay inline.
  */
 export function foldPeerReplies<T extends PresentableMessage>(
   messages: readonly T[],
@@ -111,7 +130,8 @@ export function foldPeerReplies<T extends PresentableMessage>(
     if (!message.runId || !peerRunIds.has(message.runId)) return true;
     // User-input cards stay inline; previews without receipts keep only asks, as before.
     if (message.blocks.some(includePeerReceipts ? isPeerInputBlock : isAskBlock)) return true;
-    if (!includeText || !message.blocks.some((block) => block.kind === "text")) return false;
+    // The bot's own text reply and the files it attached are kept unless the caller opts out.
+    if (!includeText || !message.blocks.some(isPeerRunReplyBlock)) return false;
     // Only bot replies fold: a person's answer, steering or reaction in the run stays inline.
     if (message.role !== "bot") return true;
     const markerId = includePeerReceipts ? markerByRunId.get(message.runId) : undefined;
