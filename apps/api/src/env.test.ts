@@ -73,6 +73,17 @@ describe("loadEnv", () => {
       );
   });
 
+  it("reads RAKAZO_SECURE_COOKIES as true, false or unset and rejects anything else", () => {
+    expect(loadEnv(base).secureCookies).toBeUndefined();
+    expect(loadEnv({ ...base, RAKAZO_SECURE_COOKIES: "" }).secureCookies).toBeUndefined();
+    expect(loadEnv({ ...base, RAKAZO_SECURE_COOKIES: "false" }).secureCookies).toBe(false);
+    expect(loadEnv({ ...base, RAKAZO_SECURE_COOKIES: "true" }).secureCookies).toBe(true);
+    for (const value of ["0", "no", "FALSE"])
+      expect(() => loadEnv({ ...base, RAKAZO_SECURE_COOKIES: value }), value).toThrow(
+        "RAKAZO_SECURE_COOKIES must be true or false",
+      );
+  });
+
   it("keeps explicit emulator settings for pnpm test", () => {
     const env = loadEnv({
       ...base,

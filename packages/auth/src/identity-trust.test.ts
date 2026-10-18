@@ -14,6 +14,20 @@ vi.mock("better-auth/adapters/prisma", async () => {
 });
 vi.mock("@rakazo/db", () => ({ bootstrapUserSpace: vi.fn(async () => ({ spaceId: "space-1" })) }));
 
+interface SignupPolicyRow {
+  signupsEnabled: boolean;
+  signupAllowlist: string;
+  signupPolicyInitialized: boolean;
+  ownerUserId: string | null;
+}
+
+/** Users, sessions and members a fixture persists; another fixture can reuse them. */
+interface FixtureStore {
+  data: Record<string, Record<string, unknown>[]>;
+  policy: SignupPolicyRow;
+  members: Set<string>;
+}
+
 function fixture({
   allowlist = "",
   delivery = true,
@@ -21,6 +35,9 @@ function fixture({
   webOrigin = "http://web.example.test",
   requestOrigin,
   expireAdmissionGate,
+  extraOrigins,
+  secureCookies,
+  store,
 }: {
   allowlist?: string;
   delivery?: boolean;
@@ -28,26 +45,25 @@ function fixture({
   webOrigin?: string;
   requestOrigin?: string;
   expireAdmissionGate?: "before" | "after";
+  extraOrigins?: string[];
+  secureCookies?: boolean;
+  /** Reuse another fixture's users, sessions and members, as a restart with new settings does. */
+  store?: FixtureStore;
 } = {}) {
-  const data: Record<string, Record<string, unknown>[]> = {
+  const data: Record<string, Record<string, unknown>[]> = store?.data ?? {
     user: [],
     account: [],
     session: [],
     verification: [],
   };
-  const policy: {
-    signupsEnabled: boolean;
-    signupAllowlist: string;
-    signupPolicyInitialized: boolean;
-    ownerUserId: string | null;
-  } = {
+  const policy: SignupPolicyRow = store?.policy ?? {
     signupsEnabled: true,
     signupAllowlist: allowlist,
     signupPolicyInitialized: true,
     ownerUserId: null,
   };
   const messages: TransactionalEmail[] = [];
-  const members = new Set<string>();
+  const members = store?.members ?? new Set<string>();
   const prisma = {
     authData: data,
     $executeRaw: vi.fn(async () => 0),
@@ -123,6 +139,8 @@ function fixture({
     webOrigin,
     signupsEnabled: "true",
     signupAllowlist: "",
+    extraOrigins,
+    secureCookies,
     email: delivery
       ? {
           describe: () => ({
@@ -190,6 +208,84 @@ describe("loopback trusted origins", () => {
       requestOrigin: "http://127.0.0.1:5173",
     });
     expect((await f.signup()).status).toBe(200);
+  });
+});
+
+describe("switching the primary origin to https next to http://127.0.0.1", () => {
+  const LOOPBACK = "http://127.0.0.1:5173";
+  const TAILNET = "https://g16.tail5f04cd.ts.net:5173";
+  const before = {
+    delivery: false,
+    baseURL: LOOPBACK,
+    webOrigin: LOOPBACK,
+    extraOrigins: [TAILNET],
+  };
+  // Proposed production: tailnet primary, loopback kept as an extra origin.
+  const after = {
+    delivery: false,
+    baseURL: TAILNET,
+    webOrigin: TAILNET,
+    extraOrigins: [LOOPBACK],
+  };
+
+  // The web proxies /api to the API container, so Better Auth sees the API's own address.
+  const call = (
+    auth: { handler: (request: Request) => Promise<Response> },
+    origin: string,
+    path: string,
+    { body, cookie }: { body?: unknown; cookie?: string } = {},
+  ) =>
+    auth.handler(
+      new Request(`http://api:3100/api/auth${path}`, {
+        method: body === undefined ? "GET" : "POST",
+        headers: { "content-type": "application/json", origin, ...(cookie ? { cookie } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+    );
+  const sessionCookie = (response: Response) =>
+    response.headers.getSetCookie().find((cookie) => cookie.includes("session_token="));
+  const credentials = { email: "approved@example.test", password: "offline-password12" };
+  const signUp = { body: { ...credentials, name: "Rens" } };
+
+  it("keeps an existing session cookie only when secure cookies are pinned off", async () => {
+    const old = fixture(before);
+    const signedUp = await old.signup();
+    expect(signedUp.status).toBe(200);
+    const setCookie = sessionCookie(signedUp)!;
+    expect(setCookie).toMatch(/^better-auth\.session_token=/);
+    expect(setCookie).not.toMatch(/;\s*Secure/i);
+    const cookie = setCookie.split(";")[0]!;
+
+    const pinned = fixture({ ...after, secureCookies: false, store: old });
+    expect(await pinned.auth.api.getSession({ headers: new Headers({ cookie }) })).toMatchObject({
+      user: { email: credentials.email },
+    });
+    // Better Auth's default for an https baseURL renames the cookie, so the old one is ignored.
+    const unpinned = fixture({ ...after, store: old });
+    expect(await unpinned.auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
+    const signedIn = await call(unpinned.auth, TAILNET, "/sign-in/email", { body: credentials });
+    expect(sessionCookie(signedIn)).toMatch(/^__Secure-better-auth\.session_token=.*;\s*Secure/i);
+  });
+
+  it("signs in, reads and signs out from both origins with the plain cookie", async () => {
+    const f = fixture({ ...after, secureCookies: false });
+    expect((await call(f.auth, LOOPBACK, "/sign-up/email", signUp)).status).toBe(200);
+    for (const origin of [LOOPBACK, TAILNET]) {
+      const signedIn = await call(f.auth, origin, "/sign-in/email", { body: credentials });
+      expect(signedIn.status, origin).toBe(200);
+      const setCookie = sessionCookie(signedIn)!;
+      expect(setCookie, origin).toMatch(/^better-auth\.session_token=/);
+      expect(setCookie, origin).not.toMatch(/;\s*Secure/i);
+      const cookie = setCookie.split(";")[0]!;
+      const session = await call(f.auth, origin, "/get-session", { cookie });
+      expect(await session.json(), origin).toMatchObject({ user: { email: credentials.email } });
+      const signedOut = await call(f.auth, origin, "/sign-out", { body: {}, cookie });
+      expect(signedOut.status, origin).toBe(200);
+      const cleared = sessionCookie(signedOut);
+      expect(cleared, origin).toMatch(/^better-auth\.session_token=;.*Max-Age=0/i);
+      const afterSignOut = await call(f.auth, origin, "/get-session", { cookie });
+      expect(await afterSignOut.json(), origin).toBeNull();
+    }
   });
 });
 

@@ -35,6 +35,11 @@ export interface AuthEnv {
   signupsEnabled: string | undefined;
   signupAllowlist: string | undefined;
   extraOrigins?: string[];
+  /**
+   * Pins Better Auth's `Secure` flag and `__Secure-` cookie name prefix. Unset lets Better Auth
+   * decide from baseURL (https: secure), so an http baseURL gets plain `better-auth.*` cookies.
+   */
+  secureCookies?: boolean;
   email?: TransactionalEmailProvider;
   logger?: BetterAuthOptions["logger"];
   onEmailError?: (error: unknown) => void;
@@ -251,6 +256,9 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
     secret: env.secret,
     baseURL: env.baseURL,
     trustedOrigins: [...buildTrustedOrigins(env), "rakazo://"],
+    ...(env.secureCookies === undefined
+      ? {}
+      : { advanced: { useSecureCookies: env.secureCookies } }),
     account: {
       accountLinking: { enabled: true, disableImplicitLinking: true, trustedProviders: [] },
     },
@@ -657,7 +665,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Assemble Better Auth trustedOrigins, adding localhost↔127.0.0.1 twins for loopback. */
 export function buildTrustedOrigins(env: Pick<AuthEnv, "webOrigin" | "baseURL" | "extraOrigins">) {
   const configured = [env.webOrigin, env.baseURL, ...(env.extraOrigins ?? [])];
-  const twins = [env.webOrigin, env.baseURL].flatMap(loopbackTwinOrigins);
+  const twins = configured.flatMap(loopbackTwinOrigins);
   return [...new Set([...configured, ...twins])];
 }
 
