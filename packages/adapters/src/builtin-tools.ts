@@ -10,6 +10,7 @@ import {
   TICKET_PRIORITIES,
   TICKET_STATUSES,
 } from "@rakazo/contracts";
+import { DEFAULT_BOT_MESSAGE_INTENT } from "@rakazo/core";
 import { z } from "zod";
 import { allowPrivateHttpSecretOrigins } from "./bot-secrets.js";
 import { messageUserMaxLength } from "./user-progress.js";
@@ -1374,7 +1375,7 @@ export const builtinAgentTools: ConnectorTool[] = [
         intent: {
           type: "string",
           enum: ["request", "result", "question", "status", "fyi"],
-          description: "What the recipient should do with this message. Defaults to request.",
+          description: `What the recipient should do with this message. Defaults to ${DEFAULT_BOT_MESSAGE_INTENT}, which does not return the recipient's reply to you; use request or question when you need the answer back.`,
         },
       },
       required: ["message"],

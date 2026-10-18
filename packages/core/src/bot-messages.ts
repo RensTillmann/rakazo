@@ -21,6 +21,14 @@ export function botMessageMaxHops(): number {
   return Number.isInteger(raw) && raw >= 1 ? raw : DEFAULT_BOT_MESSAGE_MAX_HOPS;
 }
 
+/**
+ * The intent a message_bot call gets when the sender leaves it out. An FYI wakes the
+ * recipient without the automatic return of its final reply, so an unlabelled message
+ * does not start a request/result round trip. Stored messages without an intent
+ * predate this default and are still read as requests.
+ */
+export const DEFAULT_BOT_MESSAGE_INTENT: BotMessageIntent = "fyi";
+
 /** Cap total description characters across the rendered teammate directory. */
 export const BOT_DIRECTORY_DESCRIPTIONS_MAX_LENGTH = 8_000;
 
