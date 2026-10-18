@@ -55,6 +55,15 @@ export function deploymentAutoReviewDefault(env: NodeJS.ProcessEnv = process.env
   return envFlag(env, "RAKAZO_AUTO_REVIEW");
 }
 
+/**
+ * RAKAZO_WEBHOOK_HONORS_RULES: with it on, the owner's approval rules also decide side effects in
+ * webhook-triggered runs ("Always allow" skips the card there too). Without a rule they still ask,
+ * and Auto Review stays out of them. Off (default): every webhook-run side effect asks.
+ */
+export function webhookRunsHonorRules(env: NodeJS.ProcessEnv = process.env): boolean {
+  return envFlag(env, "RAKAZO_WEBHOOK_HONORS_RULES");
+}
+
 export function autoReviewTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.RAKAZO_AUTO_REVIEW_TIMEOUT_MS?.trim();
   if (!raw) return DEFAULT_TIMEOUT_MS;

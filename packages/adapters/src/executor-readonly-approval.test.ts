@@ -9,7 +9,7 @@ import type { ActionApprovalRule } from "@rakazo/core";
 import { approvalEffectKey, toolEffectIdempotencyKey } from "@rakazo/core/node/approval-effect-key";
 import type { PrismaClient } from "@rakazo/db";
 import { createPendingSteeringRun, sendUserMessage } from "@rakazo/db";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isApprovalPausedResult } from "./approval-effect.js";
 import { MAX_SHARED_MEMORY_CHARS } from "./builtin-tools.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
@@ -560,6 +560,69 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(reviewMock).not.toHaveBeenCalled();
     },
   );
+
+  describe("with RAKAZO_WEBHOOK_HONORS_RULES on", () => {
+    const previous = process.env.RAKAZO_WEBHOOK_HONORS_RULES;
+    beforeEach(() => {
+      process.env.RAKAZO_WEBHOOK_HONORS_RULES = "true";
+    });
+    afterEach(() => {
+      if (previous === undefined) delete process.env.RAKAZO_WEBHOOK_HONORS_RULES;
+      else process.env.RAKAZO_WEBHOOK_HONORS_RULES = previous;
+    });
+
+    it("lets the owner's always-allow rule run a webhook-triggered shell command", async () => {
+      const f = fixture({
+        name: "shell",
+        trigger: "webhook",
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "shell" }],
+      });
+      await f.run();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(isApprovalPausedResult(f.results[0])).toBe(false);
+    });
+
+    it("still asks without a rule, and never hands the decision to Auto Review", async () => {
+      const f = fixture({ name: "shell", trigger: "webhook", autoReview: true });
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      expect(reviewMock).not.toHaveBeenCalled();
+    });
+
+    const batch = (tool_slug: string) => ({
+      args: { id: "item-1", tools: [{ tool_slug, arguments: { message_id: "m-1" } }] },
+      executionId: "call-1",
+    });
+
+    it("runs a Composio batch whose action the owner always-allowed", async () => {
+      const f = fixture({
+        name: "COMPOSIO_MULTI_EXECUTE_TOOL",
+        trigger: "webhook",
+        rules: [
+          { effect: "always_allow", matchKind: "tool", matchValue: "GMAIL_ADD_LABEL_TO_EMAIL" },
+        ],
+      });
+      f.setCalls([batch("GMAIL_ADD_LABEL_TO_EMAIL")]);
+      await f.run();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(f.execute).toHaveBeenCalledOnce();
+    });
+
+    it("asks for a batched send even when the batch tool itself is always-allowed", async () => {
+      const f = fixture({
+        name: "COMPOSIO_MULTI_EXECUTE_TOOL",
+        trigger: "webhook",
+        rules: [
+          { effect: "always_allow", matchKind: "tool", matchValue: "COMPOSIO_MULTI_EXECUTE_TOOL" },
+          { effect: "always_allow", matchKind: "tool", matchValue: "GMAIL_ADD_LABEL_TO_EMAIL" },
+        ],
+      });
+      f.setCalls([batch("GMAIL_SEND_EMAIL")]);
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      expect(f.execute).not.toHaveBeenCalled();
+    });
+  });
 
   it("writes shared memory directly, including when an always-allow rule exists", async () => {
     const args = { path: " MEMORY.md ", content: "Printing: all print jobs go to Clyde." };

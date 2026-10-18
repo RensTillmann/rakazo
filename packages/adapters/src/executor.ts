@@ -60,10 +60,12 @@ import {
   appendToolCallSegment,
   applyJudgeDecision,
   assertTransition,
+  batchedConnectorActions,
   blocksToAgentHistoryText,
   botMessageAllowsSilence,
   CALL_CLIENT_NONCE_PREFIX,
   callIdFromClientNonce,
+  combineActionApprovals,
   connectorKindFromToolName,
   containsSecret,
   createStreamingRedactor,
@@ -129,6 +131,7 @@ import {
   writeBotInstructions,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
+import type { ParseEntry } from "shell-quote";
 import { parse as parseShellCommand } from "shell-quote";
 import {
   connectAgent,
@@ -176,6 +179,7 @@ import {
   redactToolArgsForReview,
   resolveAutoReviewChecker,
   resolveAutoReviewProviderKind,
+  webhookRunsHonorRules,
 } from "./auto-review.js";
 import { createAutoReviewProvider } from "./auto-review-factory.js";
 import { attachedImageArtifactIds, resolveUpdateBotAvatar } from "./bot-avatar.js";
@@ -2759,7 +2763,7 @@ function simpleCommandStartsBrowser(words: readonly string[]): boolean {
  * does a browser started from inside a script.
  */
 export function shellCommandStartsBrowser(command: string): boolean {
-  let entries;
+  let entries: ParseEntry[];
   try {
     entries = parseShellCommand(preserveShellCommandBoundaries(command), (name) => `$${name}`);
   } catch {
@@ -4844,43 +4848,66 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const declaredReadOnly = viaConnector
             ? (resolvedTool ?? connectorTools.get(name))?.readOnly
             : undefined;
-          const requiresUnattendedApproval = unattendedTriggerToolRequiresApproval(
-            run.trigger,
-            name,
-            viaConnector,
-            declaredReadOnly,
-          );
+          // A batch tool (Composio's multi-execute) is judged by the actions it runs, not its name.
+          const batchedActions = viaConnector ? batchedConnectorActions(name, args) : null;
+          const approvalTargets = (batchedActions ?? [name]).map((toolName) => {
+            const readOnly = batchedActions ? undefined : declaredReadOnly;
+            const unattended = unattendedTriggerToolRequiresApproval(
+              run.trigger,
+              toolName,
+              viaConnector,
+              readOnly,
+            );
+            return {
+              toolName,
+              unattended,
+              consequential: unattended || toolRequiresApproval(toolName, viaConnector, readOnly),
+            };
+          });
+          const requiresUnattendedApproval = approvalTargets.some((target) => target.unattended);
           // This schedules unattended shell execution; require a person to approve
           // the command once, rather than letting an allow rule or reviewer schedule it.
           const commandWatch =
             name === "schedule_create" && commandWatchFromTool(args.watch) !== undefined;
           const requiresApprovalByDefault =
-            commandWatch ||
-            requiresUnattendedApproval ||
-            toolRequiresApproval(name, viaConnector, declaredReadOnly);
+            commandWatch || approvalTargets.some((target) => target.consequential);
+          // RAKAZO_WEBHOOK_HONORS_RULES: the owner's rules also decide webhook-run side effects.
+          const webhookRules = requiresUnattendedApproval && webhookRunsHonorRules();
           const requiresMandatoryApproval =
-            commandWatch || requiresUnattendedApproval || toolRequiresExplicitApproval(name);
-          const connectorKind = connectorKindFromToolName(
-            name,
-            connectedPlugins.map((plugin) => plugin.provider),
-          );
+            commandWatch ||
+            (requiresUnattendedApproval && !webhookRules) ||
+            toolRequiresExplicitApproval(name);
+          const pluginProviders = connectedPlugins.map((plugin) => plugin.provider);
+          const connectorKind = connectorKindFromToolName(name, pluginProviders);
+          const approvalRules = requiresMandatoryApproval ? [] : await loadApprovalRules();
           const approvalResolved = requiresMandatoryApproval
             ? {
                 decision: "ask" as const,
                 source: "default" as const,
                 matchingRules: [],
               }
-            : resolveActionApprovalDetail({
-                toolName: name,
-                connectorKind,
-                readOnly: declaredReadOnly,
-                rules: await loadApprovalRules(),
-              });
-          const autoReviewPref = requiresMandatoryApproval
-            ? false
-            : await loadAutoReviewPreference();
-          const injectedReview = requiresMandatoryApproval ? undefined : deps.autoReview;
-          const checker = requiresMandatoryApproval ? undefined : resolveAutoReviewChecker();
+            : batchedActions
+              ? combineActionApprovals(
+                  approvalTargets.map((target) => ({
+                    resolved: resolveActionApprovalDetail({
+                      toolName: target.toolName,
+                      connectorKind: connectorKindFromToolName(target.toolName, pluginProviders),
+                      rules: approvalRules,
+                    }),
+                    consequential: target.consequential,
+                  })),
+                ).resolved
+              : resolveActionApprovalDetail({
+                  toolName: name,
+                  connectorKind,
+                  readOnly: declaredReadOnly,
+                  rules: approvalRules,
+                });
+          // Auto Review never decides a webhook-run side effect: only a card or the owner's rule.
+          const reviewAllowed = !requiresMandatoryApproval && !webhookRules;
+          const autoReviewPref = reviewAllowed ? await loadAutoReviewPreference() : false;
+          const injectedReview = reviewAllowed ? deps.autoReview : undefined;
+          const checker = reviewAllowed ? resolveAutoReviewChecker() : undefined;
           const checkerConfigured =
             autoReviewPref &&
             (Boolean(injectedReview) ||
@@ -4897,12 +4924,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 : false));
           const plan = requiresMandatoryApproval
             ? "ask"
-            : planActionGate({
-                resolved: approvalResolved,
-                consequential: requiresApprovalByDefault,
-                autoReviewEnabled: autoReviewPref,
-                checkerConfigured,
-              });
+            : webhookRules
+              ? approvalResolved.source === "always_allow" && approvalResolved.decision === "allow"
+                ? "allow"
+                : "ask"
+              : planActionGate({
+                  resolved: approvalResolved,
+                  consequential: requiresApprovalByDefault,
+                  autoReviewEnabled: autoReviewPref,
+                  checkerConfigured,
+                });
           let reviewReason: string | undefined;
           let gateDecision: "ask" | "allow" = plan === "ask" ? "ask" : "allow";
           const needsApprovalEarly = plan === "ask" || plan === "judge";
@@ -5225,7 +5256,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             await notifyRun(deps, run, {
               kind: "help",
               title: `${bot.name} needs approval`,
-              body: `Review before ${name}`,
+              body: `Review before ${(batchedActions ?? [name]).join(", ")}`,
               botId: bot.id,
               threadId: thread.id,
             });
@@ -5619,7 +5650,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "shell") {
             const command = String(args.command ?? args.cmd ?? "");
             // No browser tools for this bot: shell must not start a browser instead.
-            if (disabledBuiltinTools.has("browser_navigate") && shellCommandStartsBrowser(command)) {
+            if (
+              disabledBuiltinTools.has("browser_navigate") &&
+              shellCommandStartsBrowser(command)
+            ) {
               return finish({ error: NO_BROWSER_SHELL_MESSAGE });
             }
             const refusal = protectedComputerLifecycleRefusal(command);

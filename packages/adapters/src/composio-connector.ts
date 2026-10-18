@@ -9,6 +9,7 @@ import type {
   ConnectorTool,
   ManagedConnectorProvider,
 } from "@rakazo/adapter-kit";
+import { COMPOSIO_MULTI_EXECUTE_TOOL } from "@rakazo/core";
 import { getLogger } from "@rakazo/logging";
 import {
   composioToolkitDirectory,
@@ -125,7 +126,6 @@ export function executeSessionKey(
   return accountKey ? `${toolkitKey}|${accountKey}` : toolkitKey;
 }
 
-const COMPOSIO_MULTI_EXECUTE_TOOL = "COMPOSIO_MULTI_EXECUTE_TOOL";
 /** Folder listings treat a missing path as the account root. */
 const DROPBOX_FOLDER_LIST_TOOLS = new Set(["DROPBOX_LIST_FILES_IN_FOLDER", "DROPBOX_LIST_FOLDERS"]);
 
