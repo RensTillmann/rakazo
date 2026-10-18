@@ -1,6 +1,6 @@
 import type { ThreadMessage } from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
-import { userVisibleMessages } from "./message-visibility.js";
+import { isPeerRunReplyBlock, userVisibleMessages } from "./message-visibility.js";
 
 function message(id: string, runId: string, blocks: ThreadMessage["blocks"]): ThreadMessage {
   return {
@@ -121,6 +121,28 @@ describe("user-visible messages", () => {
     // Sidebar previews stay ask-only.
     expect(
       userVisibleMessages(messages, { includeDelegatedReplyText: false }).map((item) => item.id),
+    ).toEqual([]);
+  });
+
+  it("keeps a peer run's thinking with its reply, and passes thinking as a reply block", () => {
+    const messages = [
+      message("final", "run-peer", [
+        { kind: "thinking", text: "Elena only needs the list." },
+        { kind: "text", text: "Urgent, later." },
+      ]),
+      message("thinking", "run-peer", [{ kind: "thinking", text: "A stray thought." }]),
+      message("steps", "run-peer", [{ kind: "steps", steps: [{ label: "Shell", count: 1 }] }]),
+    ];
+
+    expect(isPeerRunReplyBlock({ kind: "thinking", text: "x" })).toBe(true);
+    expect(
+      userVisibleMessages(messages, { knownPeerRunIds: ["run-peer"] }).map((item) => item.id),
+    ).toEqual(["final", "thinking"]);
+    expect(
+      userVisibleMessages(messages, {
+        knownPeerRunIds: ["run-peer"],
+        includeDelegatedReplyText: false,
+      }),
     ).toEqual([]);
   });
 

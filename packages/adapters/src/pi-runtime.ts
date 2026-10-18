@@ -559,6 +559,14 @@ export class PiAgentRuntime implements AgentRuntime {
         // Text streamed before this point is tool-turn narration. Only text after
         // it counts as the final reply, including when the completed message omits it.
         let streamedBeforePendingFinal = 0;
+        // Reasoning of the current model call. Emitted once, before that call's first text or
+        // tool call (or at its end), so it reads in order with the call's output.
+        let pendingThinking = "";
+        const flushThinking = () => {
+          const text = pendingThinking.trim();
+          pendingThinking = "";
+          if (text) queue.push({ type: "thinking", text });
+        };
         agent.subscribe(async (event) => {
           if (event.type === "message_end") {
             await piSession?.appendMessage(event.message);
@@ -577,6 +585,21 @@ export class PiAgentRuntime implements AgentRuntime {
           }
           if (event.type === "message_start" && event.message.role === "assistant") {
             currentMessageStreamed = "";
+            pendingThinking = "";
+          }
+          if (event.type === "message_update") {
+            const update = event.assistantMessageEvent;
+            if (update.type === "thinking_end" && update.content.trim()) {
+              pendingThinking += `${pendingThinking ? "\n\n" : ""}${update.content.trim()}`;
+            } else if (
+              (update.type === "text_delta" && update.delta) ||
+              update.type === "toolcall_start"
+            ) {
+              flushThinking();
+            }
+          }
+          if (event.type === "message_end" && event.message.role === "assistant") {
+            flushThinking();
           }
           if (
             event.type === "message_update" &&

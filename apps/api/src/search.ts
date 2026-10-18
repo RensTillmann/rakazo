@@ -1,10 +1,13 @@
 import type { Actor, MessageBlock, SearchHit } from "@rakazo/contracts";
+import { withoutThinkingBlocks } from "@rakazo/contracts";
 import { extractLinksFromText, matchesSearchQuery, snippetAroundMatch } from "@rakazo/core";
 import { Prisma, type PrismaClient } from "@rakazo/db";
 
 const SEARCH_LIMIT = 25;
 /** Cap name matches so content hits (messages/files/links/routines) keep most of the budget. */
 const CONVERSATION_HIT_LIMIT = 5;
+/** A message's blocks as searchable text, without the bot's thinking (never searchable). */
+const SEARCHABLE_BLOCKS = Prisma.sql`jsonb_path_query_array(m.blocks, '$[*] ? (@.kind != "thinking")')::text`;
 
 async function findArtifactMessages(
   prisma: PrismaClient,
@@ -28,7 +31,7 @@ async function findArtifactMessages(
         WHERE t."spaceId" = ${actor.spaceId}
           AND t."userId" = ${actor.userId}
           AND ${targetColumn} = candidate."targetId"
-          AND m.blocks::text ILIKE ('%' || candidate."artifactId" || '%')
+          AND ${SEARCHABLE_BLOCKS} ILIKE ('%' || candidate."artifactId" || '%')
         ORDER BY m."createdAt" DESC
         LIMIT 1
       ) message
@@ -239,7 +242,7 @@ export async function querySpaceSearch(
     WHERE t."spaceId" = ${actor.spaceId}
       AND t."userId" = ${actor.userId}
       AND b."archivedAt" IS NULL
-      AND m.blocks::text ILIKE ${pattern}
+      AND ${SEARCHABLE_BLOCKS} ILIKE ${pattern}
     ORDER BY m."createdAt" DESC
     LIMIT ${SEARCH_LIMIT}
   `;
@@ -272,7 +275,7 @@ export async function querySpaceSearch(
     WHERE t."spaceId" = ${actor.spaceId}
       AND t."userId" = ${actor.userId}
       AND t."groupId" IS NOT NULL
-      AND m.blocks::text ILIKE ${pattern}
+      AND ${SEARCHABLE_BLOCKS} ILIKE ${pattern}
     ORDER BY m."createdAt" DESC
     LIMIT ${SEARCH_LIMIT}
   `;
@@ -338,7 +341,7 @@ function pushMessageHits(
       }
     }
   }
-  if (!messageHit && matchesSearchQuery(ctx.query, JSON.stringify(blocks))) {
+  if (!messageHit && matchesSearchQuery(ctx.query, JSON.stringify(withoutThinkingBlocks(blocks)))) {
     ctx.push({
       kind: "message",
       ...destination,

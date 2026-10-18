@@ -21,6 +21,15 @@ describe("previewFromBlocks", () => {
     ).toBe("Created Projects-CoS as a Project");
   });
 
+  it("never previews the bot's thinking", () => {
+    expect(
+      previewFromBlocks([
+        { kind: "thinking", text: "Private reasoning" },
+        { kind: "text", text: "The reply" },
+      ]),
+    ).toBe("The reply");
+  });
+
   it("returns empty when there is no text block", () => {
     expect(previewFromBlocks([{ kind: "steps", steps: [] }])).toBe("");
     expect(previewFromBlocks(undefined)).toBe("");

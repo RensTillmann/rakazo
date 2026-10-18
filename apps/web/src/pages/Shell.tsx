@@ -153,6 +153,7 @@ import { ComputerWorkspace } from "../components/computer/ComputerWorkspace";
 import { lazyOverlay } from "../components/ErrorBoundary";
 import { FlagMessageDialog, type FlagTarget } from "../components/FlagMessageDialog";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
+import { ThinkingText } from "../components/ThinkingText";
 import {
   LIVE_TOOL_STEP_WINDOW,
   StandaloneToolActivity,
@@ -6720,7 +6721,11 @@ const MessageView = memo(function MessageView({
     message.role === "bot" &&
     message.blocks.length > 0 &&
     message.blocks.every(
-      (block) => block.kind === "text" || block.kind === "progress" || block.kind === "steps",
+      (block) =>
+        block.kind === "text" ||
+        block.kind === "progress" ||
+        block.kind === "steps" ||
+        block.kind === "thinking",
     );
   const isLive = message.id.startsWith("progress:");
   const quoteMessageId = message.id.includes(":") ? undefined : message.id;
@@ -6798,6 +6803,9 @@ const MessageView = memo(function MessageView({
                     />
                   </ToolActivityDisclosure>
                 );
+              }
+              if (block.kind === "thinking") {
+                return <ThinkingText key={i} text={block.text} truncated={block.truncated} />;
               }
               if (block.kind === "text" || block.kind === "progress") {
                 return (
@@ -7069,6 +7077,16 @@ const MessageView = memo(function MessageView({
               >
                 <LinkifiedText>{block.text}</LinkifiedText>
               </div>
+            </div>
+          );
+        }
+        if (block.kind === "thinking") {
+          return (
+            <div
+              key={i}
+              className="flex w-fit max-w-full justify-start px-[18px] [@media(hover:none)]:w-full"
+            >
+              <ThinkingText text={block.text} truncated={block.truncated} />
             </div>
           );
         }
