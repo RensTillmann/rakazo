@@ -9,7 +9,9 @@ import type { RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { ArtifactTarget } from "../lib/artifact-open";
 import { downloadArtifact, downloadArtifactBytes, fetchArtifactBytes } from "../lib/artifact-open";
+import { useArtifactImage } from "../lib/use-artifact-image";
 import { errorText } from "../lib/user-error";
+import { isVideoAttachment } from "../lib/video-attachment";
 import { PdfViewer } from "./PdfViewer";
 import { SandboxedHtmlViewer } from "./SandboxedHtmlViewer";
 
@@ -30,6 +32,88 @@ const PREVIEWABLE_MIME_TYPES = new Set([
 const TEXT_MIME_TYPES = new Set(["text/markdown", "text/html"]);
 
 export function ArtifactFileCard(props: ArtifactFileCardProps) {
+  return isVideoAttachment(props.mimeType, props.name) ? (
+    <ArtifactVideo {...props} />
+  ) : (
+    <FileCard {...props} />
+  );
+}
+
+/**
+ * Plays a video attachment in the chat. The bytes are fetched once the player scrolls near
+ * the screen (like chat images), so a long history does not download every recording.
+ */
+function ArtifactVideo(props: ArtifactFileCardProps) {
+  const { t } = useLingui();
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const src = useArtifactImage(props.target, props.artifactId, visible);
+
+  useEffect(() => {
+    const element = container.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "320px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  async function startDownload() {
+    setDownloadError(null);
+    try {
+      await downloadArtifact(props.target, props.artifactId, props.name, props.mimeType);
+    } catch {
+      setDownloadError(t`Could not download ${props.name}. Try again.`);
+    }
+  }
+
+  return (
+    <div ref={container} className="w-[480px] max-w-full">
+      {src ? (
+        <video
+          src={src}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label={props.name}
+          className="block max-h-[70vh] w-full rounded-[20px] bg-black"
+        />
+      ) : (
+        <div className="grid aspect-video w-full place-items-center rounded-[20px] border border-border bg-muted px-4 text-[14px] text-muted-foreground">
+          {props.name}
+        </div>
+      )}
+      <div className="mt-1 flex items-center gap-2 px-1 text-[13px] text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate">
+          {props.name} · {formatBytes(props.size)}
+        </span>
+        <button
+          type="button"
+          aria-label={t`Download ${props.name}`}
+          title={t`Download ${props.name}`}
+          onClick={() => void startDownload()}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground"
+        >
+          <Download size={17} strokeWidth={1.8} />
+        </button>
+      </div>
+      {downloadError ? <DownloadError message={downloadError} /> : null}
+    </div>
+  );
+}
+
+function FileCard(props: ArtifactFileCardProps) {
   const { t } = useLingui();
   const previewable = PREVIEWABLE_MIME_TYPES.has(props.mimeType);
   const previewButton = useRef<HTMLButtonElement>(null);

@@ -30,6 +30,9 @@ export const ATTACHMENT_FILE_MIME_TYPES = [
   "text/html",
   "application/json",
   "application/zip",
+  // Screen recordings; they stay `file` blocks and the web chat plays them inline.
+  "video/webm",
+  "video/mp4",
 ] as const;
 
 export const ATTACHMENT_ALLOWED_MIME_TYPES = [
