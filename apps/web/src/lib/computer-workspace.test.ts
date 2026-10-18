@@ -153,9 +153,9 @@ describe("computer terminal feed", () => {
     expect(
       terminalSocketUrl(
         "http://127.0.0.1:5173/novnc/session/control/123.abc/vnc.html?path=x",
-        "https://pc.tailnet.ts.net:5173/app",
+        "https://g16.tail5f04cd.ts.net:5173/app",
       ),
-    ).toBe("wss://pc.tailnet.ts.net:5173/novnc/session/control/123.abc/websockify");
+    ).toBe("wss://g16.tail5f04cd.ts.net:5173/novnc/session/control/123.abc/websockify");
   });
 });
 

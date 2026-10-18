@@ -16,7 +16,7 @@ async function trusted(url: string, extraOrigins: readonly string[] = []) {
   return (await auth.$context).isTrustedOrigin(url);
 }
 
-const TAILNET_ORIGIN = "https://pc.tailnet.ts.net:5173";
+const TAILNET_ORIGIN = "https://g16.tail5f04cd.ts.net:5173";
 
 const env = {
   webOrigin: "http://127.0.0.1:5173",
@@ -67,9 +67,9 @@ describe("CORS origins", () => {
     expect(isTrustedOrigin(TAILNET_ORIGIN, withExtra)).toBe(true);
     expect(isTrustedOrigin("http://127.0.0.1:5173", withExtra)).toBe(true);
     for (const origin of [
-      "https://pc.tailnet.ts.net",
-      "http://pc.tailnet.ts.net:5173",
-      "https://other.tailnet.ts.net:5173",
+      "https://g16.tail5f04cd.ts.net",
+      "http://g16.tail5f04cd.ts.net:5173",
+      "https://other.tail5f04cd.ts.net:5173",
       "https://evil.example",
     ]) {
       expect(isTrustedOrigin(origin, withExtra), origin).toBe(false);
@@ -115,7 +115,7 @@ describe("mobile auth origins", () => {
   it("trusts an extra web origin for sign-in callbacks only when it is listed", async () => {
     expect(await trusted(`${TAILNET_ORIGIN}/app`, [TAILNET_ORIGIN])).toBe(true);
     expect(await trusted(`${TAILNET_ORIGIN}/app`)).toBe(false);
-    expect(await trusted("https://other.tailnet.ts.net:5173/app", [TAILNET_ORIGIN])).toBe(
+    expect(await trusted("https://other.tail5f04cd.ts.net:5173/app", [TAILNET_ORIGIN])).toBe(
       false,
     );
   });

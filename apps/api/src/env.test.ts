@@ -49,10 +49,10 @@ describe("loadEnv", () => {
       loadEnv({
         ...base,
         RAKAZO_EXTRA_ORIGINS:
-          " https://pc.tailnet.ts.net:5173/ ,, https://pc.tailnet.ts.net:5173,http://pc.lan:5173",
+          " https://g16.tail5f04cd.ts.net:5173/ ,, https://g16.tail5f04cd.ts.net:5173,http://pc.lan:5173",
       }).extraOrigins,
-    ).toEqual(["https://pc.tailnet.ts.net:5173", "http://pc.lan:5173"]);
-    for (const value of ["pc.tailnet.ts.net", "https://host.example/app", "ftp://host.example"])
+    ).toEqual(["https://g16.tail5f04cd.ts.net:5173", "http://pc.lan:5173"]);
+    for (const value of ["g16.tail5f04cd.ts.net", "https://host.example/app", "ftp://host.example"])
       expect(() => loadEnv({ ...base, RAKAZO_EXTRA_ORIGINS: value }), value).toThrow(
         "RAKAZO_EXTRA_ORIGINS",
       );
