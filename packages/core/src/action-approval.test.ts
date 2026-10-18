@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   type ActionApprovalRule,
   applyJudgeDecision,
+  batchedConnectorActions,
+  COMPOSIO_MULTI_EXECUTE_TOOL,
+  combineActionApprovals,
   connectorKindFromToolName,
   connectorToolRequiresApproval,
   isApprovalAskBlock,
@@ -372,5 +375,71 @@ describe("applyJudgeDecision", () => {
   it("fails closed on consequential checker errors and open on exempt", () => {
     expect(applyJudgeDecision({ decision: "error", consequential: true })).toBe("ask");
     expect(applyJudgeDecision({ decision: "error", consequential: false })).toBe("allow");
+  });
+});
+
+describe("Composio batch approval", () => {
+  it("names the actions a multi-execute batch runs, and nothing for other or malformed calls", () => {
+    const tools = [
+      { tool_slug: "GMAIL_FETCH_MESSAGE_BY_THREAD_ID", arguments: { thread_id: "t" } },
+      { tool_slug: " GMAIL_SEND_EMAIL ", arguments: "{}" },
+      { tool_slug: "GMAIL_FETCH_MESSAGE_BY_THREAD_ID" },
+    ];
+    expect(batchedConnectorActions(COMPOSIO_MULTI_EXECUTE_TOOL, { tools })).toEqual([
+      "GMAIL_FETCH_MESSAGE_BY_THREAD_ID",
+      "GMAIL_SEND_EMAIL",
+    ]);
+    expect(batchedConnectorActions("GMAIL_SEND_EMAIL", { tools })).toBeNull();
+    expect(batchedConnectorActions(COMPOSIO_MULTI_EXECUTE_TOOL, { tools: [] })).toBeNull();
+    // One unnamed action keeps the whole batch judged as the wrapper.
+    expect(
+      batchedConnectorActions(COMPOSIO_MULTI_EXECUTE_TOOL, {
+        tools: [...tools, { arguments: {} }],
+      }),
+    ).toBeNull();
+  });
+
+  it("treats a fetch as a read, unless the name also mutates", () => {
+    expect(connectorToolRequiresApproval("GMAIL_FETCH_MESSAGE_BY_THREAD_ID")).toBe(false);
+    expect(connectorToolRequiresApproval("GMAIL_FETCH_AND_DELETE_MESSAGE")).toBe(true);
+    expect(connectorToolRequiresApproval("GMAIL_SEND_EMAIL")).toBe(true);
+  });
+
+  it("lets a batch run unattended only when every consequential action is always-allowed", () => {
+    const read = {
+      resolved: resolveActionApprovalDetail({ toolName: "GMAIL_FETCH_X", rules: [] }),
+      consequential: false,
+    };
+    const allowRule: ActionApprovalRule = {
+      effect: "always_allow",
+      matchKind: "tool",
+      matchValue: "GMAIL_ADD_LABEL",
+    };
+    const labelAllowed = {
+      resolved: resolveActionApprovalDetail({ toolName: "GMAIL_ADD_LABEL", rules: [allowRule] }),
+      consequential: true,
+    };
+    const sendDefault = {
+      resolved: resolveActionApprovalDetail({ toolName: "GMAIL_SEND_EMAIL", rules: [allowRule] }),
+      consequential: true,
+    };
+    const requireSend: ActionApprovalRule = {
+      effect: "require_approval",
+      matchKind: "tool",
+      matchValue: "GMAIL_SEND_EMAIL",
+    };
+    const sendRequired = {
+      resolved: resolveActionApprovalDetail({ toolName: "GMAIL_SEND_EMAIL", rules: [requireSend] }),
+      consequential: true,
+    };
+
+    expect(combineActionApprovals([read, labelAllowed]).resolved.source).toBe("always_allow");
+    // Allowing the label action never allows the send in the same batch.
+    expect(combineActionApprovals([labelAllowed, sendDefault]).resolved.source).toBe("default");
+    expect(combineActionApprovals([labelAllowed, sendRequired]).resolved.decision).toBe("ask");
+    expect(combineActionApprovals([read])).toEqual({
+      resolved: { decision: "allow", source: "default", matchingRules: [] },
+      consequential: false,
+    });
   });
 });

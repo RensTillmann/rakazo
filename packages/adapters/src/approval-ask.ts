@@ -1,8 +1,10 @@
 import type { MessageBlock } from "@rakazo/contracts";
-import { instructionUpdateDiff, redactSecrets } from "@rakazo/core";
+import { batchedConnectorActions, instructionUpdateDiff, redactSecrets } from "@rakazo/core";
 
 const MAX_APPROVAL_SUMMARY_LENGTH = 500;
 const MAX_APPROVAL_DETAIL_LENGTH = 4_000;
+
+type ApprovalAction = { toolName: string; args: Record<string, unknown> };
 
 export function buildApprovalAskBlock(
   effectId: string,
@@ -33,9 +35,19 @@ export function buildApprovalAskBlock(
       ],
     };
   }
-  const summary = describeApprovalAction(toolName, args);
-  const detail = formatApprovalDetail(toolName, args, options?.reviewReason);
+  // A batch tool (Composio's multi-execute) is shown, and always-allowed, per action it runs.
+  const batch = batchedActions(toolName, args);
+  const actions = batch ?? [{ toolName, args }];
+  const summary = actions
+    .map((action) => describeApprovalAction(action.toolName, action.args))
+    .join(", ");
+  const detail = formatApprovalDetail(toolName, actions, options?.reviewReason);
   const safeDetail = detail ? redactSecrets(detail, secrets) : undefined;
+  const alwaysLabel = !batch
+    ? "Always allow this tool"
+    : batch.length > 1
+      ? "Always allow these actions"
+      : "Always allow this action";
   return {
     kind: "ask",
     approvalEffectId: effectId,
@@ -56,10 +68,40 @@ export function buildApprovalAskBlock(
           ]
         : [
             { id: "allow", label: "Allow once" },
-            { id: "always", label: "Always allow this tool" },
+            { id: "always", label: alwaysLabel },
             { id: "deny", label: "Deny" },
           ],
   };
+}
+
+/** The actions inside a batch call, each with its own arguments; null for any other call. */
+function batchedActions(toolName: string, args: Record<string, unknown>): ApprovalAction[] | null {
+  if (!batchedConnectorActions(toolName, args) || !Array.isArray(args.tools)) return null;
+  return args.tools.flatMap((item: unknown): ApprovalAction[] => {
+    if (!item || typeof item !== "object" || !("tool_slug" in item)) return [];
+    if (typeof item.tool_slug !== "string") return [];
+    return [
+      {
+        toolName: item.tool_slug.trim(),
+        args: objectArgs("arguments" in item ? item.arguments : undefined),
+      },
+    ];
+  });
+}
+
+/** Composio accepts batch arguments as an object or a JSON string. */
+function objectArgs(raw: unknown): Record<string, unknown> {
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value))
+    : {};
 }
 
 function describeApprovalAction(toolName: string, args: Record<string, unknown>): string {
@@ -82,7 +124,7 @@ function describeApprovalAction(toolName: string, args: Record<string, unknown>)
 
 function formatApprovalDetail(
   toolName: string,
-  args: Record<string, unknown>,
+  actions: ApprovalAction[],
   reviewReason?: string,
 ): string | undefined {
   const lines: string[] = [];
@@ -94,10 +136,15 @@ function formatApprovalDetail(
       "Bots, groups, chats, files, memory, and integrations in this space stay separate from other spaces.",
     );
   }
-  for (const key of ["collection", "title", "to", "subject", "amount", "body"]) {
-    const value = args[key];
-    if (value == null || value === "") continue;
-    lines.push(`${key}: ${String(value)}`);
+  for (const action of actions) {
+    const fields: string[] = [];
+    for (const key of ["collection", "title", "to", "subject", "amount", "body"]) {
+      const value = action.args[key];
+      if (value == null || value === "") continue;
+      fields.push(`${key}: ${String(value)}`);
+    }
+    if (fields.length > 0 && actions.length > 1) lines.push(`${action.toolName}:`);
+    lines.push(...fields);
   }
   if (lines.length === 0) return undefined;
   return lines.join("\n");

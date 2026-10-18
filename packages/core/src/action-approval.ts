@@ -57,7 +57,7 @@ const UNATTENDED_SAFE_BUILTIN_TOOLS = new Set([
   "web_search",
 ]);
 
-const READ_ONLY_CONNECTOR_PATTERN = /(^|_)(get|list|search|find|read)(_|$)/i;
+const READ_ONLY_CONNECTOR_PATTERN = /(^|_)(get|list|search|find|read|fetch)(_|$)/i;
 const MUTATING_CONNECTOR_PATTERN =
   /(^|_)(accept|add|approve|archive|assign|buy|cancel|charge|checkout|close|commit|copy|create|delete|deploy|disable|enable|execute|forward|grant|invite|link|mark|merge|modify|move|patch|pay|post|publish|purchase|put|register|reject|remove|rename|replace|reply|reset|revoke|run|schedule|send|set|share|start|stop|submit|subscribe|trigger|unassign|unlink|unsubscribe|update|upload|upsert|write)(_|$)/i;
 const COMPOUND_CONNECTOR_ACTION_PATTERN = /_(and|or|then)_/i;
@@ -212,6 +212,53 @@ export function resolveActionApproval(input: {
   rules: ActionApprovalRule[];
 }): "ask" | "allow" {
   return resolveActionApprovalDetail(input).decision;
+}
+
+/** Composio's batch tool: it runs the connector actions named in `tools[].tool_slug`. */
+export const COMPOSIO_MULTI_EXECUTE_TOOL = "COMPOSIO_MULTI_EXECUTE_TOOL";
+
+/**
+ * The connector actions a batch call runs, so approval judges (and "Always allow" remembers)
+ * each action instead of the batch wrapper. Null for any other tool and for a malformed batch,
+ * which then stays judged by the wrapper's own name.
+ */
+export function batchedConnectorActions(
+  toolName: string,
+  args: Record<string, unknown> | null | undefined,
+): string[] | null {
+  if (toolName !== COMPOSIO_MULTI_EXECUTE_TOOL || !Array.isArray(args?.tools)) return null;
+  const slugs: unknown[] = args.tools.map((item: unknown) =>
+    item && typeof item === "object" && "tool_slug" in item ? item.tool_slug : undefined,
+  );
+  const named = slugs.filter(
+    (slug): slug is string => typeof slug === "string" && slug.trim() !== "",
+  );
+  if (named.length === 0 || named.length !== slugs.length) return null;
+  return [...new Set(named.map((slug) => slug.trim()))];
+}
+
+/**
+ * One decision for a batch of actions: a require_approval rule on any action asks; the batch
+ * counts as always-allowed only when every consequential action is; otherwise the default path
+ * decides, as for a single call.
+ */
+export function combineActionApprovals(
+  parts: ReadonlyArray<{ resolved: ActionApprovalResolved; consequential: boolean }>,
+): { resolved: ActionApprovalResolved; consequential: boolean } {
+  const matchingRules = parts.flatMap((part) => part.resolved.matchingRules);
+  const consequential = parts.some((part) => part.consequential);
+  if (parts.some((part) => part.resolved.decision === "ask")) {
+    return {
+      resolved: { decision: "ask", source: "require_approval", matchingRules },
+      consequential,
+    };
+  }
+  const gated = parts.filter((part) => part.consequential);
+  const source =
+    gated.length > 0 && gated.every((part) => part.resolved.source === "always_allow")
+      ? "always_allow"
+      : "default";
+  return { resolved: { decision: "allow", source, matchingRules }, consequential };
 }
 
 export type AutoReviewJudgeDecision = "pass" | "ask" | "error";

@@ -51,6 +51,34 @@ describe("buildApprovalAskBlock", () => {
     expect(block.detail).toContain("to: person@example.test");
   });
 
+  it("names the actions inside a Composio batch and always-allows the action, not the batch", () => {
+    const block = buildApprovalAskBlock(
+      "effect-1",
+      "COMPOSIO_MULTI_EXECUTE_TOOL",
+      {
+        tools: [
+          {
+            tool_slug: "GMAIL_SEND_EMAIL",
+            arguments: JSON.stringify({ to: "person@example.test", subject: "Hi" }),
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(block).toMatchObject({
+      text: "Review before GMAIL_SEND_EMAIL → person@example.test",
+      actions: [
+        { id: "allow", label: "Allow once" },
+        { id: "always", label: "Always allow this action" },
+        { id: "deny", label: "Deny" },
+      ],
+    });
+    if (block.kind !== "ask") throw new Error("expected ask block");
+    expect(block.detail).toBe("to: person@example.test\nsubject: Hi");
+    expect(block.text).not.toContain("COMPOSIO_MULTI_EXECUTE_TOOL");
+  });
+
   it("uses a one-time create or cancel choice for a new security boundary", () => {
     const block = buildApprovalAskBlock(
       "effect-1",

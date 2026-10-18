@@ -7,6 +7,7 @@ import {
   MessageBlock as MessageBlockSchema,
 } from "@rakazo/contracts";
 import {
+  batchedConnectorActions,
   blocksToAgentHistoryText,
   callIdFromClientNonce,
   instructionUpdateDiff,
@@ -690,7 +691,7 @@ async function commitAnswerRunInput(
     ? LoginSecretValue.safeParse({ username: input.username!.trim(), password: input.answer })
     : undefined;
   if (login && !login.success) return null;
-  let approvalEffect: { id: string; kind: string } | null = null;
+  let approvalEffect: { id: string; kind: string; request: Prisma.JsonValue } | null = null;
   let editedInstructions: string | undefined;
   let approvalAnswer = input.answer;
   if (approvalAsk && pendingAsk.instructionUpdate && input.answer.startsWith("{")) {
@@ -806,25 +807,33 @@ async function commitAnswerRunInput(
       data: { status: allowed ? "approved" : "denied" },
     });
     if (input.answer === "always") {
-      await tx.actionApprovalRule.upsert({
-        where: {
-          spaceId_createdByUserId_effect_matchKind_matchValue: {
+      // A batch tool (Composio's multi-execute) is allowed per action it ran, never as a whole:
+      // allowing the wrapper would allow every action it can run.
+      const request = approvalEffect!.request;
+      const allowedTools = (request && typeof request === "object" && !Array.isArray(request)
+        ? batchedConnectorActions(approvalEffect!.kind, Object.fromEntries(Object.entries(request)))
+        : null) ?? [approvalEffect!.kind];
+      for (const matchValue of allowedTools) {
+        await tx.actionApprovalRule.upsert({
+          where: {
+            spaceId_createdByUserId_effect_matchKind_matchValue: {
+              spaceId: input.spaceId,
+              createdByUserId: approvalUserId!,
+              effect: "always_allow",
+              matchKind: "tool",
+              matchValue,
+            },
+          },
+          create: {
             spaceId: input.spaceId,
             createdByUserId: approvalUserId!,
             effect: "always_allow",
             matchKind: "tool",
-            matchValue: approvalEffect!.kind,
+            matchValue,
           },
-        },
-        create: {
-          spaceId: input.spaceId,
-          createdByUserId: approvalUserId!,
-          effect: "always_allow",
-          matchKind: "tool",
-          matchValue: approvalEffect!.kind,
-        },
-        update: {},
-      });
+          update: {},
+        });
+      }
     }
   } else if (secretAsk) {
     await runSecretWriter!.store({
