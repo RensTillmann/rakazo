@@ -30,6 +30,12 @@ export interface AppEnv {
    * example a tailnet HTTPS name next to the loopback address. Trusted like webOrigin.
    */
   extraOrigins: string[];
+  /**
+   * RAKAZO_SECURE_COOKIES (true/false) pins the session cookie's `Secure` flag and `__Secure-`
+   * name. Unset: secure exactly when BETTER_AUTH_URL is https. `false` keeps the plain cookie, so
+   * an https primary origin can sit next to http://127.0.0.1 and existing sessions stay valid.
+   */
+  secureCookies?: boolean;
   privacyPolicyUrl?: string;
   apiUrl: string;
   apiHost: string;
@@ -139,7 +145,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       throw new Error("OIDC_ISSUER must be an HTTPS issuer URL");
     }
   }
-  for (const key of ["AUTH_PASSWORD_ENABLED", "OIDC_ALLOW_SIGNUP_BYPASS"]) {
+  for (const key of [
+    "AUTH_PASSWORD_ENABLED",
+    "OIDC_ALLOW_SIGNUP_BYPASS",
+    "RAKAZO_SECURE_COOKIES",
+  ]) {
     const value = source[key];
     if (value && !["true", "false"].includes(value))
       throw new Error(`${key} must be true or false`);
@@ -177,6 +187,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     authUrl: source.BETTER_AUTH_URL ?? source.WEB_ORIGIN ?? "http://127.0.0.1:5173",
     webOrigin: source.WEB_ORIGIN ?? "http://127.0.0.1:5173",
     extraOrigins: parseExtraOrigins(source.RAKAZO_EXTRA_ORIGINS),
+    secureCookies: source.RAKAZO_SECURE_COOKIES
+      ? source.RAKAZO_SECURE_COOKIES === "true"
+      : undefined,
     privacyPolicyUrl: optional(source.PRIVACY_POLICY_URL),
     apiUrl: source.API_URL ?? "http://127.0.0.1:3100",
     apiHost: source.API_HOST ?? "127.0.0.1",

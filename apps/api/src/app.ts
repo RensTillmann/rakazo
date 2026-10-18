@@ -403,6 +403,7 @@ export async function createApp(
     email,
     onEmailError: (error) => getLogger().error("transactional email delivery failed", error),
     extraOrigins: [...MOBILE_AUTH_ORIGINS, ...env.extraOrigins],
+    secureCookies: env.secureCookies,
     beforeDeleteUser: async (userId) => {
       // First, so a provider failure aborts deletion before anything is destroyed.
       await billing?.cancelForDeletedUser(userId);
