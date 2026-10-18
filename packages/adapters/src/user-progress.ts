@@ -106,14 +106,15 @@ export function extractNarrationText(
 
 /**
  * After mid-turn progress messages were already posted, skip a hollow final
- * message that would only carry hidden tool-activity blocks (or nothing).
+ * message that would only carry hidden tool-activity blocks, thinking, or nothing.
+ * A message is never made of thinking alone.
  */
 export function finalBlocksAfterMidTurnProgress(
   blocks: MessageBlock[],
   publishedMidTurn: boolean,
 ): MessageBlock[] {
   if (!publishedMidTurn || blocks.length === 0) return blocks;
-  if (blocks.every((block) => isToolActivityBlock(block))) return [];
+  if (blocks.every((block) => isToolActivityBlock(block) || block.kind === "thinking")) return [];
   return blocks;
 }
 

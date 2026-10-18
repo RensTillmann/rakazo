@@ -177,6 +177,9 @@ function replyBlockText(block: MessageBlock): string {
     case "image":
     case "file":
       return block.name || blocksToAgentHistoryText([block]);
+    case "thinking":
+      // Never quoted: a reply preview or a reply's model context shows the output only.
+      return "";
   }
 }
 

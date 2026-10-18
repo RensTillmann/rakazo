@@ -104,6 +104,20 @@ describe("browser notifications", () => {
         "Chief",
       ),
     ).toEqual({ title: "Chief", body: "Pool, Total main, 42" });
+    expect(
+      browserNotificationMessage(
+        event({
+          payload: {
+            role: "bot",
+            blocks: [
+              { kind: "thinking", text: "Private reasoning" },
+              { kind: "text", text: "The pool is balanced." },
+            ],
+          },
+        }),
+        "Chief",
+      ),
+    ).toEqual({ title: "Chief", body: "The pool is balanced." });
     expect(browserNotificationMessage(event({ type: "run.failed" }), "Chief")).toEqual({
       title: "Chief failed",
       body: "Failed.",

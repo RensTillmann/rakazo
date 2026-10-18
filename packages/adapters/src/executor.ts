@@ -52,6 +52,7 @@ import {
   HistorySearchInputSchema,
   isAttachmentImageMimeType,
   OPENAI_COMPATIBLE_PROVIDER_ID,
+  thinkingBlock,
 } from "@rakazo/contracts";
 import type { ActionApprovalRule, ToolCallStreak } from "@rakazo/core";
 import {
@@ -95,6 +96,7 @@ import {
   truncatedPlainText,
   unattendedTriggerToolRequiresApproval,
   userTurnMessageForRun,
+  withoutThinking,
 } from "@rakazo/core";
 import {
   approvalEffectKey,
@@ -4482,11 +4484,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return;
           }
           assembled = "";
+          // The reasoning that led to this narration is posted with it, so it reads in order;
+          // the tool steps stay for the final message.
+          const thinking = messageSegments.filter((block) => block.kind === "thinking");
+          messageSegments = withoutThinking(messageSegments);
           await publishMessage(
             deps,
             run,
             "bot",
-            [{ kind: "text", text: narration, narration: true }],
+            [
+              ...redactBlocks(thinking, runSecrets),
+              { kind: "text", text: narration, narration: true },
+            ],
             undefined,
             userProgressClientNonce(run.id, midTurnProgressCount++),
           );
@@ -7585,6 +7594,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (!scripted && pendingProgress && now - lastProgressAt >= 250) {
                 await flushProgress();
               }
+            } else if (event.type === "thinking") {
+              if (!runRecordsThinking(run.trigger)) continue;
+              const block = thinkingBlock(redactSecrets(event.text, runSecrets));
+              if (!block) continue;
+              // A model call's reasoning comes before its own output: settle the previous
+              // call's text and tool steps first so the run reads in order.
+              flushPendingTools();
+              messageSegments = [...messageSegments, block];
             } else if (event.type === "progress") {
               toolCallStreak = { key: undefined, count: 0 };
               if (isBackgroundRunTrigger(run.trigger)) continue;
@@ -7978,12 +7995,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               skipEmptyFallback: publishedTerminalSubagent || publishedMidTurnUserMessage,
             });
           }
-          const blocks = handedOff
+          const finalBlocks = handedOff
             ? []
             : finalBlocksAfterMidTurnProgress(
                 redactBlocks(completionBlocks, runSecrets),
                 publishedMidTurnUserMessage || allowSilentEmptyRun,
               );
+          // Thinking only accompanies output; it is never posted as a message of its own.
+          const blocks = finalBlocks.every((block) => block.kind === "thinking") ? [] : finalBlocks;
           const text = handedOff
             ? ""
             : redactSecrets(completionNotificationBody(silentReply.assembled, blocks), runSecrets);
@@ -8980,6 +8999,14 @@ export function runPromotesMidTurnNarration(trigger: string): boolean {
   return trigger !== "routine" && trigger !== "bot_message" && !isBackgroundRunTrigger(trigger);
 }
 
+/**
+ * Whether the model's thinking is kept in the run's chat (behind the client's Show thoughts
+ * toggle): runs a user or another bot started. Routine and background (ticket) runs keep none.
+ */
+export function runRecordsThinking(trigger: string): boolean {
+  return trigger !== "routine" && !isBackgroundRunTrigger(trigger);
+}
+
 export const TICKET_SILENT_REPLY_GUIDANCE =
   "Ticket work is reported on the board, not in chat. Put updates and results in ticket_comment and keep the ticket status current with ticket_update. Use the existing ask or approval mechanism when user input is needed. Leave the final reply empty.";
 
@@ -9034,18 +9061,21 @@ export function completionMessageSegments(
 ): MessageBlock[] {
   if (options?.suppressOutput) return [];
   const fallback = options?.emptyResponseText?.trim() || "done.";
-  if (segments.length > 0) {
+  // Thinking is kept but is not output: a turn of only thinking still counts as empty.
+  const output = segments.filter((segment) => segment.kind !== "thinking");
+  if (output.length > 0) {
     if (
       !options?.allowSilentEmpty &&
       options?.emptyResponseText !== undefined &&
-      !segments.some((segment) => segment.kind === "text" && segment.text)
+      !output.some((segment) => segment.kind === "text" && segment.text)
     ) {
       return [...segments, { kind: "text", text: fallback }];
     }
     return segments;
   }
+  // A silent finish posts nothing, not even its thinking: thinking never stands alone.
   if (options?.allowSilentEmpty || options?.skipEmptyFallback) return [];
-  return [{ kind: "text", text: fallback }];
+  return [...segments, { kind: "text", text: fallback }];
 }
 
 /** User-facing text for completion notifications; empty when only tool/step activity remains. */
@@ -9215,7 +9245,11 @@ function redactBlocks(blocks: MessageBlock[], secrets: string[]): MessageBlock[]
         text: redactSecrets(block.text, secrets),
       };
     }
-    if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+    if (
+      block.kind === "bot_message_sent" ||
+      block.kind === "bot_message_received" ||
+      block.kind === "thinking"
+    ) {
       return { ...block, text: redactSecrets(block.text, secrets) };
     }
     return block;
