@@ -7675,9 +7675,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             currentTextSegment = assembled;
           }
           flushPendingTools();
-          // Only routine runs are instructed to emit NO_RESPONSE. Other
-          // allowSilentEmpty wakes (FYI, messaging) may finish truly empty.
-          const silentReply = runAllowsSilentEmpty(run.trigger)
+          // An exact NO_RESPONSE (once or repeated) is a silent finish in every run that may
+          // finish empty: routines, fyi wakes from another bot, and messaging channels.
+          const silentReply = allowSilentEmptyRun
             ? stripNoResponseReply(assembled, messageSegments)
             : { assembled, blocks: messageSegments };
           let completionBlocks = silentReply.blocks;
@@ -7698,7 +7698,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? []
             : finalBlocksAfterMidTurnProgress(
                 redactBlocks(completionBlocks, runSecrets),
-                publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
+                publishedMidTurnUserMessage || allowSilentEmptyRun,
               );
           const text = handedOff
             ? ""
