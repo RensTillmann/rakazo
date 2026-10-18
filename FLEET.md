@@ -4,10 +4,13 @@ This is Rens's fork of [elie222/rakazo](https://github.com/elie222/rakazo):
 [RensTillmann/rakazo](https://github.com/RensTillmann/rakazo).
 
 - `main` follows upstream `main`. We never commit to it.
-- `fleet` is the branch the running images were built from (`8896cd15`, image
-  `rakazo-fleet/app:d93d461`, base upstream `7d5e64c`). It is left as it is until
-  `fleet-next` is adopted (see "Adopt `fleet-next`").
-- `fleet-next` (this branch) is a newer upstream plus our patches, one commit per patch.
+- `fleet-next` (this branch) is a newer upstream plus our patches, one commit per patch. It is
+  **running** since 18 Oct 2026: image `rakazo-fleet/app:5e8f647` (head `5e8f6471`, base upstream
+  `76f4259`), computers pinned to `rakazo-fleet/computer:7d5e64c`. Full suite, web tests and `tsc`
+  for every package passed in that image. Rollback needs the `pre-fleet-next-20261018.dump`
+  restore (upstream migrations ran).
+- `fleet` (`8896cd15`, image `rakazo-fleet/app:d93d461`) is the previous build. Adopt `fleet-next`
+  as `fleet` once it has run well for a few days (see "Adopt `fleet-next`").
 
 All commands are for Git Bash on this PC.
 
