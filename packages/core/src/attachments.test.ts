@@ -6,6 +6,7 @@ import {
   blocksToAgentHistoryText,
   decodeAttachmentBase64,
   inferAttachmentMimeType,
+  messageBlockForArtifact,
   promptTextForAttachments,
   userTurnMessageForRun,
   validateAttachmentMimeType,
@@ -97,6 +98,29 @@ describe("attachment helpers", () => {
     expect(inferAttachmentMimeType("archive.zip", reportedType)).toBe("application/zip");
     expect(inferAttachmentMimeType("archive.ZIP", reportedType)).toBe("application/zip");
     expect(attachmentExtensionForMimeType("application/zip")).toBe(".zip");
+  });
+
+  it("accepts webm and mp4 screen recordings as file blocks", () => {
+    expect(inferAttachmentMimeType("recording.webm")).toBe("video/webm");
+    expect(inferAttachmentMimeType("recording.MP4")).toBe("video/mp4");
+    expect(inferAttachmentMimeType("recording.m4v")).toBe("video/mp4");
+    expect(inferAttachmentMimeType("clip.webm", "application/octet-stream")).toBe("video/webm");
+    expect(inferAttachmentMimeType("clip.mov")).toBeNull();
+    expect(attachmentExtensionForMimeType("video/webm")).toBe(".webm");
+    expect(
+      messageBlockForArtifact({
+        id: "a1",
+        name: "recording.webm",
+        mimeType: "video/webm",
+        size: 4_000_000,
+      }),
+    ).toEqual({
+      kind: "file",
+      artifactId: "a1",
+      mimeType: "video/webm",
+      name: "recording.webm",
+      size: 4_000_000,
+    });
   });
 
   it("scopes current-turn images to user-triggered runs", () => {

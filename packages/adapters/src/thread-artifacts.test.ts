@@ -184,6 +184,45 @@ describe("current-turn thread files", () => {
     );
   });
 
+  it("attaches a webm screen recording as a video file block", async () => {
+    const artifact = {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: "rec-1", ...data })),
+    };
+    const tx = { artifact, $queryRaw: vi.fn().mockResolvedValue([{ lock: "1" }]) };
+    const put = vi.fn().mockResolvedValue({ id: "stored-1", hash: "hash" });
+    const bytes = new Uint8Array(4 * 1024 * 1024);
+    const attached = await attachWorkspaceFileToThread(
+      {
+        prisma: {
+          artifact,
+          $transaction: async (run: (client: typeof tx) => Promise<unknown>) => run(tx),
+        } as unknown as PrismaClient,
+        artifacts: { put, remove: vi.fn() } as unknown as ArtifactStore,
+      },
+      {
+        spaceId: "workspace-1",
+        userId: "user-1",
+        botId: "bot-1",
+        runId: "run-1",
+        filePath: "recordings/login-flow.webm",
+        bytes,
+        operationId: "attach-1",
+      },
+    );
+    expect(put).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "login-flow.webm", mimeType: "video/webm" }),
+      expect.anything(),
+    );
+    expect(attached.block).toEqual({
+      kind: "file",
+      artifactId: "rec-1",
+      mimeType: "video/webm",
+      name: "login-flow.webm",
+      size: bytes.byteLength,
+    });
+  });
+
   it.each([
     ["video/mp4", ".mp4"],
     ["application/pdf", ".pdf"],
