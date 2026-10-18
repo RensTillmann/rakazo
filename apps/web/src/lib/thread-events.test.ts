@@ -1549,6 +1549,39 @@ describe("thread event reduction", () => {
 
     expect(next?.messages[0]?.botId).toBe("bot-researcher");
   });
+
+  it("keeps an automatic wake marked live and after an update, and ignores unknown sources", () => {
+    const blocks = [
+      { kind: "text" as const, text: 'Run routine "Inbox triage run":\n@triaging-inbox' },
+    ];
+    const live = reduceThreadSnapshot(
+      snapshot([]),
+      event({
+        type: "thread.message.created",
+        payload: { messageId: "wake-1", role: "user", blocks, inbound: "webhook" },
+      }),
+    );
+    expect(live?.messages[0]?.inbound).toBe("webhook");
+
+    const updated = reduceThreadSnapshot(
+      live!,
+      event({
+        type: "thread.message.updated",
+        seq: 5,
+        payload: { messageId: "wake-1", role: "user", blocks },
+      }),
+    );
+    expect(updated?.messages[0]?.inbound).toBe("webhook");
+
+    const forged = reduceThreadSnapshot(
+      snapshot([]),
+      event({
+        type: "thread.message.created",
+        payload: { messageId: "own-1", role: "user", blocks, inbound: "owner" },
+      }),
+    );
+    expect(forged?.messages[0]?.inbound).toBeUndefined();
+  });
 });
 
 describe("computer event reduction", () => {

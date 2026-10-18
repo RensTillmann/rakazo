@@ -8,7 +8,7 @@ import type {
   ThreadMessagePage,
   ThreadSnapshot,
 } from "@rakazo/contracts";
-import { RUN_TRIGGERS } from "@rakazo/contracts";
+import { InboundDeliverySource, RUN_TRIGGERS } from "@rakazo/contracts";
 import {
   isActive,
   isBackgroundRunTrigger,
@@ -26,6 +26,11 @@ import {
 } from "@rakazo/core";
 
 const runTriggers = new Set<string>(RUN_TRIGGERS);
+
+function inboundSource(value: unknown): InboundDeliverySource | undefined {
+  const source = InboundDeliverySource.safeParse(value);
+  return source.success ? source.data : undefined;
+}
 
 function runFromStartedEvent(event: ProductEvent, previous: Run | undefined): Run {
   const trigger = event.payload.trigger;
@@ -523,6 +528,7 @@ export function reduceThreadSnapshot(
       botId: event.botId,
       runId: event.runId,
       callId: typeof event.payload.callId === "string" ? event.payload.callId : known?.callId,
+      inbound: inboundSource(event.payload.inbound) ?? known?.inbound,
       ...replyMetadata(event.payload, known),
       createdAt: known?.createdAt ?? event.createdAt,
     };

@@ -417,6 +417,10 @@ export const ReplyPreviewSchema = z.object({
 });
 export type ReplyPreview = z.infer<typeof ReplyPreviewSchema>;
 
+/** An integration that delivers wakes into a bot's chat: a webhook, GitHub, or a messaging channel. */
+export const InboundDeliverySource = z.enum(["webhook", "github", "messaging"]);
+export type InboundDeliverySource = z.infer<typeof InboundDeliverySource>;
+
 export const ThreadMessageSchema = z.object({
   id: Id,
   threadId: Id,
@@ -430,6 +434,8 @@ export const ThreadMessageSchema = z.object({
   runId: Id.optional(),
   /** Set when the message was sent from a live voice call; groups one call's transcript. */
   callId: z.string().optional(),
+  /** Set when an integration delivered the message as an automatic wake, not the owner. */
+  inbound: InboundDeliverySource.optional(),
   createdAt: z.string(),
 });
 export type ThreadMessage = z.infer<typeof ThreadMessageSchema>;

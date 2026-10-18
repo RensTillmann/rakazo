@@ -755,6 +755,11 @@ msgstr ""
 msgid "Automated senders will appear after they post here."
 msgstr ""
 
+#: src/components/InboundDeliveryCard.tsx
+#: src/pages/Shell.tsx
+msgid "Automatic"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr "루틴을 저장한 후 사용할 수 있습니다"
@@ -1959,6 +1964,10 @@ msgstr "고객 지원"
 msgid "Customize bot avatar"
 msgstr "봇 아바타 맞춤설정"
 
+#: src/components/ThinkingText.tsx
+msgid "Cut at {THINKING_BLOCK_MAX_CHARS} characters."
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Dark"
 msgstr "다크"
@@ -3030,6 +3039,10 @@ msgstr "메시지"
 #: src/pages/Shell.tsx
 msgid "Message {activeName}"
 msgstr "{activeName}에게 메시지 보내기"
+
+#: src/components/InboundDeliveryCard.tsx
+msgid "Message channel"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Message composer"
@@ -4390,18 +4403,15 @@ msgstr ""
 msgid "Show computer"
 msgstr ""
 
+#: src/components/ThinkingText.tsx
+msgid "Show less"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "Show list"
 msgstr ""
 
 #: src/components/ThinkingText.tsx
-msgid "Cut at {THINKING_BLOCK_MAX_CHARS} characters."
-msgstr ""
-
-#: src/components/ThinkingText.tsx
-msgid "Show less"
-msgstr ""
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Show more"
 msgstr "더 보기"
@@ -5145,6 +5155,7 @@ msgstr "기다리는 중…"
 msgid "Web, desktop and mobile apps"
 msgstr ""
 
+#: src/components/InboundDeliveryCard.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Webhook"
 msgstr "웹훅"

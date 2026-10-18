@@ -161,6 +161,7 @@ import {
 import { ComputerWorkspace } from "../components/computer/ComputerWorkspace";
 import { lazyOverlay } from "../components/ErrorBoundary";
 import { FlagMessageDialog, type FlagTarget } from "../components/FlagMessageDialog";
+import { InboundDeliveryCard } from "../components/InboundDeliveryCard";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { ThinkingText } from "../components/ThinkingText";
 import {
@@ -2113,7 +2114,9 @@ function SpaceShell() {
   );
   const replyTargetName = activeReplyTarget
     ? activeReplyTarget.role === "user"
-      ? t`You`
+      ? activeReplyTarget.inbound
+        ? t`Automatic`
+        : t`You`
       : (resolveTranscriptMemberName(activeReplyTarget.botId) ?? active?.name ?? t`Bot`)
     : undefined;
   const composerMentionTargets = useMemo(
@@ -5770,6 +5773,8 @@ const Transcript = memo(function Transcript({
           const message = item.message;
           if (!messageHasVisibleBlocks(message.blocks, showToolActivity)) return null;
           const peerReceipt = isPeerReceiptBlocks(message.blocks);
+          // An automatic wake is stored with the owner's role; it sits on the bot side instead.
+          const fromOwner = message.role === "user" && !message.inbound;
           const messageReactions = reactionView.reactions.get(message.id);
           return (
             <Fragment key={message.id}>
@@ -5784,7 +5789,7 @@ const Transcript = memo(function Transcript({
                   className={
                     peerReceipt
                       ? undefined
-                      : `relative flex ${message.role === "user" ? "justify-end" : "justify-start"}`
+                      : `relative flex ${fromOwner ? "justify-end" : "justify-start"}`
                   }
                 >
                   <div
@@ -5797,7 +5802,7 @@ const Transcript = memo(function Transcript({
                             )
                           ? "relative w-full min-w-0 max-w-full"
                           : `relative w-fit min-w-0 ${
-                              message.role === "user"
+                              fromOwner
                                 ? "max-w-[min(84%,calc(100%_-_8rem))] [@media(hover:none)]:max-w-[84%]"
                                 : "max-w-[min(88%,calc(100%_-_8rem))] [@media(hover:none)]:max-w-[88%]"
                             }`
@@ -5845,7 +5850,7 @@ const Transcript = memo(function Transcript({
                     {peerReceipt ? null : (
                       <MessageHoverActions
                         message={message}
-                        side={message.role === "user" ? "start" : "end"}
+                        side={fromOwner ? "start" : "end"}
                         onReply={onReply}
                         onReact={onReact}
                         flagLabel={flagLabel}
@@ -5861,7 +5866,7 @@ const Transcript = memo(function Transcript({
                     className={cn(
                       "pointer-events-none absolute top-1 z-10 text-xs tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100 group-has-[[aria-expanded=true]]/message:opacity-100 [@media(hover:none)]:transition-none",
                       // Hover keeps the date in the side margin. Touch leaves that margin for the bubble and drops the revealed time under it.
-                      message.role === "user"
+                      fromOwner
                         ? "start-0 max-w-[max(8rem,16%)] text-start"
                         : "end-0 max-w-[max(8rem,12%)] text-end",
                       "[@media(hover:none)]:group-hover/message:static [@media(hover:none)]:group-focus-within/message:static [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:static",
@@ -5869,7 +5874,7 @@ const Transcript = memo(function Transcript({
                       "[@media(hover:none)]:group-hover/message:mt-1 [@media(hover:none)]:group-focus-within/message:mt-1 [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:mt-1",
                       "[@media(hover:none)]:group-hover/message:w-full [@media(hover:none)]:group-focus-within/message:w-full [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:w-full",
                       "[@media(hover:none)]:group-hover/message:max-w-none [@media(hover:none)]:group-focus-within/message:max-w-none [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:max-w-none",
-                      message.role === "user"
+                      fromOwner
                         ? "[@media(hover:none)]:group-hover/message:text-end [@media(hover:none)]:group-focus-within/message:text-end [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:text-end"
                         : "[@media(hover:none)]:group-hover/message:text-start [@media(hover:none)]:group-focus-within/message:text-start [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:text-start",
                     )}
@@ -5880,10 +5885,7 @@ const Transcript = memo(function Transcript({
                 {!peerReceipt && messageReactions ? (
                   <div
                     data-testid="message-reactions"
-                    className={cn(
-                      "mt-1 flex flex-wrap gap-1",
-                      message.role === "user" && "justify-end",
-                    )}
+                    className={cn("mt-1 flex flex-wrap gap-1", fromOwner && "justify-end")}
                   >
                     {[...messageReactions].map(([emoji, count]) => (
                       <span
@@ -7645,6 +7647,9 @@ const MessageView = memo(function MessageView({
               />
             </div>
           );
+        }
+        if (block.kind === "text" && message.role === "user" && message.inbound) {
+          return <InboundDeliveryCard key={i} source={message.inbound} text={block.text} />;
         }
         if (block.kind === "text" && message.role === "user") {
           // User bubbles stay literal text on web and mobile. Only explicit URLs

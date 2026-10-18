@@ -6,6 +6,7 @@ import {
   GithubWebhookEmulator,
   InfisicalSecretStore,
 } from "@rakazo/adapters";
+import { inboundSourceFromClientNonce } from "@rakazo/core";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { infisicalFake } from "../../../packages/adapters/src/secret-store-fake.js";
@@ -441,6 +442,23 @@ describe("inbound webhook HTTP route", () => {
         clientNonce: `webhook:bot-1:${digest}`,
       }),
     );
+  });
+
+  it("marks a delivery without an idempotency key as a webhook delivery, without deduplicating it", async () => {
+    const deps = createDeps();
+    const app = mount(deps);
+    const deliver = () =>
+      app.request("/api/v1/bots/bot-1/webhook", {
+        method: "POST",
+        headers: { authorization: `Bearer ${SECRET}`, "content-type": "application/json" },
+        body: JSON.stringify({ event: "ping" }),
+      });
+    expect((await deliver()).status).toBe(200);
+    expect((await deliver()).status).toBe(200);
+    const nonces = deps.sendUserMessage.mock.calls.map((call) => String(call[0]?.clientNonce));
+    expect(nonces).toHaveLength(2);
+    for (const nonce of nonces) expect(inboundSourceFromClientNonce(nonce)).toBe("webhook");
+    expect(nonces[0]).not.toBe(nonces[1]);
   });
 
   it("rejects oversized payloads", async () => {

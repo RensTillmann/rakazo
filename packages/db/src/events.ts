@@ -10,6 +10,7 @@ import {
   batchedConnectorActions,
   blocksToAgentHistoryText,
   callIdFromClientNonce,
+  inboundSourceFromClientNonce,
   instructionUpdateDiff,
   isApprovalAskBlock,
   isConversationalRun,
@@ -510,6 +511,8 @@ export async function sendUserMessage(
           // Carries the call id on the live event so a spoken turn groups into the
           // call card immediately, instead of after a refetch reads the nonce.
           callId: callIdFromClientNonce(message.clientNonce),
+          // Marks a webhook, GitHub or messaging wake as automatic on the live event too.
+          inbound: inboundSourceFromClientNonce(message.clientNonce),
         },
       });
       return { message, task, run, busy, event };
