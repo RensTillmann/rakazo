@@ -7982,7 +7982,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? []
             : finalBlocksAfterMidTurnProgress(
                 redactBlocks(completionBlocks, runSecrets),
-                publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
+                publishedMidTurnUserMessage || allowSilentEmptyRun,
               );
           const text = handedOff
             ? ""
