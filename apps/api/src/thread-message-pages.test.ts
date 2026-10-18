@@ -77,6 +77,19 @@ describe("thread message pages", () => {
     ).toBe(false);
   });
 
+  it("forwards a peer run's thinking live, but not a background run's", () => {
+    const blocks = [
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+      { kind: "thinking", text: "Elena only needs the list." },
+    ];
+    expect(
+      shouldForwardPeerThreadEvent({ type: "thread.message.created", payload: { blocks } }),
+    ).toBe(true);
+    expect(
+      shouldForwardBackgroundThreadEvent({ type: "thread.message.created", payload: { blocks } }),
+    ).toBe(false);
+  });
+
   it("caches background-run classification for live events", async () => {
     const findUnique = vi.fn(async () => ({ trigger: "tickets" }));
     const prisma = { run: { findUnique } } as unknown as PrismaClient;

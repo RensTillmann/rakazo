@@ -26,12 +26,17 @@ function isCardBlock(block: MessageBlock): boolean {
 export function messagePresentationSegments(
   blocks: readonly MessageBlock[],
 ): MessagePresentationSegment[] {
-  const content = blocks.filter((block) => !isCardBlock(block) && !isToolActivityBlock(block));
+  const content = blocks.filter(
+    (block) => !isCardBlock(block) && !isToolActivityBlock(block) && block.kind !== "thinking",
+  );
   return content.length > 0 ? [{ kind: "content", blocks: content }] : [];
 }
 
 export function hasVisibleMessagePresentation(blocks: readonly MessageBlock[]): boolean {
-  return blocks.some((block) => !isToolActivityBlock(block) && !isDismissedChoice(block));
+  return blocks.some(
+    (block) =>
+      !isToolActivityBlock(block) && !isDismissedChoice(block) && block.kind !== "thinking",
+  );
 }
 
 type ChoiceBlock = Extract<MessageBlock, { kind: "choice" }>;

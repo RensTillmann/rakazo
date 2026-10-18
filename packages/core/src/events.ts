@@ -345,6 +345,43 @@ export function appendToolCallSegment(
   return [...segments, { kind: "steps", steps }];
 }
 
+/**
+ * Drops `thinking` blocks and joins the tool steps they separated, so the result reads as
+ * if the reasoning had never been recorded. Returns the same array when there is none.
+ */
+export function withoutThinking(blocks: readonly MessageBlock[]): MessageBlock[] {
+  if (!blocks.some((block) => block.kind === "thinking")) return blocks as MessageBlock[];
+  const kept: MessageBlock[] = [];
+  let separated = false;
+  for (const block of blocks) {
+    if (block.kind === "thinking") {
+      separated = true;
+      continue;
+    }
+    const last = kept.at(-1);
+    if (separated && block.kind === "steps" && last?.kind === "steps") {
+      let steps = last.steps;
+      for (const step of block.steps) {
+        const tail = steps.at(-1);
+        steps =
+          tail && tail.label === step.label
+            ? [...steps.slice(0, -1), { label: step.label, count: tail.count + step.count }]
+            : [...steps, step];
+      }
+      const durationMs = block.durationMs ?? last.durationMs;
+      kept[kept.length - 1] = {
+        kind: "steps",
+        steps,
+        ...(durationMs === undefined ? {} : { durationMs }),
+      };
+    } else {
+      kept.push(block);
+    }
+    separated = false;
+  }
+  return kept;
+}
+
 export function humanizeToolName(name: string): string {
   const spaced = name.replace(/_/g, " ").trim();
   if (!spaced) return name;

@@ -1,5 +1,5 @@
 import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
+import { type MessageBlock, THINKING_BLOCK_MAX_CHARS } from "@rakazo/contracts";
 import type * as DbModule from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import type * as BotMessagesModule from "./bot-messages.js";
@@ -31,14 +31,18 @@ vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
 }));
 
 const NARRATION = "Label missing; create it.";
+const SECRET = "sk-live-0123456789abcdef";
+
+type HistoryRow = { id: string; seq: number; role: string; blocks: MessageBlock[] };
 
 /**
  * One run whose runtime yields `script` (tool events are executed). User-triggered unless
- * `trigger` says otherwise; `source` is the message that woke a bot_message run.
+ * `trigger` says otherwise; `source` is the message that woke a bot_message run, `history`
+ * the thread's earlier messages.
  */
 function fixture(
   script: AgentRuntimeEvent[],
-  options: { trigger?: string; source?: MessageBlock[] } = {},
+  options: { trigger?: string; source?: MessageBlock[]; history?: HistoryRow[] } = {},
 ) {
   const run = {
     id: "run-1",
@@ -52,6 +56,16 @@ function fixture(
     sourceMessageId: options.source ? "source-1" : null,
     leaseFence: 0,
   };
+  const history = (options.history ?? []).map((row) => ({
+    ...row,
+    threadId: run.threadId,
+    botId: row.role === "bot" ? run.botId : null,
+    runId: null,
+    createdAt: new Date("2026-10-18T08:00:00Z"),
+    replyToMessageId: null,
+    replyQuote: null,
+    replyTo: null,
+  }));
   const prisma = {
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({})),
     run: {
@@ -81,7 +95,10 @@ function fixture(
     },
     thread: { findUniqueOrThrow: vi.fn(async () => ({ id: run.threadId, groupId: null })) },
     message: {
-      findMany: vi.fn(async () => []),
+      // Newest first, like the history query; this run's own earlier messages: none.
+      findMany: vi.fn(async (query: { where?: { runId?: string } }) =>
+        query.where?.runId ? [] : [...history].sort((left, right) => right.seq - left.seq),
+      ),
       findUnique: vi.fn(async () =>
         options.source ? { blocks: options.source, replyTo: null } : null,
       ),
@@ -152,9 +169,10 @@ function fixture(
     memoryProviders: { resolve: async () => null },
     events: { append, notify: vi.fn(async () => undefined), pauseRunForInput, finalizeRun },
     jobs: { enqueue: vi.fn(async () => undefined) },
-    secrets: [],
+    secrets: [SECRET],
   } as unknown as Parameters<typeof createRunExecutor>[0]);
   return {
+    runtimeRun,
     append,
     pauseRunForInput,
     finalizeRun,
@@ -285,5 +303,130 @@ describe("NO_RESPONSE in a run woken by another bot's fyi", () => {
       "NO_RESPONSE",
       "result",
     );
+  });
+});
+
+describe("model thinking in a run's chat", () => {
+  const tool = (executionId: string): AgentRuntimeEvent => ({
+    type: "tool",
+    name: "label_create",
+    args: { name: executionId },
+    executionId,
+  });
+
+  it("stores each call's thinking in order with the narration, steps and reply", async () => {
+    const f = fixture([
+      { type: "thinking", text: "No urgent label yet; create it." },
+      { type: "text", text: NARRATION },
+      tool("call-1"),
+      { type: "thinking", text: "Created. Tell the user." },
+      { type: "text", text: "Created the urgent label." },
+      { type: "done", text: `${NARRATION}Created the urgent label.` },
+    ]);
+    await f.run();
+
+    expect(published.map((message) => message.blocks)).toEqual([
+      [
+        { kind: "thinking", text: "No urgent label yet; create it." },
+        { kind: "text", text: NARRATION, narration: true },
+      ],
+    ]);
+    expect(f.finalBlocks()).toEqual([
+      { kind: "steps", steps: [{ label: "Label create", count: 1 }] },
+      { kind: "thinking", text: "Created. Tell the user." },
+      { kind: "text", text: "Created the urgent label." },
+    ]);
+  });
+
+  it("redacts the run's secrets and cuts long thinking, marking the cut", async () => {
+    const long = `Key ${SECRET} works. ${"x".repeat(THINKING_BLOCK_MAX_CHARS + 500)}`;
+    const f = fixture([
+      { type: "thinking", text: long },
+      { type: "text", text: "Done." },
+      { type: "done", text: "Done." },
+    ]);
+    await f.run();
+
+    const [thinking] = f.finalBlocks();
+    expect(thinking).toMatchObject({ kind: "thinking", truncated: true });
+    const text = thinking?.kind === "thinking" ? thinking.text : "";
+    expect(text).not.toContain(SECRET);
+    expect(text.startsWith("Key [redacted] works.")).toBe(true);
+    expect(text.length).toBeLessThanOrEqual(THINKING_BLOCK_MAX_CHARS);
+    expect(text.endsWith("…")).toBe(true);
+  });
+
+  it("stores the thinking of a run another bot started", async () => {
+    const f = fixture(
+      [
+        { type: "thinking", text: "Elena asks for the label list." },
+        { type: "text", text: "Urgent, later." },
+        { type: "done", text: "Urgent, later." },
+      ],
+      { trigger: "bot_message", source: peerMessage("request") },
+    );
+    await f.run();
+
+    expect(f.finalBlocks()).toEqual([
+      { kind: "thinking", text: "Elena asks for the label list." },
+      { kind: "text", text: "Urgent, later." },
+    ]);
+  });
+
+  it("posts nothing when an fyi run's only output is its thinking and NO_RESPONSE", async () => {
+    const f = fixture(
+      [
+        { type: "thinking", text: "Just an fyi; nothing to add." },
+        { type: "text", text: "NO_RESPONSE" },
+        { type: "done", text: "NO_RESPONSE" },
+      ],
+      { trigger: "bot_message", source: peerMessage("fyi") },
+    );
+    await f.run();
+
+    expect(published).toEqual([]);
+    expect(f.finalBlocks()).toEqual([]);
+  });
+
+  it("keeps none for routines", async () => {
+    const f = fixture(
+      [
+        { type: "thinking", text: "Nothing new today." },
+        { type: "text", text: "All quiet." },
+        { type: "done", text: "All quiet." },
+      ],
+      { trigger: "routine" },
+    );
+    await f.run();
+
+    expect(f.finalBlocks()).toEqual([{ kind: "text", text: "All quiet." }]);
+  });
+
+  it("never sends stored thinking back to the model in the next run's history", async () => {
+    const f = fixture(
+      [
+        { type: "text", text: "Sure." },
+        { type: "done", text: "Sure." },
+      ],
+      {
+        history: [
+          { id: "m1", seq: 0, role: "user", blocks: [{ kind: "text", text: "Which labels?" }] },
+          {
+            id: "m2",
+            seq: 1,
+            role: "bot",
+            blocks: [
+              { kind: "thinking", text: "PRIVATE-REASONING-MARKER" },
+              { kind: "text", text: "Urgent and later." },
+            ],
+          },
+        ],
+      },
+    );
+    await f.run();
+
+    const input = JSON.stringify(f.runtimeRun.mock.calls[0]![0]);
+    expect(input).toContain("Urgent and later.");
+    expect(input).not.toContain("PRIVATE-REASONING-MARKER");
   });
 });

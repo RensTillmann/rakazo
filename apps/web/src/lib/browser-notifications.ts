@@ -74,7 +74,12 @@ export function browserNotificationMessage(
     const blocks = Array.isArray(event.payload.blocks) ? event.payload.blocks : [];
     const body = blocks
       .map((block) =>
-        block && typeof block === "object" && "text" in block && typeof block.text === "string"
+        block &&
+        typeof block === "object" &&
+        // The bot's thinking stays in the chat, behind Show thoughts.
+        !("kind" in block && block.kind === "thinking") &&
+        "text" in block &&
+        typeof block.text === "string"
           ? plainTextFromMarkdown(block.text)
           : "",
       )

@@ -45,7 +45,8 @@ export function isBackgroundInputBlock(block: unknown): boolean {
 
 /**
  * Peer-run (bot_message) blocks the user still sees besides receipts: ask cards, the
- * bot's own text reply, and files it attached with `attach_file` (`image` / `file`).
+ * bot's own text reply, files it attached with `attach_file` (`image` / `file`), and the
+ * thinking behind its reply (shown behind the client's Show thoughts toggle).
  * Steps, progress and other tool activity stay hidden.
  */
 export function isPeerRunReplyBlock(block: unknown): boolean {
@@ -56,7 +57,8 @@ export function isPeerRunReplyBlock(block: unknown): boolean {
     (block.kind === "ask" ||
       block.kind === "text" ||
       block.kind === "image" ||
-      block.kind === "file")
+      block.kind === "file" ||
+      block.kind === "thinking")
   );
 }
 
