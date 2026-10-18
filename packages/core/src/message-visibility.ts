@@ -20,8 +20,9 @@ export type UserVisibleMessagesOptions = {
   backgroundRunIds?: Iterable<string>;
   /**
    * Surface a peer-run's own `text` reply (e.g. a delegating bot's summary to the user)
-   * alongside `ask` cards. Defaults to true for chat-thread rendering; set false for
-   * contexts like sidebar previews that should stay ask-only and never echo peer chatter.
+   * and the `image` / `file` blocks it attached with `attach_file`, alongside `ask` cards.
+   * Defaults to true for chat-thread rendering; set false for contexts like sidebar
+   * previews that should stay ask-only and never echo peer chatter.
    */
   includeDelegatedReplyText?: boolean;
 };
@@ -39,6 +40,23 @@ export function isBackgroundInputBlock(block: unknown): boolean {
     typeof block === "object" &&
     "kind" in block &&
     (block.kind === "ask" || block.kind === "computer" || block.kind === "mcp_approval")
+  );
+}
+
+/**
+ * Peer-run (bot_message) blocks the user still sees besides receipts: ask cards, the
+ * bot's own text reply, and files it attached with `attach_file` (`image` / `file`).
+ * Steps, progress and other tool activity stay hidden.
+ */
+export function isPeerRunReplyBlock(block: unknown): boolean {
+  return (
+    !!block &&
+    typeof block === "object" &&
+    "kind" in block &&
+    (block.kind === "ask" ||
+      block.kind === "text" ||
+      block.kind === "image" ||
+      block.kind === "file")
   );
 }
 
@@ -62,10 +80,11 @@ export function userVisibleMessages<T extends PresentableMessage>(
     }
     if (isPeerReceiptBlocks(message.blocks)) return includePeerReceipts;
     if (!message.runId || !peerRunIds.has(message.runId)) return true;
-    // Keep peer-run ask cards, and (unless the caller opts out) the bot's own text reply.
-    const includeText = options.includeDelegatedReplyText !== false;
-    return message.blocks.some(
-      (block) => block.kind === "ask" || (includeText && block.kind === "text"),
-    );
+    // Keep peer-run ask cards, and (unless the caller opts out) the bot's own text reply
+    // and attachments.
+    if (options.includeDelegatedReplyText === false) {
+      return message.blocks.some((block) => block.kind === "ask");
+    }
+    return message.blocks.some(isPeerRunReplyBlock);
   });
 }
