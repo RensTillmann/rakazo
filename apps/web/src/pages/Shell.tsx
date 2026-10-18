@@ -124,7 +124,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { ClipboardEvent, DragEvent, MutableRefObject, RefObject } from "react";
+import type { ClipboardEvent, CSSProperties, DragEvent, MutableRefObject, RefObject } from "react";
 import {
   Fragment,
   memo,
@@ -175,12 +175,6 @@ import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
 import { TeachRecordingChrome, TeachStopButton } from "../components/teach/TeachRecordingChrome";
 import { readActivityMode, writeActivityMode } from "../lib/activity-mode";
-import {
-  readShowThoughts,
-  subscribeShowThoughts,
-  withThoughtsVisibility,
-  writeShowThoughts,
-} from "../lib/show-thoughts";
 import type { ArtifactTarget } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
 import {
@@ -194,9 +188,17 @@ import {
   subscribeBotsSidebarDensity,
 } from "../lib/bots-sidebar-density-pref";
 import {
-  BOTS_SIDEBAR_EDGE_DRAG_PX,
+  BOTS_SIDEBAR_CLICK_SLOP_PX,
+  BOTS_SIDEBAR_DEFAULT_WIDTH,
+  BOTS_SIDEBAR_RAIL_WIDTH,
+  type BotsSidebarLayout,
+  botsSidebarLayoutForWidth,
+  botsSidebarMaxWidth,
+  nudgeBotsSidebar,
   readBotsSidebarCollapsed,
+  readBotsSidebarWidth,
   writeBotsSidebarCollapsed,
+  writeBotsSidebarWidth,
 } from "../lib/bots-sidebar-pref";
 import {
   deliverBrowserNotification as deliverNativeBrowserNotification,
@@ -266,6 +268,12 @@ import {
   spaceSwitchDecision,
   useSpaceEpoch,
 } from "../lib/space-switch";
+import {
+  readShowThoughts,
+  subscribeShowThoughts,
+  withThoughtsVisibility,
+  writeShowThoughts,
+} from "../lib/show-thoughts";
 import {
   activeThreadRuns,
   applyThreadSendReceipt,
@@ -507,6 +515,7 @@ function SpaceShell() {
   }, [userId]);
   useEffect(() => {
     setBotsSidebarCollapsed(readBotsSidebarCollapsed(userId));
+    setBotsSidebarWidth(readBotsSidebarWidth(userId));
   }, [userId]);
   const [query, setQuery] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
@@ -688,11 +697,17 @@ function SpaceShell() {
   const [rosterDropKey, setRosterDropKey] = useState<string | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [botsSidebarCollapsed, setBotsSidebarCollapsed] = useState(false);
+  const [botsSidebarWidth, setBotsSidebarWidth] = useState(BOTS_SIDEBAR_DEFAULT_WIDTH);
+  const [botsSidebarDragging, setBotsSidebarDragging] = useState(false);
   const focusPromptAbortRef = useRef<AbortController | null>(null);
   const focusPromptBotIdRef = useRef<string | null>(null);
-  const botsSidebarEdgeDragRef = useRef<{ startX: number; mode: "expand" | "collapse" } | null>(
-    null,
-  );
+  const botsSidebarEdgeDragRef = useRef<{
+    startX: number;
+    /** Width under the pointer at the start: 0 when the sidebar starts hidden. */
+    startWidth: number;
+    reopenWidth: number;
+    layout: BotsSidebarLayout | null;
+  } | null>(null);
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [pickerInfoTopic, setPickerInfoTopic] = useState<"group" | "space" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -2660,6 +2675,18 @@ function SpaceShell() {
     writeBotsSidebarCollapsed(userId, collapsed);
   }
 
+  function setBotsSidebarLayout(layout: BotsSidebarLayout, persist: boolean) {
+    setBotsSidebarWidth(layout.width);
+    setBotsSidebarCollapsed(layout.collapsed);
+    if (!persist) return;
+    writeBotsSidebarWidth(userId, layout.width);
+    writeBotsSidebarCollapsed(userId, layout.collapsed);
+  }
+
+  /** Desktop avatar rail: only the avatars, names in tooltips. The phone drawer always shows full rows. */
+  const botsSidebarRail =
+    !botsSidebarCollapsed && botsSidebarWidth <= BOTS_SIDEBAR_RAIL_WIDTH && !mobileSidebarOpen;
+
   function openSettings(section: SettingsSection = "general") {
     setSettingsSpaceId(null);
     setSettingsSection(section);
@@ -3121,16 +3148,24 @@ function SpaceShell() {
         data-space-switch="sidebar"
         data-bots-sidebar-density={botsSidebarDensity}
         data-collapsed={botsSidebarCollapsed ? "true" : "false"}
+        data-rail={botsSidebarRail ? "true" : undefined}
         inert={botsSidebarCollapsed && !mobileSidebarOpen ? true : undefined}
-        className={`absolute inset-y-0 start-0 z-40 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,width,opacity] md:static md:z-auto md:translate-x-0 ${
-          mobileSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
-        } ${
+        style={{ "--bots-sidebar-width": `${botsSidebarWidth}px` } as CSSProperties}
+        className={`absolute inset-y-0 start-0 z-40 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar md:static md:z-auto md:translate-x-0 ${
+          botsSidebarDragging ? "" : "transition-[transform,width,opacity]"
+        } ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"} ${
           botsSidebarCollapsed
             ? "md:w-0 md:max-w-0 md:overflow-hidden md:border-e-0 md:opacity-0 md:pointer-events-none"
-            : "md:w-[316px]"
+            : "md:w-(--bots-sidebar-width) md:max-w-none"
         }`}
       >
-        <div className="app-drag flex items-center justify-between px-[18px] pb-3 pt-4">
+        <div
+          className={`app-drag flex pb-3 pt-4 ${
+            botsSidebarRail
+              ? "flex-col items-center gap-3"
+              : "items-center justify-between px-[18px]"
+          }`}
+        >
           <WindowChrome />
           <div className="relative flex items-center gap-2.5">
             <button
@@ -3140,7 +3175,9 @@ function SpaceShell() {
               title={t`Activity`}
               data-activity-mode={activityMode ? "on" : "off"}
               onClick={toggleActivityMode}
-              className={`app-no-drag flex h-7 w-7 items-center justify-center rounded-full ${
+              className={`app-no-drag h-7 w-7 items-center justify-center rounded-full ${
+                botsSidebarRail ? "hidden" : "flex"
+              } ${
                 activityMode
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground/70 hover:text-foreground/75"
@@ -3155,7 +3192,9 @@ function SpaceShell() {
             </button>
             <button
               type="button"
-              className="app-no-drag hidden h-7 w-7 items-center justify-center rounded-full text-muted-foreground/70 hover:text-foreground/75 md:inline-flex"
+              className={`app-no-drag hidden h-7 w-7 items-center justify-center rounded-full text-muted-foreground/70 hover:text-foreground/75 ${
+                botsSidebarRail ? "" : "md:inline-flex"
+              }`}
               aria-label={t`Minimize bots`}
               title={t`Minimize bots`}
               data-testid="minimize-bots-sidebar"
@@ -3215,23 +3254,29 @@ function SpaceShell() {
             </Popover>
           </div>
         </div>
-        <InputGroup
-          data-testid="sidebar-search"
-          className="mx-2.5 mb-3 w-auto rounded-xl bg-card dark:bg-input border border-border text-muted-foreground focus-within:border-ring"
+        {botsSidebarRail ? null : (
+          <InputGroup
+            data-testid="sidebar-search"
+            className="mx-2.5 mb-3 w-auto rounded-xl bg-card dark:bg-input border border-border text-muted-foreground focus-within:border-ring"
+          >
+            <InputGroupAddon>
+              <Search size={16} strokeWidth={1.8} aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t`Search`}
+              autoComplete="off"
+              name="sidebar-search"
+            />
+          </InputGroup>
+        )}
+        <div
+          className={`rk-scroll flex flex-1 flex-col gap-0.5 overflow-y-auto pb-2.5 ${
+            botsSidebarRail ? "overflow-x-hidden px-1.5" : "px-2.5"
+          }`}
         >
-          <InputGroupAddon>
-            <Search size={16} strokeWidth={1.8} aria-hidden="true" />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t`Search`}
-            autoComplete="off"
-            name="sidebar-search"
-          />
-        </InputGroup>
-        <div className="rk-scroll flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-2.5">
-          {showSpaceSearch ? (
+          {showSpaceSearch && !botsSidebarRail ? (
             <SpaceSearchResults
               hits={searchHits}
               loading={searchLoading}
@@ -3239,7 +3284,7 @@ function SpaceShell() {
             />
           ) : (
             <>
-              {activityMode ? (
+              {activityMode && !botsSidebarRail ? (
                 <ActivityList
                   onOpenRun={(run) => {
                     setMobileSidebarOpen(false);
@@ -3273,7 +3318,22 @@ function SpaceShell() {
                 const headerDropKey = `header:${group.key}`;
                 return (
                   <div key={group.key} data-sidebar-group={group.key}>
-                    {group.title || hasSpaceActions ? (
+                    {botsSidebarRail ? (
+                      group.title && !group.emptySpaceId ? (
+                        <button
+                          type="button"
+                          title={group.title}
+                          aria-expanded={!collapsed}
+                          aria-label={
+                            collapsed ? t`Expand ${group.title}` : t`Collapse ${group.title}`
+                          }
+                          onClick={() => toggleSidebarSection(group.key)}
+                          className="flex h-5 w-full items-center px-2 text-muted-foreground/40 hover:text-foreground"
+                        >
+                          <span className="h-px w-full bg-current" aria-hidden="true" />
+                        </button>
+                      ) : null
+                    ) : group.title || hasSpaceActions ? (
                       // biome-ignore lint/a11y/useSemanticElements: groups sidebar controls, not form fields; Move to remains the keyboard alternative.
                       <div
                         role="group"
@@ -3453,7 +3513,7 @@ function SpaceShell() {
                                 item.kind === "bot" && draggedBotId === item.chat.id ? 0.55 : 1,
                             }}
                           >
-                            {hasChildren ? (
+                            {hasChildren && !botsSidebarRail ? (
                               <span
                                 className="absolute inset-y-0 z-10 flex w-3.5 items-center justify-center"
                                 style={{ insetInlineStart: `${10 + depth * 14}px` }}
@@ -3482,6 +3542,7 @@ function SpaceShell() {
                             ) : null}
                             <button
                               type="button"
+                              title={botsSidebarRail ? item.chat.name : undefined}
                               draggable={item.kind === "bot"}
                               data-roster-bot-id={item.kind === "bot" ? item.chat.id : undefined}
                               data-roster-unread={item.chat.unread ? "true" : undefined}
@@ -3555,9 +3616,11 @@ function SpaceShell() {
                                 });
                               }}
                               className={`flex w-full items-center ${
-                                compact
-                                  ? "min-h-11 gap-2 rounded-xl px-2.5 py-1.5"
-                                  : "gap-3 rounded-xl px-2.5 py-[10px]"
+                                botsSidebarRail
+                                  ? `justify-center rounded-xl ${compact ? "min-h-11 py-1.5" : "py-[10px]"}`
+                                  : compact
+                                    ? "min-h-11 gap-2 rounded-xl px-2.5 py-1.5"
+                                    : "gap-3 rounded-xl px-2.5 py-[10px]"
                               } text-start ${
                                 item.kind === "bot" ? "cursor-grab active:cursor-grabbing" : ""
                               } ${
@@ -3566,29 +3629,37 @@ function SpaceShell() {
                                   : "group-hover/row:bg-sidebar-accent"
                               }`}
                               style={
-                                treeActive
+                                treeActive && !botsSidebarRail
                                   ? { paddingInlineStart: `${24 + depth * 14}px` }
                                   : undefined
                               }
                             >
-                              {item.kind === "bot" ? (
-                                <BotAvatar
-                                  color={item.chat.color}
-                                  identity={item.chat.id}
-                                  size={compact ? 28 : 38}
-                                  status={item.chat.status}
-                                />
-                              ) : (
-                                <GroupAvatar
-                                  members={
-                                    item.chat.id === activeSnapshot?.groupId
-                                      ? (activeSnapshot.members ?? item.chat.members)
-                                      : item.chat.members
-                                  }
-                                  size={compact ? 28 : 38}
-                                />
-                              )}
-                              <div className="min-w-0 flex-1">
+                              <span className="relative flex shrink-0">
+                                {item.kind === "bot" ? (
+                                  <BotAvatar
+                                    color={item.chat.color}
+                                    identity={item.chat.id}
+                                    size={compact ? 28 : 38}
+                                    status={item.chat.status}
+                                  />
+                                ) : (
+                                  <GroupAvatar
+                                    members={
+                                      item.chat.id === activeSnapshot?.groupId
+                                        ? (activeSnapshot.members ?? item.chat.members)
+                                        : item.chat.members
+                                    }
+                                    size={compact ? 28 : 38}
+                                  />
+                                )}
+                                {botsSidebarRail && item.chat.unread ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sidebar bg-foreground"
+                                  />
+                                ) : null}
+                              </span>
+                              <div className={botsSidebarRail ? "sr-only" : "min-w-0 flex-1"}>
                                 <div className="flex items-center justify-between gap-1.5">
                                   <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                                     <span
@@ -3677,7 +3748,9 @@ function SpaceShell() {
               })}
             </>
           )}
-          {archivedBots.length + archivedGroups.length > 0 && !showSpaceSearch ? (
+          {archivedBots.length + archivedGroups.length > 0 &&
+          !showSpaceSearch &&
+          !botsSidebarRail ? (
             <div className="mt-2 border-t border-border pt-2">
               <button
                 type="button"
@@ -3764,13 +3837,18 @@ function SpaceShell() {
         </div>
         <button
           type="button"
+          title={botsSidebarRail ? t`Integrations` : undefined}
           onClick={() => setPluginsOpen(true)}
-          className="mx-3 mb-1 flex items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-sidebar-accent"
+          className={`mb-1 flex items-center gap-3 rounded-xl py-2 hover:bg-sidebar-accent ${
+            botsSidebarRail ? "mx-auto px-2" : "mx-3 px-2.5"
+          }`}
         >
           <span className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-accent text-foreground/80">
             <LayoutGrid size={15} strokeWidth={1.8} />
           </span>
-          <span className="text-[14px] font-medium text-foreground/90">
+          <span
+            className={botsSidebarRail ? "sr-only" : "text-[14px] font-medium text-foreground/90"}
+          >
             <Trans>Integrations</Trans>
           </span>
         </button>
@@ -3783,12 +3861,17 @@ function SpaceShell() {
         >
           <PopoverTrigger
             data-testid="user-menu-trigger"
-            className="flex items-center gap-[11px] px-[18px] py-3.5"
+            title={botsSidebarRail ? userName : undefined}
+            className={`flex items-center gap-[11px] py-3.5 ${
+              botsSidebarRail ? "justify-center px-0" : "px-[18px]"
+            }`}
           >
             <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-[12px] text-foreground/75">
               {initials}
             </span>
-            <span className="text-[14.5px] text-foreground/90">{userName}</span>
+            <span className={botsSidebarRail ? "sr-only" : "text-[14.5px] text-foreground/90"}>
+              {userName}
+            </span>
           </PopoverTrigger>
           {menuOpen ? (
             <PopoverContent
@@ -3875,41 +3958,60 @@ function SpaceShell() {
           data-testid="bots-sidebar-edge"
           aria-label={botsSidebarCollapsed ? t`Show bots` : t`Hide bots`}
           aria-pressed={!botsSidebarCollapsed}
-          className={`absolute inset-y-0 z-50 hidden w-2 cursor-ew-resize touch-none border-0 bg-transparent p-0 md:block ${
-            botsSidebarCollapsed ? "start-0" : "start-[308px]"
-          }`}
+          aria-keyshortcuts="ArrowLeft ArrowRight"
+          className="absolute inset-y-0 z-50 hidden w-2 cursor-ew-resize touch-none border-0 bg-transparent p-0 hover:bg-border focus-visible:bg-border focus-visible:outline-none md:block"
+          style={{ insetInlineStart: botsSidebarCollapsed ? 0 : botsSidebarWidth - 8 }}
           onPointerDown={(event) => {
+            if (event.button !== 0) return;
             event.currentTarget.setPointerCapture(event.pointerId);
             botsSidebarEdgeDragRef.current = {
               startX: event.clientX,
-              mode: botsSidebarCollapsed ? "expand" : "collapse",
+              startWidth: botsSidebarCollapsed ? 0 : botsSidebarWidth,
+              reopenWidth: botsSidebarWidth,
+              layout: null,
             };
           }}
           onPointerMove={(event) => {
             const drag = botsSidebarEdgeDragRef.current;
             if (!drag) return;
-            const rtl =
-              typeof document !== "undefined" &&
-              document.documentElement.getAttribute("dir") === "rtl";
+            const rtl = document.documentElement.getAttribute("dir") === "rtl";
             const delta = rtl ? drag.startX - event.clientX : event.clientX - drag.startX;
-            if (drag.mode === "expand" && delta >= BOTS_SIDEBAR_EDGE_DRAG_PX) {
-              botsSidebarEdgeDragRef.current = null;
-              setBotsSidebarCollapsedPref(false);
-            } else if (drag.mode === "collapse" && delta <= -BOTS_SIDEBAR_EDGE_DRAG_PX) {
-              botsSidebarEdgeDragRef.current = null;
-              setBotsSidebarCollapsedPref(true);
-            }
+            // A press that barely moves stays a click: show or hide.
+            if (!drag.layout && Math.abs(delta) < BOTS_SIDEBAR_CLICK_SLOP_PX) return;
+            if (!drag.layout) setBotsSidebarDragging(true);
+            drag.layout = botsSidebarLayoutForWidth(
+              drag.startWidth + delta,
+              botsSidebarMaxWidth(window.innerWidth),
+              drag.reopenWidth,
+            );
+            setBotsSidebarLayout(drag.layout, false);
           }}
-          onPointerUp={(event) => {
+          onPointerUp={() => {
             const drag = botsSidebarEdgeDragRef.current;
             botsSidebarEdgeDragRef.current = null;
             if (!drag) return;
-            if (Math.abs(event.clientX - drag.startX) < BOTS_SIDEBAR_EDGE_DRAG_PX) {
-              setBotsSidebarCollapsedPref(!botsSidebarCollapsed);
-            }
+            setBotsSidebarDragging(false);
+            if (drag.layout) setBotsSidebarLayout(drag.layout, true);
+            else setBotsSidebarCollapsedPref(!botsSidebarCollapsed);
           }}
           onPointerCancel={() => {
+            const drag = botsSidebarEdgeDragRef.current;
             botsSidebarEdgeDragRef.current = null;
+            setBotsSidebarDragging(false);
+            if (drag?.layout) setBotsSidebarLayout(drag.layout, true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            const rtl = document.documentElement.getAttribute("dir") === "rtl";
+            setBotsSidebarLayout(
+              nudgeBotsSidebar(
+                { collapsed: botsSidebarCollapsed, width: botsSidebarWidth },
+                (event.key === "ArrowRight") !== rtl,
+                botsSidebarMaxWidth(window.innerWidth),
+              ),
+              true,
+            );
           }}
         />
       )}
@@ -4158,7 +4260,7 @@ function SpaceShell() {
       />
 
       <ResizableSidePanel
-        botsSidebarCollapsed={botsSidebarCollapsed}
+        botsSidebarWidth={botsSidebarCollapsed ? 0 : botsSidebarWidth}
         open={Boolean(panel && (active || activeGroup || panel === "create"))}
         panel={panel ?? "closed"}
       >

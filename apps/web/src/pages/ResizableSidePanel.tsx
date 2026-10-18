@@ -6,8 +6,6 @@ const STORAGE_KEY = "rakazo:right-panel-width";
 const MIN_WIDTH = 320;
 const DEFAULT_WIDTH = 384;
 const ABSOLUTE_MAX = 1000;
-/** Desktop bots sidebar width (`md:w-[316px]` in Shell). */
-const BOTS_SIDEBAR_WIDTH = 316;
 const MIN_CHAT_WIDTH = 320;
 
 function maximumWidth(reservedLeadingPx: number) {
@@ -30,15 +28,15 @@ function readPreferredWidth() {
 export function ResizableSidePanel({
   open,
   panel,
-  botsSidebarCollapsed = false,
+  botsSidebarWidth: reservedLeadingPx = 0,
   children,
 }: {
   open: boolean;
   panel: string;
-  botsSidebarCollapsed?: boolean;
+  /** Current desktop width of the bots sidebar; 0 while it is hidden. */
+  botsSidebarWidth?: number;
   children: ReactNode;
 }) {
-  const reservedLeadingPx = botsSidebarCollapsed ? 0 : BOTS_SIDEBAR_WIDTH;
   const [preferredWidth, setPreferredWidth] = useState(readPreferredWidth);
   const [maxWidth, setMaxWidth] = useState(() => maximumWidth(reservedLeadingPx));
   const [dragging, setDragging] = useState(false);
