@@ -24,6 +24,11 @@ export interface AppEnv {
   authSecret: string;
   authUrl: string;
   webOrigin: string;
+  /**
+   * More origins the web app is served from (RAKAZO_EXTRA_ORIGINS, comma-separated), for
+   * example a tailnet HTTPS name next to the loopback address. Trusted like webOrigin.
+   */
+  extraOrigins: string[];
   privacyPolicyUrl?: string;
   apiUrl: string;
   apiHost: string;
@@ -169,6 +174,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     authSecret,
     authUrl: source.BETTER_AUTH_URL ?? source.WEB_ORIGIN ?? "http://127.0.0.1:5173",
     webOrigin: source.WEB_ORIGIN ?? "http://127.0.0.1:5173",
+    extraOrigins: parseExtraOrigins(source.RAKAZO_EXTRA_ORIGINS),
     privacyPolicyUrl: optional(source.PRIVACY_POLICY_URL),
     apiUrl: source.API_URL ?? "http://127.0.0.1:3100",
     apiHost: source.API_HOST ?? "127.0.0.1",
@@ -254,6 +260,33 @@ function required(source: NodeJS.ProcessEnv, key: string): string {
   const value = source[key];
   if (!value) throw new Error(`Missing ${key}`);
   return value;
+}
+
+function parseExtraOrigins(value: string | undefined): string[] {
+  const origins = (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      let url: URL;
+      try {
+        url = new URL(entry);
+      } catch {
+        throw new Error(`RAKAZO_EXTRA_ORIGINS: ${entry} is not an http(s) origin`);
+      }
+      if (
+        (url.protocol !== "http:" && url.protocol !== "https:") ||
+        url.username ||
+        url.password ||
+        url.pathname !== "/" ||
+        url.search ||
+        url.hash
+      ) {
+        throw new Error(`RAKAZO_EXTRA_ORIGINS: ${entry} is not an http(s) origin`);
+      }
+      return url.origin;
+    });
+  return [...new Set(origins)];
 }
 
 function optional(value: string | undefined): string | undefined {
