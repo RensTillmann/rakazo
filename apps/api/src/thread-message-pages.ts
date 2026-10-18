@@ -3,6 +3,7 @@ import { MessageBlock as MessageBlockSchema } from "@rakazo/contracts";
 import {
   BACKGROUND_RUN_TRIGGERS,
   callIdFromClientNonce,
+  inboundSourceFromClientNonce,
   isBackgroundInputBlock,
   isBackgroundRunTrigger,
   isPeerReceiptBlocks,
@@ -283,6 +284,7 @@ function toThreadMessage(row: {
     replyPreview,
     runId: row.runId ?? undefined,
     callId: callIdFromClientNonce(row.clientNonce),
+    inbound: inboundSourceFromClientNonce(row.clientNonce),
     createdAt: row.createdAt.toISOString(),
   };
 }

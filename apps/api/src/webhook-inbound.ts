@@ -1,7 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { JobPublisher, SecretStore } from "@rakazo/adapter-kit";
 import { runContinueJob, SecretStoreUnavailableError } from "@rakazo/adapter-kit";
 import { inboundRoutineModelPin } from "@rakazo/adapters";
+import type { InboundDeliverySource } from "@rakazo/contracts";
+import { inboundDeliveryNoncePrefix } from "@rakazo/core";
 import type { PrismaClient } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 
@@ -253,13 +255,20 @@ export function messagingWakeIdempotencyKey(provider: string, handle: string): s
   return `${provider}:${handle}`;
 }
 
-/** Client nonce for idempotent inbound deliveries (webhook / github / messaging). */
+/**
+ * Client nonce for an inbound delivery (webhook / github / messaging). A delivery with an
+ * idempotency key is deduplicated by it; one without still gets a unique nonce, so every delivery
+ * carries the source prefix that marks it as automatic in the chat.
+ */
 export function inboundDeliveryClientNonce(
-  source: "webhook" | "github" | "messaging",
+  source: InboundDeliverySource,
   botId: string,
-  idempotencyKey: string,
+  idempotencyKey: string | undefined,
 ): string {
-  return `${source}:${botId}:${createHash("sha256").update(idempotencyKey).digest("base64url")}`;
+  const suffix = idempotencyKey
+    ? createHash("sha256").update(idempotencyKey).digest("base64url")
+    : randomUUID();
+  return `${inboundDeliveryNoncePrefix(source, botId)}${suffix}`;
 }
 
 export async function deliverWebhookEvent(
@@ -274,7 +283,7 @@ export async function deliverWebhookEvent(
       modelId: string | null;
       thinkingLevel: string | null;
     }>;
-    source: "webhook" | "github" | "messaging";
+    source: InboundDeliverySource;
     idempotencyKey?: string;
     /** Messaging wakes share the live chat thread; keep a separate webhook run. */
     allowParallelRun?: boolean;
@@ -296,9 +305,7 @@ export async function deliverWebhookEvent(
         ].join("\n")
       : input.prompt;
 
-  const clientNonce = input.idempotencyKey
-    ? inboundDeliveryClientNonce(input.source, target.bot.id, input.idempotencyKey)
-    : undefined;
+  const clientNonce = inboundDeliveryClientNonce(input.source, target.bot.id, input.idempotencyKey);
   const pin = inboundRoutineModelPin(input.routines);
 
   const sent = await deps.events.sendUserMessage({

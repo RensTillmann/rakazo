@@ -738,6 +738,11 @@ msgstr "Automated senders"
 msgid "Automated senders will appear after they post here."
 msgstr "Automated senders will appear after they post here."
 
+#: src/components/InboundDeliveryCard.tsx
+#: src/pages/Shell.tsx
+msgid "Automatic"
+msgstr "Automatic"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr "Available after the routine is saved"
@@ -1910,6 +1915,10 @@ msgstr "Customer support"
 msgid "Customize bot avatar"
 msgstr "Customize bot avatar"
 
+#: src/components/ThinkingText.tsx
+msgid "Cut at {THINKING_BLOCK_MAX_CHARS} characters."
+msgstr "Cut at {THINKING_BLOCK_MAX_CHARS} characters."
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Dark"
 msgstr "Dark"
@@ -2913,6 +2922,10 @@ msgstr "Message"
 #: src/pages/Shell.tsx
 msgid "Message {activeName}"
 msgstr "Message {activeName}"
+
+#: src/components/InboundDeliveryCard.tsx
+msgid "Message channel"
+msgstr "Message channel"
 
 #: src/pages/Shell.tsx
 msgid "Message composer"
@@ -4207,18 +4220,15 @@ msgstr "Show bots"
 msgid "Show computer"
 msgstr "Show computer"
 
+#: src/components/ThinkingText.tsx
+msgid "Show less"
+msgstr "Show less"
+
 #: src/pages/Artifacts.tsx
 msgid "Show list"
 msgstr "Show list"
 
 #: src/components/ThinkingText.tsx
-msgid "Cut at {THINKING_BLOCK_MAX_CHARS} characters."
-msgstr "Cut at {THINKING_BLOCK_MAX_CHARS} characters."
-
-#: src/components/ThinkingText.tsx
-msgid "Show less"
-msgstr "Show less"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Show more"
 msgstr "Show more"
@@ -4912,6 +4922,7 @@ msgstr "Waiting…"
 msgid "Web, desktop and mobile apps"
 msgstr "Web, desktop and mobile apps"
 
+#: src/components/InboundDeliveryCard.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Webhook"
 msgstr "Webhook"
