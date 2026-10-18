@@ -144,7 +144,7 @@ export function AskCard({
             ? "instruction-approval-card"
             : undefined
       }
-      className="max-w-[74%] rounded-2xl border border-border bg-card px-5 py-4"
+      className="w-full rounded-2xl border border-border bg-card px-5 py-4 sm:w-auto sm:max-w-[74%]"
     >
       <div className="text-[15.5px] leading-[1.5] text-foreground">
         {block.instructionUpdate ? (
