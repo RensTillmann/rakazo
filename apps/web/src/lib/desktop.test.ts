@@ -68,7 +68,10 @@ describe("window chrome", () => {
     );
     expect(shell).toContain('className="app-no-drag grid h-8 w-8');
     expect(shell).toContain('className="app-no-drag flex min-w-0 items-center gap-3"');
-    expect(shell.match(/className="app-no-drag grid h-\[30px\] w-\[34px\]/g)).toHaveLength(2);
+    // Every square header control (Show thoughts, computer panel, …) must sit outside the drag region.
+    const controls = shell.match(/className="[^"]*h-\[30px\] w-\[34px\][^"]*"/g) ?? [];
+    expect(controls.length).toBeGreaterThan(0);
+    for (const control of controls) expect(control).toMatch(/^className="app-no-drag /);
   });
 
   it("moves window chrome into the conversation header when the bots sidebar is collapsed", () => {
