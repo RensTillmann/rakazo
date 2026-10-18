@@ -55,6 +55,9 @@ function fixture(
     trigger: options.trigger ?? "user",
     sourceMessageId: options.source ? "source-1" : null,
     leaseFence: 0,
+    // Upstream #1401 holds mid-turn narration back until a turn is a minute old; these tests
+    // cover a long turn, where user-run narration is published.
+    startedAt: new Date(Date.now() - 10 * 60_000),
   };
   const history = (options.history ?? []).map((row) => ({
     ...row,
