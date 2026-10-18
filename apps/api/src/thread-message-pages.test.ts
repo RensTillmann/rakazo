@@ -45,6 +45,38 @@ describe("thread message pages", () => {
     ).toBe(false);
   });
 
+  it("forwards a peer run's attached image and file live but not its steps or tool activity", () => {
+    const created = (blocks: unknown[]) =>
+      shouldForwardPeerThreadEvent({ type: "thread.message.created", payload: { blocks } });
+    expect(
+      created([
+        { kind: "image", artifactId: "art-1", mimeType: "image/png", name: "nu_article.png" },
+      ]),
+    ).toBe(true);
+    expect(
+      created([
+        {
+          kind: "file",
+          artifactId: "art-2",
+          mimeType: "application/pdf",
+          name: "nu_article.pdf",
+          size: 1024,
+        },
+      ]),
+    ).toBe(true);
+    expect(created([{ kind: "steps", steps: [{ label: "Attach", count: 1 }] }])).toBe(false);
+    expect(created([{ kind: "progress", text: "Attaching", activity: true }])).toBe(false);
+    expect(created([null])).toBe(false);
+    expect(
+      shouldForwardBackgroundThreadEvent({
+        type: "thread.message.created",
+        payload: {
+          blocks: [{ kind: "image", artifactId: "art-1", mimeType: "image/png", name: "a.png" }],
+        },
+      }),
+    ).toBe(false);
+  });
+
   it("caches background-run classification for live events", async () => {
     const findUnique = vi.fn(async () => ({ trigger: "tickets" }));
     const prisma = { run: { findUnique } } as unknown as PrismaClient;
@@ -226,6 +258,49 @@ describe("thread message pages", () => {
     const page = await loadMessagePage(prisma, "thread-1", undefined, 2);
 
     expect(page.messages.map((message) => message.id)).toEqual(["message-user"]);
+  });
+
+  it("keeps a peer run's attached image and file in history and drops its steps", async () => {
+    const row = (seq: number, runId: string, blocks: unknown[]) => ({
+      id: `message-${seq}`,
+      threadId: "thread-1",
+      seq,
+      role: "bot",
+      blocks,
+      botId: "bot-1",
+      replyToMessageId: null,
+      runId,
+      createdAt: new Date(`2026-08-16T00:00:0${seq}.000Z`),
+    });
+    const findMany = vi.fn(async () => [
+      row(5, "run-peer", [{ kind: "text", text: "Here is the nu.nl screenshot." }]),
+      row(4, "run-peer", [
+        {
+          kind: "file",
+          artifactId: "art-2",
+          mimeType: "application/pdf",
+          name: "nu_article.pdf",
+          size: 1024,
+        },
+      ]),
+      row(3, "run-peer", [
+        { kind: "image", artifactId: "art-1", mimeType: "image/png", name: "nu_article.png" },
+      ]),
+      row(2, "run-peer", [{ kind: "steps", steps: [{ label: "Attach", count: 1 }] }]),
+      row(1, "run-peer", [{ kind: "progress", text: "Attaching", activity: true }]),
+    ]);
+    const prisma = {
+      message: { findMany },
+      run: { findMany: vi.fn(async () => [{ id: "run-peer", trigger: "bot_message" }]) },
+    } as unknown as PrismaClient;
+
+    const page = await loadMessagePage(prisma, "thread-1", undefined, 5);
+
+    expect(page.messages.map((message) => message.id)).toEqual([
+      "message-3",
+      "message-4",
+      "message-5",
+    ]);
   });
 
   it("keeps peer text around-page targets and omits peer activity", async () => {

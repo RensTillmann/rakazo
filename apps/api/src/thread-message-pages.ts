@@ -6,6 +6,7 @@ import {
   isBackgroundInputBlock,
   isBackgroundRunTrigger,
   isPeerReceiptBlocks,
+  isPeerRunReplyBlock,
 } from "@rakazo/core";
 import { messageReplyPreview } from "@rakazo/core/message-quote";
 import type { Prisma, PrismaClient } from "@rakazo/db";
@@ -142,14 +143,8 @@ async function withoutPeerRunMessages<
       return blocks.some(isBackgroundInputBlock);
     }
     if (!peerRunIds.has(row.runId)) return true;
-    // Keep peer receipts (chips), ask cards, and the bot's own text reply.
-    return blocks.some(
-      (block) =>
-        block.kind === "bot_message_sent" ||
-        block.kind === "bot_message_received" ||
-        block.kind === "ask" ||
-        block.kind === "text",
-    );
+    // Keep peer receipts (chips), ask cards, the bot's own text reply and its attachments.
+    return isPeerReceiptBlocks(blocks) || blocks.some(isPeerRunReplyBlock);
   });
 }
 
@@ -185,7 +180,10 @@ export async function isBackgroundRun(
   return backgroundRun;
 }
 
-/** Peer-run SSE events that must still reach an open thread (terminals, waits, receipts, asks, text). */
+/**
+ * Peer-run SSE events that must still reach an open thread (terminals, waits, receipts,
+ * asks, text, and `attach_file` images/files).
+ */
 export function shouldForwardPeerThreadEvent(event: {
   type: string;
   payload: { blocks?: unknown };
@@ -207,13 +205,11 @@ export function shouldForwardPeerThreadEvent(event: {
     Array.isArray(blocks) &&
     blocks.some(
       (block) =>
-        !!block &&
-        typeof block === "object" &&
-        "kind" in block &&
-        (block.kind === "bot_message_received" ||
-          block.kind === "bot_message_sent" ||
-          block.kind === "ask" ||
-          block.kind === "text"),
+        isPeerRunReplyBlock(block) ||
+        (!!block &&
+          typeof block === "object" &&
+          "kind" in block &&
+          (block.kind === "bot_message_received" || block.kind === "bot_message_sent")),
     )
   );
 }
