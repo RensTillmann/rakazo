@@ -31,6 +31,7 @@ import {
   expandPeerReplies,
   foldPeerReplies,
   formatFileSize,
+  formatMessageTime,
   forwardProbeAfterPage,
   groupVoiceChats,
   isApprovalAskBlock,
@@ -177,7 +178,7 @@ import { setCallProviderTranscribe, startCall, useCallSession } from "../lib/cal
 import { loadDeviceVoiceEnabled } from "../lib/device-voice";
 import { available as dictationAvailable } from "../lib/dictation";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
-import { t, useI18n } from "../lib/i18n";
+import { dateLocaleForUi, t, useI18n } from "../lib/i18n";
 import { isInlineImageMimeType } from "../lib/inline-image";
 import { integrationsCacheScope, isIntegrationsScopeCurrent } from "../lib/integrations-cache";
 import { saveLastBotId } from "../lib/last-bot";
