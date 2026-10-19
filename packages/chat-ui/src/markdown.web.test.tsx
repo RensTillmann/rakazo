@@ -574,7 +574,9 @@ describe("web markdown bot mentions", () => {
   it("colours a known bot's mention but not code, links or email addresses", () => {
     const html = withBots(
       <ChatMarkdown>
-        {"Room test received. @Quinn, please confirm. `@Quinn` [@Quinn](https://example.test) a@quinn.com @Robin"}
+        {
+          "Room test received. @Quinn, please confirm. `@Quinn` [@Quinn](https://example.test) a@quinn.com @Robin"
+        }
       </ChatMarkdown>,
     );
 

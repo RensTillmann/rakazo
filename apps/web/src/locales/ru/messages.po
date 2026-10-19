@@ -3339,6 +3339,7 @@ msgid "Needs you"
 msgstr "Требуется ваше участие"
 
 #: src/lib/roster-status.ts
+#: src/pages/Shell.tsx
 msgid "Needs your answer"
 msgstr ""
 
