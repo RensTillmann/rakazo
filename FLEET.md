@@ -5,12 +5,15 @@ This is Rens's fork of [elie222/rakazo](https://github.com/elie222/rakazo):
 
 - `main` follows upstream `main`. We never commit to it.
 - `fleet-next` (this branch) is a newer upstream plus our patches, one commit per patch. It is
-  **running** since 18 Oct 2026: image `rakazo-fleet/app:49fa329` (patch head `49fa329`, base
-  upstream `76f4259`) with `RAKAZO_WEBHOOK_HONORS_RULES=true`, computers pinned to
-  `rakazo-fleet/computer:7d5e64c`. Full suite (incl. `packages/db`), web tests and `tsc` for every
-  package passed in that image. Rollback to the image before the approval patches: tag `1fd5c20`,
-  no restore (no migrations since `5e8f647`). Rollback to `fleet` needs the
-  `pre-fleet-next-20261018.dump` restore (upstream migrations ran).
+  **running** since 19 Oct 2026: image `rakazo-fleet/app:bcdacb3` (the fleet build: approvals in
+  every run and shell rules, rooms, usage bars, Hindsight provider, and the web catalogs; base upstream
+  `76f4259`), computers pinned to `rakazo-fleet/computer:7d5e64c`. `tsc` for 8 packages, 5243 core/
+  adapters/api/worker tests, 769 web tests and 358 Postgres tests (with `NODE_ENV=test`, which turns
+  off sign-up rate limits) passed in that image. Settings: `RAKAZO_WEBHOOK_HONORS_RULES`,
+  `RAKAZO_APPROVAL_EVERY_RUN`, `RAKAZO_STUCK_*_HOURS`, `RAKAZO_ROOM_*`, `RAKAZO_MEMORY_RECALL_EVERY_RUN`,
+  `RAKAZO_SUBSCRIPTION_LIMITS` (see `D:/rakazo/.env`). Two migrations ran
+  (`20261019120000_subscription_limit_readings`, `20261019121000_chat_group_room_brake_notify`), so
+  rollback to `49fa329` needs the `D:/rakazo/backups/pre-fleet-build-20261019-0848.dump` restore.
 - `fleet` (`8896cd15`, image `rakazo-fleet/app:d93d461`) is the previous build. Adopt `fleet-next`
   as `fleet` once it has run well for a few days (see "Adopt `fleet-next`").
 
