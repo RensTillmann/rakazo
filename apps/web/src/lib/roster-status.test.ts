@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   compactRosterStatusLabel,
+  groupRosterStatus,
   rosterHasUndismissedRunError,
+  rosterNeedsAnswer,
+  rosterNeedsAnswerLabel,
   rosterWorkStatusLabel,
 } from "./roster-status";
 
@@ -40,12 +43,38 @@ describe("compactRosterStatusLabel", () => {
     expect(compactRosterStatusLabel("queued")).toBe("Waiting in line…");
     expect(compactRosterStatusLabel("leased")).toBe("Starting…");
     expect(compactRosterStatusLabel("running")).toBe("Working…");
-    expect(compactRosterStatusLabel("waiting_input")).toBe("Needs an answer");
-    expect(compactRosterStatusLabel("waiting_takeover")).toBe("Needs you");
+    expect(compactRosterStatusLabel("waiting_input")).toBe("Needs your answer");
+    expect(compactRosterStatusLabel("waiting_takeover")).toBe("Needs your answer");
     expect(compactRosterStatusLabel("failed")).toBe("Error");
   });
 
   it("does not add status text to idle rows", () => {
     expect(compactRosterStatusLabel("idle")).toBeNull();
+  });
+});
+
+describe("rosterNeedsAnswer", () => {
+  it("flags only runs that wait for the user, never working runs", () => {
+    expect(rosterNeedsAnswer("waiting_input")).toBe(true);
+    expect(rosterNeedsAnswer("waiting_takeover")).toBe(true);
+    for (const status of ["queued", "leased", "running", "idle", "completed", "failed"]) {
+      expect(rosterNeedsAnswer(status)).toBe(false);
+    }
+    expect(rosterNeedsAnswerLabel("waiting_input")).toBe("Needs your answer");
+    expect(rosterNeedsAnswerLabel("running")).toBeNull();
+  });
+});
+
+describe("groupRosterStatus", () => {
+  it("prefers a member waiting for the user over a working member", () => {
+    expect(groupRosterStatus([{ status: "running" }, { status: "waiting_input" }])).toBe(
+      "waiting_input",
+    );
+  });
+
+  it("shows work when a member runs and idle otherwise", () => {
+    expect(groupRosterStatus([{ status: "idle" }, { status: "running" }])).toBe("running");
+    expect(groupRosterStatus([{ status: "completed" }, {}])).toBe("idle");
+    expect(groupRosterStatus([])).toBe("idle");
   });
 });

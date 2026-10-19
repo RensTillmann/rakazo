@@ -238,6 +238,9 @@ import {
 import {
   compactRosterStatusLabel,
   rosterHasUndismissedRunError,
+  groupRosterStatus,
+  rosterNeedsAnswer,
+  rosterNeedsAnswerLabel,
   rosterWorkStatusLabel,
 } from "../lib/roster-status";
 import { clearSpaceSelection, rpc, selectedSpaceId, selectSpace } from "../lib/rpc";
@@ -1463,6 +1466,8 @@ export function ShellPage() {
           event.type === "bot.deleted" ||
           event.type === "bot.updated" ||
           event.type === "run.started" ||
+          event.type === "run.waiting_input" ||
+          event.type === "computer.takeover.requested" ||
           isRunTerminalEvent(event) ||
           event.type === "thread.cleared"
         ) {
@@ -1567,6 +1572,8 @@ export function ShellPage() {
         }
         if (
           event.type === "run.started" ||
+          event.type === "run.waiting_input" ||
+          event.type === "computer.takeover.requested" ||
           event.type === "bot.updated" ||
           isRunTerminalEvent(event)
         ) {
@@ -3270,8 +3277,13 @@ export function ShellPage() {
                           (item.kind === "bot" && !inGroup && active?.id === item.chat.id) ||
                           (item.kind === "group" && inGroup && activeGroup?.id === item.chat.id);
                         const compact = botsSidebarDensity === "compact";
-                        const workStatusLabel =
-                          item.kind === "bot" ? rosterWorkStatusLabel(item.chat.status) : null;
+                        const rowStatus =
+                          item.kind === "bot"
+                            ? item.chat.status
+                            : groupRosterStatus(item.chat.members);
+                        const workStatusLabel = rosterWorkStatusLabel(rowStatus);
+                        const needsAnswer = rosterNeedsAnswer(rowStatus);
+                        const attentionDot = needsAnswer || item.chat.unread;
                         const rowError =
                           item.kind === "bot" &&
                           (rosterHasUndismissedRunError(
@@ -3279,15 +3291,15 @@ export function ShellPage() {
                             dismissedRunErrorIds,
                           ) ||
                             (active?.id === item.chat.id && Boolean(displayedRunError)));
-                        const compactStatusLabel =
-                          compact && item.kind === "bot"
-                            ? rowError
-                              ? t`Error`
-                              : compactRosterStatusLabel(item.chat.status)
-                            : null;
+                        const compactStatusLabel = compact
+                          ? rowError
+                            ? t`Error`
+                            : compactRosterStatusLabel(rowStatus)
+                          : null;
                         const rosterLine = compact
                           ? compactStatusLabel
                           : (workStatusLabel ??
+                            rosterNeedsAnswerLabel(rowStatus) ??
                             (item.kind === "bot"
                               ? item.chat.preview ||
                                 (item.chat.status !== "idle" ? item.chat.status : "")
@@ -3458,10 +3470,11 @@ export function ShellPage() {
                                     size={compact ? 28 : 38}
                                   />
                                 )}
-                                {botsSidebarRail && item.chat.unread ? (
+                                {botsSidebarRail && attentionDot ? (
                                   <span
                                     aria-hidden="true"
-                                    className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sidebar bg-foreground"
+                                    data-roster-attention-dot=""
+                                    className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sidebar bg-warning"
                                   />
                                 ) : null}
                               </span>
@@ -3477,7 +3490,11 @@ export function ShellPage() {
                                     >
                                       {item.chat.name}
                                     </span>
-                                    {item.chat.unread ? (
+                                    {needsAnswer ? (
+                                      <span className="sr-only">
+                                        <Trans> (needs your answer)</Trans>
+                                      </span>
+                                    ) : item.chat.unread ? (
                                       <span className="sr-only">
                                         <Trans> (unread)</Trans>
                                       </span>
@@ -3489,10 +3506,11 @@ export function ShellPage() {
                                         {formatRosterTime(item.chat.updatedAt)}
                                       </span>
                                     ) : null}
-                                    {item.chat.unread ? (
+                                    {attentionDot ? (
                                       <span
                                         aria-hidden="true"
-                                        className="inline-block h-2 w-2 rounded-full bg-foreground"
+                                        data-roster-attention-dot=""
+                                        className="inline-block h-2 w-2 rounded-full bg-warning"
                                       />
                                     ) : null}
                                   </div>
@@ -3508,19 +3526,15 @@ export function ShellPage() {
                                   compactStatusLabel ? (
                                     <div
                                       dir="auto"
-                                      data-roster-status={
-                                        rowError
-                                          ? "error"
-                                          : item.kind === "bot"
-                                            ? item.chat.status
-                                            : undefined
-                                      }
+                                      data-roster-status={rowError ? "error" : rowStatus}
                                       className={`mt-0.5 flex items-center gap-1 text-[11.5px] ${
                                         rowError
                                           ? "font-medium text-destructive"
                                           : workStatusLabel
                                             ? "font-semibold text-status-working"
-                                            : "font-medium text-foreground/75"
+                                            : needsAnswer
+                                              ? "font-semibold text-warning"
+                                              : "font-medium text-foreground/75"
                                       }`}
                                     >
                                       {rowError ? (
@@ -3532,13 +3546,20 @@ export function ShellPage() {
                                 ) : (
                                   <div
                                     dir="auto"
-                                    data-roster-preview={!workStatusLabel ? "true" : undefined}
+                                    data-roster-preview={
+                                      !workStatusLabel && !needsAnswer ? "true" : undefined
+                                    }
+                                    data-roster-status={
+                                      workStatusLabel || needsAnswer ? rowStatus : undefined
+                                    }
                                     className={`mt-1 line-clamp-2 text-[12.5px] break-words whitespace-normal ${
                                       workStatusLabel
                                         ? "font-semibold text-status-working"
-                                        : item.chat.unread
-                                          ? "font-medium text-foreground/75"
-                                          : "text-muted-foreground/60"
+                                        : needsAnswer
+                                          ? "font-semibold text-warning"
+                                          : item.chat.unread
+                                            ? "font-medium text-foreground/75"
+                                            : "text-muted-foreground/60"
                                     }`}
                                   >
                                     {rosterLine}
