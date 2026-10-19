@@ -1,5 +1,10 @@
 import type { SpaceBot, SpaceGroup } from "@rakazo/contracts";
-import { groupBotsForSidebar, nestRosterByParent } from "@rakazo/core";
+import {
+  groupBotsForSidebar,
+  nestRosterByParent,
+  orderRosterWithActiveFirst,
+  type RosterActivityState,
+} from "@rakazo/core";
 import {
   adoptDeletedSpaceFallback,
   type MobileBot,
@@ -43,8 +48,9 @@ export function spaceInboxItems(
   spaces: InboxSpace[],
   collapsedParentIds: ReadonlySet<string> = new Set(),
   editableSpaceId?: string,
+  activity: RosterActivityState = new Map(),
 ): InboxSpaceItem[] {
-  return spaces.flatMap((space): InboxSpaceItem[] => {
+  const perSpace = spaces.map((space) => {
     const chats = [
       ...space.bots.map((chat) => ({
         type: "bot" as const,
@@ -62,13 +68,31 @@ export function spaceInboxItems(
         sectionId: chat.sectionId,
       })),
     ];
-    const items: InboxSpaceItem[] = [];
-    if (spaces.length > 1 || !space.isDefault || chats.length === 0) {
+    return {
+      space,
+      empty: chats.length === 0,
+      groups: groupBotsForSidebar(chats, space.botSections, { includeEmptySections: true }).map(
+        (group) => ({ ...group, spaceId: space.id }),
+      ),
+    };
+  });
+  // Fleet patch: active bots (working, waiting for an answer, unread) lead the whole list,
+  // newest activity first; rooms and everything else keep their place.
+  const ordered = orderRosterWithActiveFirst(
+    perSpace.flatMap((entry) => entry.groups),
+    activity,
+    (item) => (item.type === "bot" ? item.id : null),
+  );
+  const items: InboxSpaceItem[] = [];
+  for (const item of ordered.active) {
+    if (item.type === "bot") items.push({ type: "bot", bot: item.bot, depth: 0, hasChildren: false });
+  }
+  for (const { space, empty } of perSpace) {
+    if (spaces.length > 1 || !space.isDefault || empty) {
       items.push({ type: "heading", key: space.id, title: space.name, space });
     }
-    for (const group of groupBotsForSidebar(chats, space.botSections, {
-      includeEmptySections: true,
-    })) {
+    for (const group of ordered.groups) {
+      if (group.spaceId !== space.id) continue;
       if (group.title) {
         items.push({
           type: "heading",
@@ -92,8 +116,8 @@ export function spaceInboxItems(
         }
       }
     }
-    return items;
-  });
+  }
+  return items;
 }
 
 export async function selectInboxSpace(spaceId: string, refresh: () => Promise<void>) {

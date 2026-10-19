@@ -12,6 +12,7 @@ export * from "./bot-avatar-colors.js";
 export * from "./bot-avatar-shapes.js";
 export * from "./bot-messages.js";
 export * from "./bot-sections.js";
+export * from "./roster-active-order.js";
 export * from "./call-nonce.js";
 export * from "./call-request.js";
 export * from "./cloud-agent.js";
