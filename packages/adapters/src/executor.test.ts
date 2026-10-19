@@ -18,6 +18,8 @@ import {
   runNotificationsEnabled,
   selectBuiltinToolsForRun,
   semanticRecallQuery,
+  recallForSteeringMessages,
+  attachSteeringRecall,
   settleSteeringAttachmentLoads,
   threadContextForRun,
   toolCompletionAuditPayload,
@@ -27,6 +29,7 @@ import {
   voiceCallInstruction,
   withRecentTurnImages,
 } from "./executor.js";
+import { MAX_RECALLED_MEMORIES } from "./history-compaction.js";
 import { UnavailableModelForAuthError } from "./model-selection.js";
 import { RetiredModelCredentialError, serializeModelSecret } from "./pi-oauth.js";
 
@@ -1572,6 +1575,93 @@ describe("createRunExecutor", () => {
         prompt: "q",
       }),
     ).toBe(null);
+  });
+
+  describe("recall for steered messages", () => {
+    const userItem = (text: string) => ({ text, blocks: [{ kind: "text", text }] as never[] });
+    const botItem = {
+      text: "[from Riona] status",
+      blocks: [
+        { kind: "bot_message_received", fromBotId: "r", fromBotName: "Riona", text: "status" },
+      ] as never[],
+    };
+    const provider = (recall: unknown) =>
+      ({ recall, describe: () => ({ id: "hindsight" }) }) as never;
+    const base = {
+      includeSemanticRecall: true,
+      historyCompacted: false,
+      recallEveryRun: true,
+      scope: "shared" as const,
+      botId: "elena",
+      context: { signal: new AbortController().signal } as never,
+    };
+
+    it("recalls with the steered user text and lands the block with that message", async () => {
+      const recall = vi.fn(async () => ({
+        ok: true as const,
+        value: [{ memory: "Conditional logic lives under Form settings." }],
+      }));
+      const items = [botItem, userItem("What do the Super Forms docs say about conditional logic?")];
+      const block = await recallForSteeringMessages({
+        ...base,
+        items,
+        provider: provider(recall),
+      });
+      expect(recall).toHaveBeenCalledOnce();
+      expect(recall.mock.calls[0]![0]).toMatchObject({
+        query: "What do the Super Forms docs say about conditional logic?",
+        scope: "shared",
+        botId: "elena",
+        limit: MAX_RECALLED_MEMORIES,
+      });
+      expect(block).toContain("Shared memory recalled for this message");
+      const claimed = attachSteeringRecall(
+        items.map((item, index) => ({ id: String(index), text: item.text })),
+        items,
+        block,
+      );
+      expect(claimed[0]!.text).toBe(botItem.text);
+      expect(claimed[1]!.text).toContain("conditional logic?\n\nShared memory recalled");
+    });
+
+    it("skips recall without user text or when recall is disabled", async () => {
+      const recall = vi.fn();
+      await expect(
+        recallForSteeringMessages({ ...base, items: [botItem], provider: provider(recall) }),
+      ).resolves.toBe("");
+      await expect(
+        recallForSteeringMessages({ ...base, items: [userItem("  ")], provider: provider(recall) }),
+      ).resolves.toBe("");
+      await expect(
+        recallForSteeringMessages({
+          ...base,
+          includeSemanticRecall: false,
+          items: [userItem("hi")],
+          provider: provider(recall),
+        }),
+      ).resolves.toBe("");
+      await expect(
+        recallForSteeringMessages({ ...base, items: [userItem("hi")], provider: null }),
+      ).resolves.toBe("");
+      expect(recall).not.toHaveBeenCalled();
+    });
+
+    it("injects nothing when recall fails, throws or times out", async () => {
+      const items = [userItem("hi")];
+      for (const recall of [
+        vi.fn(async () => ({ ok: false as const, error: new Error("down") })),
+        vi.fn(async () => {
+          throw new Error("boom");
+        }),
+        vi.fn(() => Promise.withResolvers<never>().promise),
+      ]) {
+        await expect(
+          recallForSteeringMessages({ ...base, items, provider: provider(recall), timeoutMs: 5 }),
+        ).resolves.toBe("");
+      }
+      const claimed = [{ id: "1", text: "hi" }];
+      expect(attachSteeringRecall(claimed, items, "")).toEqual([{ id: "1", text: "hi" }]);
+    });
   });
 
   it("keeps remember and recall_memory but no save/forget with a recall-only provider", () => {
