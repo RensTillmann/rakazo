@@ -944,7 +944,11 @@ function SpaceShell() {
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
-  const activeGroup = groups.find((group) => group.id === groupId);
+  // An archived room opens read-only from the Archived list: history, no composer.
+  const activeGroup =
+    groups.find((group) => group.id === groupId) ??
+    archivedGroups.find((group) => group.id === groupId);
+  const activeGroupArchived = Boolean(activeGroup?.archivedAt);
   const activePendingAttachments = useMemo(
     () => attachmentsForThread(pendingAttachments, inGroup ? groupId : active?.id),
     [active?.id, groupId, inGroup, pendingAttachments],
@@ -3806,12 +3810,14 @@ function SpaceShell() {
                   {archivedGroups.map((group) => (
                     <div key={group.id} className="flex items-center gap-2 rounded-lg px-2.5 py-2">
                       <GroupAvatar members={group.members} size={28} />
-                      <span
-                        className="min-w-0 flex-1 truncate text-[14px] text-foreground/75"
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 truncate text-start text-[14px] text-foreground/75 hover:text-foreground"
                         dir="auto"
+                        onClick={() => navigate(`/app/g/${group.id}`)}
                       >
                         {group.name}
-                      </span>
+                      </button>
                       <Button
                         variant="ghost"
                         size="xs"
@@ -4214,7 +4220,15 @@ function SpaceShell() {
             <Trans>Teaching in progress. Stop teaching before sending a new message.</Trans>
           </div>
         ) : null}
-        {active || activeGroup ? (
+        {activeGroupArchived ? (
+          <p
+            data-testid="archived-room-note"
+            className="px-6 pb-4 text-center text-[13px] text-muted-foreground"
+          >
+            <Trans>Archived</Trans>
+          </p>
+        ) : null}
+        {active || (activeGroup && !activeGroupArchived) ? (
           <Composer
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
             draftKey={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
@@ -4435,7 +4449,7 @@ function SpaceShell() {
                 }}
               />
             ) : null}
-            {panel === "group-settings" && activeGroup ? (
+            {panel === "group-settings" && activeGroup && !activeGroupArchived ? (
               <GroupSettings
                 key={activeGroup.id}
                 group={activeGroup}

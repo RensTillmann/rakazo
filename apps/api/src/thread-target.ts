@@ -311,7 +311,7 @@ export async function resolveThreadTarget(
     };
   }
   if (input.groupId) {
-    const group = await groupRepos.getGroupTarget(actor, input.groupId);
+    const group = await groupRepos.getGroupTarget(actor, input.groupId, options);
     if (!group.thread) throw new IsolationError();
     const members = group.members.map((member) => ({
       botId: member.bot.id,
