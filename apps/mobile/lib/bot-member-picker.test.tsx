@@ -122,8 +122,11 @@ afterEach(async () => {
   container.remove();
   vi.unstubAllGlobals();
 });
+// Member switches only: the room's notification switch (fleet) sits below the picker.
 function switches() {
-  return [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+  return [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].filter(
+    (input) => input.getAttribute("aria-label") !== "Notifications for this room",
+  );
 }
 async function click(label: string) {
   const button = [...container.querySelectorAll("button")].find(

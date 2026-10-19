@@ -306,9 +306,14 @@ describe("user-visible messages", () => {
       "file",
       "reply",
     ]);
-    expect(
-      userVisibleMessages(messages, { includePeerReceipts: true }).map((item) => item.id),
-    ).toEqual(["received", "image", "file", "reply"]);
+    // With receipts the bot's attachments and reply fold under its marker, steps stay hidden.
+    const transcript = foldPeerReplies(messages, { includePeerReceipts: true });
+    expect(transcript.messages.map((item) => item.id)).toEqual(["received"]);
+    expect(transcript.folded.get("received")?.map((item) => item.id)).toEqual([
+      "image",
+      "file",
+      "reply",
+    ]);
     // Sidebar previews stay ask-only.
     expect(
       userVisibleMessages(messages, { includeDelegatedReplyText: false }).map((item) => item.id),
