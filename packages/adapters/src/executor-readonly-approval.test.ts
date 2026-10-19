@@ -715,6 +715,71 @@ describe("connector read-only metadata and approval enforcement", () => {
     });
   });
 
+  describe("shell rules", () => {
+    const pushRule: ActionApprovalRule = {
+      effect: "require_approval",
+      matchKind: "shell",
+      matchValue: "^git push",
+    };
+    const shellCall = (command: string) => [{ args: { command }, executionId: "call-1" }];
+
+    it.each(["user", "routine", "bot_message", "follow_up", "messaging", "group"])(
+      "asks before a matching command in a %s run although shell is exempt",
+      async (trigger) => {
+        const f = fixture({ name: "shell", builtin: true, trigger, rules: [pushRule] });
+        f.setCalls(shellCall("bash -c 'git push origin main'"));
+        await f.run();
+        expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+        expect(f.sandboxExecute).not.toHaveBeenCalled();
+        expect(isApprovalPausedResult(f.results[0])).toBe(true);
+      },
+    );
+
+    it("runs a command the rule does not match", async () => {
+      const f = fixture({ name: "shell", builtin: true, rules: [pushRule] });
+      f.setCalls(shellCall("git status"));
+      await f.run();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(f.sandboxExecute).toHaveBeenCalledOnce();
+    });
+
+    it("asks in a webhook run with the owner's rules on", async () => {
+      const previous = process.env.RAKAZO_WEBHOOK_HONORS_RULES;
+      process.env.RAKAZO_WEBHOOK_HONORS_RULES = "true";
+      try {
+        const f = fixture({
+          name: "shell",
+          trigger: "webhook",
+          rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "shell" }, pushRule],
+        });
+        f.setCalls(shellCall("git push"));
+        await f.run();
+        expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      } finally {
+        if (previous === undefined) delete process.env.RAKAZO_WEBHOOK_HONORS_RULES;
+        else process.env.RAKAZO_WEBHOOK_HONORS_RULES = previous;
+      }
+    });
+
+    it("lets an always_allow shell rule run a webhook-run command", async () => {
+      const previous = process.env.RAKAZO_WEBHOOK_HONORS_RULES;
+      process.env.RAKAZO_WEBHOOK_HONORS_RULES = "true";
+      try {
+        const f = fixture({
+          name: "shell",
+          trigger: "webhook",
+          rules: [{ effect: "always_allow", matchKind: "shell", matchValue: "^ls\\b" }],
+        });
+        f.setCalls(shellCall("ls -la"));
+        await f.run();
+        expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      } finally {
+        if (previous === undefined) delete process.env.RAKAZO_WEBHOOK_HONORS_RULES;
+        else process.env.RAKAZO_WEBHOOK_HONORS_RULES = previous;
+      }
+    });
+  });
+
   it("writes shared memory directly, including when an always-allow rule exists", async () => {
     const args = { path: " MEMORY.md ", content: "Printing: all print jobs go to Clyde." };
     const f = fixture({

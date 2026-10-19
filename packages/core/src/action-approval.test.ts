@@ -13,6 +13,8 @@ import {
   planActionGate,
   resolveActionApproval,
   resolveActionApprovalDetail,
+  shellCommandForms,
+  shellRulePattern,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
   unattendedTriggerToolRequiresApproval,
@@ -136,6 +138,86 @@ describe("isOwnerStartedRun", () => {
     ["unknown", true, false],
   ])("treats %s (follow-up from user: %s) as owner-started: %s", (trigger, fromUser, expected) => {
     expect(isOwnerStartedRun(trigger, fromUser)).toBe(expected);
+  });
+});
+
+describe("shell rules", () => {
+  const ask: ActionApprovalRule = {
+    effect: "require_approval",
+    matchKind: "shell",
+    matchValue: "^git push",
+  };
+  const decide = (shellCommand: string, rules: ActionApprovalRule[] = [ask]) =>
+    resolveActionApprovalDetail({ toolName: "shell", shellCommand, rules });
+
+  it("matches the command itself", () => {
+    expect(decide("git push origin main")).toMatchObject({
+      decision: "ask",
+      source: "require_approval",
+    });
+    expect(decide("git status").source).toBe("default");
+  });
+
+  it.each([
+    "bash -c 'git push origin main'",
+    'sh -c "git push"',
+    "bash -lc 'git push'",
+    "env GIT_TRACE=1 git push",
+    "env -i HOME=/root git push",
+    "timeout 60 git push",
+    "timeout -s KILL 5m git push",
+    "nohup git push",
+    "nohup timeout 30 env A=1 bash -c 'git push --tags'",
+    "/usr/bin/env git push",
+  ])("looks through wrappers: %s", (command) => {
+    expect(decide(command).decision).toBe("ask");
+  });
+
+  it("lists each unwrapped form", () => {
+    expect(shellCommandForms("nohup bash -c 'timeout 5 git push'")).toEqual([
+      "nohup bash -c 'timeout 5 git push'",
+      "bash -c 'timeout 5 git push'",
+      "timeout 5 git push",
+      "git push",
+    ]);
+  });
+
+  it("allows a command an always_allow shell rule matches", () => {
+    const allow: ActionApprovalRule = {
+      effect: "always_allow",
+      matchKind: "shell",
+      matchValue: "^ls\\b",
+    };
+    expect(decide("ls -la", [allow])).toMatchObject({
+      decision: "allow",
+      source: "always_allow",
+    });
+  });
+
+  it("beats a tool-level shell rule", () => {
+    const toolAllow: ActionApprovalRule = {
+      effect: "always_allow",
+      matchKind: "tool",
+      matchValue: "shell",
+    };
+    expect(decide("git push", [toolAllow, ask]).decision).toBe("ask");
+    expect(decide("git status", [toolAllow, ask]).source).toBe("always_allow");
+  });
+
+  it("ignores other tools, a missing command and an invalid stored regex", () => {
+    expect(
+      resolveActionApprovalDetail({ toolName: "write_file", shellCommand: "git push", rules: [ask] })
+        .source,
+    ).toBe("default");
+    expect(resolveActionApprovalDetail({ toolName: "shell", rules: [ask] }).source).toBe(
+      "default",
+    );
+    expect(decide("git (push", [{ ...ask, matchValue: "git (push" }]).source).toBe("default");
+  });
+
+  it("compiles only valid patterns", () => {
+    expect(shellRulePattern("^git push")).toBeInstanceOf(RegExp);
+    expect(shellRulePattern("git (push")).toBeNull();
   });
 });
 

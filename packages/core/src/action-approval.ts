@@ -186,11 +186,58 @@ function categoryMatches(
   return false;
 }
 
+// Fleet: wrappers a shell rule looks through, so `^git push` also matches `env X=1 git push`.
+const SHELL_WRAPPER_PATTERNS = [
+  /^(?:\S*\/)?env(?:\s+(?:-u\s+\S+|-\S+|[A-Za-z_][A-Za-z0-9_]*=\S*))*\s+(?=\S)/,
+  /^(?:\S*\/)?timeout(?:\s+(?:-[sk]\s+\S+|-\S+))*\s+\d+(?:\.\d+)?[smhd]?\s+(?=\S)/,
+  /^(?:\S*\/)?nohup\s+(?=\S)/,
+];
+const SHELL_DASH_C_PATTERN = /^(?:\S*\/)?(?:ba|da|z)?sh(?:\s+-[A-Za-z]+)*?\s+-[A-Za-z]*c[A-Za-z]*\s+([\s\S]+)$/;
+const MAX_SHELL_UNWRAP = 8;
+
+/**
+ * The command itself plus each form left after peeling `bash -c`, `env`, `timeout` and `nohup`
+ * prefixes, outermost first. A shell rule matches when its regex matches any of them.
+ */
+export function shellCommandForms(command: string): string[] {
+  const forms = [command];
+  let current = command.trim();
+  for (let step = 0; step < MAX_SHELL_UNWRAP; step += 1) {
+    let next: string | undefined;
+    const dashC = SHELL_DASH_C_PATTERN.exec(current);
+    if (dashC?.[1]) {
+      const inner = dashC[1].trim();
+      const quote = inner[0];
+      next =
+        (quote === "'" || quote === '"') && inner.length > 1 && inner.endsWith(quote)
+          ? inner.slice(1, -1)
+          : inner;
+    } else {
+      const wrapper = SHELL_WRAPPER_PATTERNS.find((pattern) => pattern.test(current));
+      if (wrapper) next = current.replace(wrapper, "");
+    }
+    if (next === undefined) break;
+    current = next.trim();
+    forms.push(current);
+  }
+  return forms;
+}
+
+/** A shell rule's `matchValue` is a JS regex; the RPC refuses one that does not compile. */
+export function shellRulePattern(matchValue: string): RegExp | null {
+  try {
+    return new RegExp(matchValue);
+  } catch {
+    return null;
+  }
+}
+
 function ruleMatches(
   rule: ActionApprovalRule,
   toolName: string,
   connectorKind: string,
   readOnly: boolean | undefined,
+  shellCommand: string | undefined,
 ): boolean {
   const value = rule.matchValue.toLowerCase();
   switch (rule.matchKind) {
@@ -200,6 +247,13 @@ function ruleMatches(
       return connectorKind.toLowerCase() === value;
     case "category":
       return categoryMatches(rule.matchValue, toolName, connectorKind, readOnly);
+    case "shell": {
+      if (toolName !== "shell" || shellCommand === undefined) return false;
+      const pattern = shellRulePattern(rule.matchValue);
+      return pattern
+        ? shellCommandForms(shellCommand).some((form) => pattern.test(form))
+        : false;
+    }
     default:
       return false;
   }
@@ -207,6 +261,8 @@ function ruleMatches(
 
 function ruleSpecificity(rule: ActionApprovalRule): number {
   switch (rule.matchKind) {
+    case "shell":
+      return 4;
     case "tool":
       return 3;
     case "connector":
@@ -231,11 +287,13 @@ export function resolveActionApprovalDetail(input: {
   toolName: string;
   connectorKind?: string;
   readOnly?: boolean;
+  /** The `shell` tool's command, for `shell` rules. */
+  shellCommand?: string;
   rules: ActionApprovalRule[];
 }): ActionApprovalResolved {
   const connectorKind = input.connectorKind ?? connectorKindFromToolName(input.toolName);
   const matchingRules = input.rules.filter((rule) =>
-    ruleMatches(rule, input.toolName, connectorKind, input.readOnly),
+    ruleMatches(rule, input.toolName, connectorKind, input.readOnly, input.shellCommand),
   );
   if (matchingRules.length === 0) {
     return { decision: "allow", source: "default", matchingRules };
