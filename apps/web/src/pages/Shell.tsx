@@ -1746,8 +1746,12 @@ function SpaceShell() {
         ? trackRosterActivity(rosterActivityRef.current, rosterBots)
         : (rosterActivityRef.current ?? new Map());
     if (rosterBots.length > 0) rosterActivityRef.current = activity;
-    const ordered = orderRosterWithActiveFirst(grouped, activity, (item) =>
-      item.kind === "bot" ? item.chat.id : null,
+    type SidebarGroup = (typeof grouped)[number];
+    type SidebarItem = SidebarGroup["bots"][number];
+    const ordered = orderRosterWithActiveFirst<SidebarItem, SidebarGroup>(
+      grouped,
+      activity,
+      (item) => (item.kind === "bot" ? item.chat.id : null),
     );
     if (ordered.active.length === 0) return ordered.groups;
     const activeGroup: (typeof grouped)[number] = {
