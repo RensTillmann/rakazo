@@ -59,7 +59,8 @@ the `fleet` commit it came from.
 | `4c7065d` Handoff steers a busy target | `handoff_to_bot` steers a member already running in the thread instead of starting a second run, and respects the brake. | none | not yet |
 | `3014a6c` Author names in group history | Another bot's message is a `user` turn `[Name] …`, Rens's `[Rens] …`; handoffs render names; web names fall back to the space's bots. | none | not yet |
 | `bc2d0af` message_bot in groups | `message_bot` is offered in group threads. | none | not yet |
-| `aca0d73` Per-room push | A group run pushes only when the room's `notify` is on, or for help/takeover (cards, approvals). | `chat_groups.notify` (default off) | not yet |
+| `aca0d73` + `ba8622c` Per-room push | A group run's finish/failure push, the stuck-work reminders and stopped notices, and the activity list's bell follow the room's `notify` switch (`runPushEnabled` in `packages/core/src/run-push.ts`); help (cards, approvals, asks) and takeover pushes always go out, so a muted room never hides a question. Outside rooms the bot's "notify on finish" still decides. `notify` is on `Group`/`groups.update`; web group settings and the mobile group settings get a "Notifications for this room" switch. | `chat_groups.notify` (default off) | not yet |
+| `5de442d` Archived rooms readable | `getGroupTarget`/`resolveThreadTarget` take `includeArchived`; `threads.head`, `threads.get` and `threads.messages` pass it, so an archived room's history loads. The web opens an archived room from the Archived list read-only: history, an "Archived" note, no composer and no group settings; Restore and Delete stay. Writes still refuse archived rooms. | none | not yet |
 | Fleet: notes for `fleet-next` | This file. Never sent upstream. | — | — |
 
 ### Dropped patches (merged upstream)
