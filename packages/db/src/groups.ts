@@ -333,13 +333,17 @@ export function createGroupRepos(prisma: PrismaClient) {
       return group as GroupRecord;
     },
 
-    async getGroupTarget(actor: Actor, groupId: string) {
+    async getGroupTarget(
+      actor: Actor,
+      groupId: string,
+      options: { includeArchived?: boolean } = {},
+    ) {
       const group = await prisma.chatGroup.findFirst({
         where: {
           id: groupId,
           spaceId: actor.spaceId,
           userId: actor.userId,
-          archivedAt: null,
+          ...(options.includeArchived ? {} : { archivedAt: null }),
         },
         include: groupTargetInclude,
       });

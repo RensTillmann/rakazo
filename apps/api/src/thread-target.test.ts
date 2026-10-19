@@ -8,6 +8,7 @@ import type { ThreadTarget } from "./thread-target.js";
 import {
   cancelSupersededQueuedRuns,
   reactToThreadMessage,
+  resolveThreadTarget,
   sendThreadMessage,
   stopThreadRuns,
   threadHead,
@@ -46,6 +47,38 @@ describe("threadHead", () => {
       orderBy: { seq: "desc" },
       select: { seq: true },
     });
+  });
+});
+
+describe("resolveThreadTarget for an archived room", () => {
+  const actor = { spaceId: "space-1", userId: "user-1" } as Actor;
+  const member = (id: string) => ({ bot: { id, name: id, color: "blue", runs: [] } });
+  function groupPrisma() {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "group-1",
+      name: "Case room",
+      thread: { id: "thread-1" },
+      members: [member("bot-1"), member("bot-2")],
+    });
+    return { findFirst, prisma: { chatGroup: { findFirst } } as unknown as PrismaClient };
+  }
+
+  it("filters archived rooms out by default", async () => {
+    const { findFirst, prisma } = groupPrisma();
+    await resolveThreadTarget(prisma, actor, { groupId: "group-1" });
+    expect(findFirst.mock.calls[0]?.[0].where).toMatchObject({ archivedAt: null });
+  });
+
+  it("finds an archived room when reads include archived threads", async () => {
+    const { findFirst, prisma } = groupPrisma();
+    const target = await resolveThreadTarget(
+      prisma,
+      actor,
+      { groupId: "group-1" },
+      { includeArchived: true },
+    );
+    expect(findFirst.mock.calls[0]?.[0].where).not.toHaveProperty("archivedAt");
+    expect(target).toMatchObject({ kind: "group", threadId: "thread-1" });
   });
 });
 
