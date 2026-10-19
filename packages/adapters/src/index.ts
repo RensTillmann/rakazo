@@ -67,6 +67,7 @@ export * from "./fish-audio-voice.js";
 export * from "./github-webhook-emulator.js";
 export * from "./graphql-connectors.js";
 export * from "./group-handoff.js";
+export { HindsightMemoryProvider } from "./hindsight-memory-provider.js";
 export * from "./home.js";
 export * from "./host-aware-sandbox.js";
 export * from "./infisical-secret-store.js";
