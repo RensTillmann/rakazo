@@ -59,8 +59,10 @@ import {
   mentionChipKey,
   nestRosterByParent,
   normalizeRunError,
+  orderRosterWithActiveFirst,
   plainTextFromMarkdown,
   projectMessageReactions,
+  type RosterActivityState,
   reorderBotTo,
   replyAttachment,
   resolveComposerSendPlan,
@@ -71,6 +73,7 @@ import {
   serializeComposerPrompt,
   speechFromBlocks,
   timeSeparatorIds,
+  trackRosterActivity,
   truncateSlashDescription,
   userVisibleMessages,
   withLiveStreamingProgress,
@@ -1602,6 +1605,7 @@ export function ShellPage() {
     };
   }, [activeGroup?.id, groupId, notifyBrowserForEvent]);
 
+  const rosterActivityRef = useRef<RosterActivityState | null>(null);
   const sidebarGroups = useMemo(() => {
     const sidebarSpaces =
       spaces.length > 0
@@ -1623,7 +1627,33 @@ export function ShellPage() {
               },
             ]
           : [];
-    return sidebarGroupsForSpaces(sidebarSpaces, query);
+    const grouped = sidebarGroupsForSpaces(sidebarSpaces, query);
+    // Fleet patch: active bots (working, waiting for an answer, unread) move to one untitled
+    // top block, newest activity first. The state only changes on real activity changes; it
+    // starts at the first non-empty bot list so already-active bots keep their message times.
+    const rosterBots = sidebarSpaces.flatMap((space) => space.bots);
+    const activity =
+      rosterBots.length > 0
+        ? trackRosterActivity(rosterActivityRef.current, rosterBots)
+        : (rosterActivityRef.current ?? new Map());
+    if (rosterBots.length > 0) rosterActivityRef.current = activity;
+    const ordered = orderRosterWithActiveFirst(grouped, activity, (item) =>
+      item.kind === "bot" ? item.chat.id : null,
+    );
+    if (ordered.active.length === 0) return ordered.groups;
+    const activeGroup: (typeof grouped)[number] = {
+      key: "active",
+      title: null,
+      bots: ordered.active,
+      sectionId: null,
+      showLock: false,
+      emptySpaceId: undefined,
+      spaceId: bootstrapMe?.spaceId ?? "",
+      spaceName: "",
+      canRenameSpace: false,
+      canDeleteSpace: false,
+    };
+    return [activeGroup, ...ordered.groups];
   }, [bootstrapMe, botSections, bots, groups, spaces, query]);
 
   const openSpaceChat = useCallback(
@@ -3144,6 +3174,8 @@ export function ShellPage() {
                 const groupBotIds = group.bots.flatMap((item) =>
                   item.kind === "bot" ? [item.chat.id] : [],
                 );
+                // Fleet patch: the active block is a temporary view; its order is not the saved order.
+                const inActiveBlock = group.key === "active";
                 const nestedRows = nestRosterByParent(group.bots, collapsedRosterParents);
                 const treeActive = nestedRows.some((row) => row.depth > 0 || row.hasChildren);
                 const rosterParent = new Map(
@@ -3339,7 +3371,7 @@ export function ShellPage() {
                               : item.chat.preview ||
                                 item.chat.members.map((member) => member.name).join(", ")));
                         const rowDropTarget: RosterDropTarget | null =
-                          item.chat.spaceId !== bootstrapMe?.spaceId
+                          inActiveBlock || item.chat.spaceId !== bootstrapMe?.spaceId
                             ? null
                             : item.kind === "bot"
                               ? { kind: "bot", chat: item.chat }
@@ -3394,7 +3426,7 @@ export function ShellPage() {
                             <button
                               type="button"
                               title={botsSidebarRail ? item.chat.name : undefined}
-                              draggable={item.kind === "bot"}
+                              draggable={item.kind === "bot" && !inActiveBlock}
                               data-roster-bot-id={item.kind === "bot" ? item.chat.id : undefined}
                               data-roster-unread={item.chat.unread ? "true" : undefined}
                               data-roster-error={rowError && compact ? "true" : undefined}
@@ -3437,6 +3469,7 @@ export function ShellPage() {
                               onKeyDown={(event) => {
                                 if (
                                   item.kind !== "bot" ||
+                                  inActiveBlock ||
                                   !event.altKey ||
                                   (event.key !== "ArrowUp" && event.key !== "ArrowDown")
                                 )
