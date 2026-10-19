@@ -1,7 +1,12 @@
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { ChatMarkdown, LinkifiedText, type MentionBot, MentionBotsContext } from "@rakazo/chat-ui/web";
+import {
+  ChatMarkdown,
+  LinkifiedText,
+  type MentionBot,
+  MentionBotsContext,
+} from "@rakazo/chat-ui/web";
 import type {
   AgentSkillCatalogEntry,
   Bot,

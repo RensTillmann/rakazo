@@ -3205,6 +3205,7 @@ msgid "Needs you"
 msgstr ""
 
 #: src/lib/roster-status.ts
+#: src/pages/Shell.tsx
 msgid "Needs your answer"
 msgstr ""
 

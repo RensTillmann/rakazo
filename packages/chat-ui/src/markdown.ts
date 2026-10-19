@@ -502,9 +502,7 @@ export function mentionParts(text: string, bots: readonly MentionBot[]): Mention
     if (char === "@" && !isWordChar(text[index - 1])) {
       const name = names.find((candidate) => {
         const end = index + 1 + candidate.length;
-        return (
-          text.slice(index + 1, end).toLowerCase() === candidate && !isWordChar(text[end])
-        );
+        return text.slice(index + 1, end).toLowerCase() === candidate && !isWordChar(text[end]);
       });
       const bot = name ? byName.get(name) : undefined;
       if (name && bot) {
