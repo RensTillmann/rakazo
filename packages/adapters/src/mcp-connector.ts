@@ -168,6 +168,10 @@ export class McpConnector implements ConnectorProvider {
               name: `mcp__${assignment.server.slug}__${tool.name}`,
               description: tool.description ?? tool.name,
               inputSchema: tool.inputSchema as Record<string, unknown>,
+              // Fleet: the server's declared effect; only `true` relaxes the name-based gate.
+              ...(typeof tool.annotations?.readOnlyHint === "boolean"
+                ? { readOnly: tool.annotations.readOnlyHint }
+                : {}),
               route: {
                 connectorId: "mcp",
                 resourceId: assignment.serverId,

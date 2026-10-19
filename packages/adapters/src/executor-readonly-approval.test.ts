@@ -51,7 +51,8 @@ type Effect = {
 function fixture({
   name = "demo_get_item",
   catalog = false,
-  readOnly = true,
+  readOnly = true as boolean | null,
+  connectorId = "demo",
   rules = [] as ActionApprovalRule[],
   autoReview = false,
   trigger = "user",
@@ -84,7 +85,9 @@ function fixture({
   advanceRevisionAfterRead?: boolean;
   name?: string;
   catalog?: boolean;
-  readOnly?: boolean;
+  /** `null` declares no effect, as an MCP tool without a readOnlyHint. */
+  readOnly?: boolean | null;
+  connectorId?: string;
   rules?: ActionApprovalRule[];
   autoReview?: boolean;
   trigger?: string;
@@ -98,13 +101,13 @@ function fixture({
   const tool: ConnectorTool = {
     name,
     description: "Read an item",
-    readOnly,
+    ...(readOnly === null ? {} : { readOnly }),
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
       required: ["id"],
     },
-    route: { connectorId: "demo", resourceId: "resource-1", toolName: name },
+    route: { connectorId, resourceId: "resource-1", toolName: name },
   };
   const effects: Effect[] = [];
   const results: unknown[] = [];
@@ -670,6 +673,49 @@ describe("connector read-only metadata and approval enforcement", () => {
       await f.run();
       expect(f.pauseRunForInput).toHaveBeenCalledOnce();
       expect(f.execute).not.toHaveBeenCalled();
+    });
+
+    describe("MCP readOnlyHint", () => {
+      const recall = "mcp__fleet-dr-eggbot__memory_recall";
+
+      it.each([...triggers, "webhook"])(
+        "runs a hinted read with a non-read name unasked in a %s run",
+        async (trigger) => {
+          process.env.RAKAZO_APPROVAL_EVERY_RUN = "true";
+          const f = fixture({ name: recall, connectorId: "mcp", readOnly: true, trigger });
+          await f.run();
+          expect(f.pauseRunForInput).not.toHaveBeenCalled();
+          expect(f.execute).toHaveBeenCalledOnce();
+        },
+      );
+
+      it("asks for the same tool without the hint", async () => {
+        process.env.RAKAZO_APPROVAL_EVERY_RUN = "true";
+        const f = fixture({ name: recall, connectorId: "mcp", readOnly: null });
+        await f.run();
+        expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+        expect(f.execute).not.toHaveBeenCalled();
+      });
+
+      it("asks for a hinted read a require_approval tool rule names", async () => {
+        process.env.RAKAZO_APPROVAL_EVERY_RUN = "true";
+        const f = fixture({
+          name: recall,
+          connectorId: "mcp",
+          readOnly: true,
+          rules: [{ effect: "require_approval", matchKind: "tool", matchValue: recall }],
+        });
+        await f.run();
+        expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+        expect(f.execute).not.toHaveBeenCalled();
+      });
+
+      it("keeps the hint from relaxing a non-MCP connector's name check", async () => {
+        process.env.RAKAZO_APPROVAL_EVERY_RUN = "true";
+        const f = fixture({ name: "demo_memory_recall", readOnly: true });
+        await f.run();
+        expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      });
     });
   });
 

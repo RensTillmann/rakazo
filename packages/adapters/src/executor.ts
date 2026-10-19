@@ -4729,9 +4729,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           // Declared effect of the operation this call dispatches (installed API method and
           // flag). Install config is immutable per route resource, so it cannot drift before
           // execute; a catalog call uses the tool it was just resolved to.
-          const declaredReadOnly = viaConnector
-            ? (resolvedTool ?? connectorTools.get(name))?.readOnly
-            : undefined;
+          const declaredTool = viaConnector ? (resolvedTool ?? connectorTools.get(name)) : undefined;
+          const declaredReadOnly = declaredTool?.readOnly;
+          // Fleet: an MCP server's readOnlyHint (tools/list annotations) is honoured as a read.
+          const trustDeclaredRead = declaredTool?.route?.connectorId === "mcp";
           // A batch tool (Composio's multi-execute) is judged by the actions it runs, not its name.
           const batchedActions = viaConnector ? batchedConnectorActions(name, args) : null;
           const approvalTargets = (batchedActions ?? [name]).map((toolName) => {
@@ -4741,11 +4742,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               toolName,
               viaConnector,
               readOnly,
+              trustDeclaredRead,
             );
             return {
               toolName,
               unattended,
-              consequential: unattended || toolRequiresApproval(toolName, viaConnector, readOnly),
+              consequential:
+                unattended ||
+                toolRequiresApproval(toolName, viaConnector, readOnly, trustDeclaredRead),
             };
           });
           const requiresUnattendedApproval = approvalTargets.some((target) => target.unattended);

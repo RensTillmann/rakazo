@@ -86,6 +86,15 @@ describe("connectorToolRequiresApproval", () => {
     expect(connectorToolRequiresApproval("get_or_create_contact", true)).toBe(true);
     expect(connectorToolRequiresApproval("profile_card", true)).toBe(true);
   });
+
+  it("lets a trusted declared read lift the default-deny, never a mutating name", () => {
+    expect(connectorToolRequiresApproval("memory_recall", true, true)).toBe(false);
+    expect(connectorToolRequiresApproval("memory_recall", undefined, true)).toBe(true);
+    expect(connectorToolRequiresApproval("memory_recall", false, true)).toBe(true);
+    expect(connectorToolRequiresApproval("memory_recall", true)).toBe(true);
+    expect(connectorToolRequiresApproval("delete_item", true, true)).toBe(true);
+    expect(connectorToolRequiresApproval("get_or_create_contact", true, true)).toBe(true);
+  });
 });
 
 describe("resolveActionApprovalDetail", () => {
