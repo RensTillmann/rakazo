@@ -110,6 +110,7 @@ function fakeBot(id: string, name: string, title: string): Bot {
     runErrorId: null,
     computerMode: "team",
     updatedAt: "2026-01-01T00:00:00.000Z",
+    lastMessageAt: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     voiceId: null,
     autoSpeak: false,
