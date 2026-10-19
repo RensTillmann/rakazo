@@ -972,6 +972,7 @@ msgstr "无法连接服务器。"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2648,6 +2649,10 @@ msgstr "频率"
 msgid "How to check"
 msgstr "如何检查"
 
+#: src/components/AskCard.tsx
+msgid "I'll type it"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "I’m done"
 msgstr "我做完了"
@@ -3530,6 +3535,16 @@ msgstr "在完整窗口中打开"
 msgid "Open navigation"
 msgstr "打开导航"
 
+#. placeholder {0}: openAsk.question
+#: src/pages/Shell.tsx
+msgid "Open question: {0} · answer it on the card first"
+msgstr ""
+
+#. placeholder {0}: openAsk.question
+#: src/pages/Shell.tsx
+msgid "Open question: {0} · your message will answer it"
+msgstr ""
+
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "打开 Shell"
@@ -4304,6 +4319,14 @@ msgstr "请在 10 分钟内从聊天应用向该线路发送 <0>{linkCode}</0>�
 msgid "Send answer"
 msgstr "发送回答"
 
+#: src/pages/Shell.tsx
+msgid "Send as answer"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Send as answer?"
+msgstr ""
+
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "发送删除验证码"
@@ -4737,6 +4760,10 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr "API 未恢复。请刷新此页面。"
 
+#: src/pages/Shell.tsx
+msgid "the bot"
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "连接超时。"
@@ -4767,6 +4794,10 @@ msgstr "思考"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "This answers {bot}'s open question: '{question}'."
 msgstr ""
 
 #: src/pages/Shell.tsx

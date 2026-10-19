@@ -812,7 +812,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not restore instructions": "无法恢复指令",
   "Open question: {question} · your message will answer it":
     "待回答问题：{question} · 你的消息将作为回答",
-  "Open question: {question} · answer it on the card first": "待回答问题：{question} · 请先在卡片上回答",
-  "This answers {bot}'s open question: '{question}'.": "这将回答 {bot} 的待回答问题：“{question}”。",
+  "Open question: {question} · answer it on the card first":
+    "待回答问题：{question} · 请先在卡片上回答",
+  "This answers {bot}'s open question: '{question}'.":
+    "这将回答 {bot} 的待回答问题：“{question}”。",
   "Send as answer": "作为回答发送",
 };

@@ -972,6 +972,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2648,6 +2649,10 @@ msgstr "कितनी बार"
 msgid "How to check"
 msgstr "जांच कैसे करें"
 
+#: src/components/AskCard.tsx
+msgid "I'll type it"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "I’m done"
 msgstr "मेरा काम हो गया"
@@ -3530,6 +3535,16 @@ msgstr "पूरी विंडो में खोलें"
 msgid "Open navigation"
 msgstr "नेविगेशन खोलें"
 
+#. placeholder {0}: openAsk.question
+#: src/pages/Shell.tsx
+msgid "Open question: {0} · answer it on the card first"
+msgstr ""
+
+#. placeholder {0}: openAsk.question
+#: src/pages/Shell.tsx
+msgid "Open question: {0} · your message will answer it"
+msgstr ""
+
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "शेल खोलें"
@@ -4304,6 +4319,14 @@ msgstr ""
 msgid "Send answer"
 msgstr "उत्तर भेजें"
 
+#: src/pages/Shell.tsx
+msgid "Send as answer"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Send as answer?"
+msgstr ""
+
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "हटाने का कोड भेजें"
@@ -4737,6 +4760,10 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "the bot"
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "कनेक्शन का समय समाप्त हो गया।"
@@ -4767,6 +4794,10 @@ msgstr "सोच रहा है"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "This answers {bot}'s open question: '{question}'."
 msgstr ""
 
 #: src/pages/Shell.tsx

@@ -972,6 +972,7 @@ msgstr "Не удаётся связаться с сервером."
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2648,6 +2649,10 @@ msgstr "Как часто"
 msgid "How to check"
 msgstr "Как проверить"
 
+#: src/components/AskCard.tsx
+msgid "I'll type it"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "I’m done"
 msgstr "Готово"
@@ -3530,6 +3535,16 @@ msgstr "Открыть в полном окне"
 msgid "Open navigation"
 msgstr "Открыть навигацию"
 
+#. placeholder {0}: openAsk.question
+#: src/pages/Shell.tsx
+msgid "Open question: {0} · answer it on the card first"
+msgstr ""
+
+#. placeholder {0}: openAsk.question
+#: src/pages/Shell.tsx
+msgid "Open question: {0} · your message will answer it"
+msgstr ""
+
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "Открыть оболочку"
@@ -4304,6 +4319,14 @@ msgstr "Отправьте <0>{linkCode}</0> в строку из вашего �
 msgid "Send answer"
 msgstr "Отправить ответ"
 
+#: src/pages/Shell.tsx
+msgid "Send as answer"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Send as answer?"
+msgstr ""
+
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "Отправить код удаления"
@@ -4737,6 +4760,10 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr "API не вернулся. Обновите эту страницу."
 
+#: src/pages/Shell.tsx
+msgid "the bot"
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "Время ожидания соединения истекло."
@@ -4767,6 +4794,10 @@ msgstr "рассуждение"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "This answers {bot}'s open question: '{question}'."
 msgstr ""
 
 #: src/pages/Shell.tsx
