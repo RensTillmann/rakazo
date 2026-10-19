@@ -294,21 +294,21 @@ describe("loadEnv", () => {
     expect(env.flagLabel).toBe("Needs fleet improvement…");
   });
 
-  it("reads the case link template and refuses one that cannot link", () => {
-    expect(loadEnv(base).caseLinkUrl).toBeUndefined();
-    expect(loadEnv({ ...base, RAKAZO_CASE_LINK_URL: " " }).caseLinkUrl).toBeUndefined();
-    expect(
-      loadEnv({ ...base, RAKAZO_CASE_LINK_URL: " https://tracker.example.test/issues/{n} " })
-        .caseLinkUrl,
-    ).toBe("https://tracker.example.test/issues/{n}");
+  it.each([
+    ["RAKAZO_CASE_LINK_URL", "caseLinkUrl"],
+    ["RAKAZO_ZENDESK_LINK_URL", "zendeskLinkUrl"],
+  ] as const)("reads the %s template and refuses one that cannot link", (name, key) => {
+    expect(loadEnv(base)[key]).toBeUndefined();
+    expect(loadEnv({ ...base, [name]: " " })[key]).toBeUndefined();
+    expect(loadEnv({ ...base, [name]: " https://tracker.example.test/issues/{n} " })[key]).toBe(
+      "https://tracker.example.test/issues/{n}",
+    );
     for (const value of [
       "https://tracker.example.test/issues/",
       "javascript:alert({n})",
       "tracker/{n}",
     ]) {
-      expect(() => loadEnv({ ...base, RAKAZO_CASE_LINK_URL: value })).toThrow(
-        "RAKAZO_CASE_LINK_URL",
-      );
+      expect(() => loadEnv({ ...base, [name]: value })).toThrow(name);
     }
   });
 });

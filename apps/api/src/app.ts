@@ -598,6 +598,7 @@ export async function createApp(
       flagBot: env.flagBot,
       flagLabel: env.flagLabel,
       caseLinkUrl: env.caseLinkUrl,
+      zendeskLinkUrl: env.zendeskLinkUrl,
     },
   });
   const rpc = new RPCHandler(router, {

@@ -1,3 +1,4 @@
+import type { ReferenceLinks } from "@rakazo/chat-ui/web";
 import type { AppBootstrap } from "@rakazo/contracts";
 import { ATTACHMENT_MAX_BYTES, attachmentMaxBytes } from "@rakazo/contracts";
 import { initialBootstrapTarget } from "./bootstrap-target";
@@ -6,13 +7,13 @@ import { rpc, selectedSpaceId } from "./rpc";
 
 let ticketBoardEnabled = false;
 let maxUploadSizeBytes = ATTACHMENT_MAX_BYTES;
-let caseLinkUrl: string | null = null;
+let referenceLinks: ReferenceLinks = {};
 export function getMaxUploadSizeBytes() {
   return maxUploadSizeBytes;
 }
-/** Fleet `RAKAZO_CASE_LINK_URL` from `me`; null leaves "case 174" as text. */
-export function getCaseLinkUrl() {
-  return caseLinkUrl;
+/** Fleet `RAKAZO_CASE_LINK_URL` and `RAKAZO_ZENDESK_LINK_URL` from `me`; unset ones stay text. */
+export function getReferenceLinks() {
+  return referenceLinks;
 }
 const capabilityListeners = new Set<() => void>();
 export function getTicketBoardEnabled() {
@@ -93,7 +94,14 @@ function requestBootstrap(botId?: string, spaceId?: string) {
 function applyCapabilities(bootstrap: AppBootstrap): AppBootstrap {
   ticketBoardEnabled = bootstrap.me.ticketBoardEnabled;
   maxUploadSizeBytes = attachmentMaxBytes(bootstrap.me);
-  caseLinkUrl = bootstrap.me.caseLinkUrl ?? null;
+  const { caseLinkUrl = null, zendeskLinkUrl = null } = bootstrap.me;
+  // A new object only when a link changes, so rendered messages keep their parsed markdown.
+  if (
+    caseLinkUrl !== (referenceLinks.case ?? null) ||
+    zendeskLinkUrl !== (referenceLinks.zendesk ?? null)
+  ) {
+    referenceLinks = { case: caseLinkUrl, zendesk: zendeskLinkUrl };
+  }
   for (const listener of capabilityListeners) listener();
   return bootstrap;
 }

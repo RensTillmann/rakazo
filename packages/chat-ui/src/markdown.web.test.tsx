@@ -5,14 +5,14 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { LinkFavicons } from "./markdown.web";
+import type { LinkFavicons, ReferenceLinks } from "./markdown.web";
 import {
-  CaseLinkContext,
   ChatMarkdown,
   LinkFaviconsContext,
   LinkifiedText,
   MentionBotsContext,
   MentionOpenBotContext,
+  ReferenceLinksContext,
   RemoteImagesContext,
 } from "./markdown.web";
 
@@ -677,20 +677,27 @@ describe("web markdown bot mentions", () => {
   });
 });
 
-describe("web markdown case links", () => {
-  const template = "https://tracker.example.test/issues/{n}";
+describe("web markdown reference links", () => {
+  const links = {
+    case: "https://tracker.example.test/issues/{n}",
+    zendesk: "https://help.example.test/agent/tickets/{n}",
+  };
 
-  function withCaseLink(node: ReactNode, value: string | null = template) {
+  function withLinks(node: ReactNode, value: ReferenceLinks = links) {
     return renderToStaticMarkup(
-      <CaseLinkContext.Provider value={value}>{node}</CaseLinkContext.Provider>,
+      <ReferenceLinksContext.Provider value={value}>{node}</ReferenceLinksContext.Provider>,
     );
   }
 
-  const anchor = (number: number, label: string) =>
-    `<a href="https://tracker.example.test/issues/${number}" target="_blank" rel="noreferrer noopener" class="text-link underline">${label}</a>`;
+  const anchor = (href: string, label: string) =>
+    `<a href="${href}" target="_blank" rel="noreferrer noopener" class="text-link underline">${label}</a>`;
+  const caseAnchor = (number: number, label: string) =>
+    anchor(`https://tracker.example.test/issues/${number}`, label);
+  const ticketAnchor = (number: number, label: string) =>
+    anchor(`https://help.example.test/agent/tickets/${number}`, label);
 
   it("links case numbers in bot markdown, not in code, links or bare numbers", () => {
-    const html = withCaseLink(
+    const html = withLinks(
       <ChatMarkdown>
         {
           "**Case 174** and case #12 wait. `case 5` [case 6](https://example.test) #3536 showcase 7 cases 8\n\n```\ncase 9\n```"
@@ -698,48 +705,67 @@ describe("web markdown case links", () => {
       </ChatMarkdown>,
     );
 
-    expect(html).toContain(`<strong>${anchor(174, "Case 174")}</strong>`);
-    expect(html).toContain(`${anchor(12, "case #12")} wait.`);
+    expect(html).toContain(`<strong>${caseAnchor(174, "Case 174")}</strong>`);
+    expect(html).toContain(`${caseAnchor(12, "case #12")} wait.`);
     expect(html.match(/tracker\.example\.test/g)).toHaveLength(2);
     expect(html).toContain("<code>case 5</code>");
     expect(html).toContain("#3536 showcase 7 cases 8");
     expect(html).toContain("case 9");
   });
 
-  it("links case numbers next to a mention and in a person's plain text", () => {
+  it("links Zendesk tickets, also inside a title bracket, and a case in the same sentence", () => {
+    const html = withLinks(
+      <ChatMarkdown>
+        {
+          "## [ZD #3536] Checkout broken\n\nCase 174 tracks Zendesk ticket #3529 and zd 3530. `ZD #1` [ZD #2](https://example.test) #3537"
+        }
+      </ChatMarkdown>,
+    );
+
+    expect(html).toContain(`<h2>[${ticketAnchor(3536, "ZD #3536")}] Checkout broken</h2>`);
+    expect(html).toContain(
+      `${caseAnchor(174, "Case 174")} tracks ${ticketAnchor(3529, "Zendesk ticket #3529")} and ${ticketAnchor(3530, "zd 3530")}.`,
+    );
+    expect(html.match(/help\.example\.test/g)).toHaveLength(3);
+    expect(html).toContain("<code>ZD #1</code>");
+    expect(html).toContain("#3537");
+  });
+
+  it("links references next to a mention and in a person's plain text", () => {
     const quinn = {
       id: "quinn",
       names: ["Quinn"],
       color: { onLight: "#5B21B6", onDark: "#A97EFE" },
     };
-    const html = withCaseLink(
+    const html = withLinks(
       <MentionBotsContext.Provider value={[quinn]}>
         <ChatMarkdown>{"@Quinn see case 174"}</ChatMarkdown>
-        <LinkifiedText>{"@Quinn case 175 https://example.test `case 6`"}</LinkifiedText>
+        <LinkifiedText>{"@Quinn case 175 ZD #3529 https://example.test `case 6`"}</LinkifiedText>
       </MentionBotsContext.Provider>,
     );
 
     expect(html.match(/data-mention-bot="quinn"/g)).toHaveLength(2);
-    expect(html).toContain(anchor(174, "case 174"));
-    expect(html).toContain(anchor(175, "case 175"));
+    expect(html).toContain(caseAnchor(174, "case 174"));
+    expect(html).toContain(caseAnchor(175, "case 175"));
+    expect(html).toContain(ticketAnchor(3529, "ZD #3529"));
     expect(html).toContain("`case 6`");
   });
 
-  it("leaves case numbers as text without the setting", () => {
-    const html = withCaseLink(<ChatMarkdown>{"case 174"}</ChatMarkdown>, null);
-    expect(html).toBe('<div class="rk-chat-markdown"><p>case 174</p></div>');
+  it("leaves references as text without the settings", () => {
+    const html = withLinks(<ChatMarkdown>{"case 174 ZD #3529"}</ChatMarkdown>, {});
+    expect(html).toBe('<div class="rk-chat-markdown"><p>case 174 ZD #3529</p></div>');
   });
 
-  it("opens the case without the external link prompt", async () => {
+  it("opens the reference without the external link prompt", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
     await act(async () => {
       root.render(
-        <CaseLinkContext.Provider value={template}>
-          <ChatMarkdown>{"See case 174"}</ChatMarkdown>
-        </CaseLinkContext.Provider>,
+        <ReferenceLinksContext.Provider value={links}>
+          <ChatMarkdown>{"See ZD #3529"}</ChatMarkdown>
+        </ReferenceLinksContext.Provider>,
       );
     });
     let held: boolean | undefined;

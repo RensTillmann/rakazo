@@ -1441,6 +1441,8 @@ export const MeSchema = z.object({
   phoneCallsEnabled: z.boolean().default(false),
   /** Fleet `RAKAZO_CASE_LINK_URL`: "case 174" in messages links here, `{n}` the number; absent = off. */
   caseLinkUrl: z.string().optional(),
+  /** Fleet `RAKAZO_ZENDESK_LINK_URL`: "ZD #3529" in messages links here, `{n}` the number; absent = off. */
+  zendeskLinkUrl: z.string().optional(),
   userId: Id,
   email: z.string().email(),
   name: z.string(),

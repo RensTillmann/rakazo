@@ -1,11 +1,11 @@
 import type { MenuAction } from "@expo/ui/community/menu";
 import {
-  CaseLinkContext,
   ChatMarkdown,
   type MentionBot,
   MentionBotsContext,
   type MentionOpenBot,
   MentionOpenBotContext,
+  ReferenceLinksContext,
 } from "@rakazo/chat-ui/native";
 import type {
   AgentSkillCatalogEntry,
@@ -573,14 +573,17 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   }, [streamResponses]);
   const activeThreadId = useRef<string | undefined>(undefined);
   const [agentSkills, setAgentSkills] = useState<AgentSkillCatalogEntry[]>([]);
-  // Server settings from `me`: the upload limit and the case link (`RAKAZO_CASE_LINK_URL`).
-  const [serverConfig, setServerConfig] = useState<{
+  // Server settings from `me`: the upload limit and the reference links
+  // (`RAKAZO_CASE_LINK_URL`, `RAKAZO_ZENDESK_LINK_URL`).
+  type ServerConfig = {
     maxUploadSizeBytes?: number;
     caseLinkUrl?: string;
-  }>();
+    zendeskLinkUrl?: string;
+  };
+  const [serverConfig, setServerConfig] = useState<ServerConfig>();
   useEffect(() => {
     let cancelled = false;
-    void rpc<{ maxUploadSizeBytes?: number; caseLinkUrl?: string }>("me")
+    void rpc<ServerConfig>("me")
       .then((me) => {
         if (!cancelled) setServerConfig(me);
       })
@@ -589,6 +592,10 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
       cancelled = true;
     };
   }, []);
+  const referenceLinks = useMemo(
+    () => ({ case: serverConfig?.caseLinkUrl, zendesk: serverConfig?.zendeskLinkUrl }),
+    [serverConfig?.caseLinkUrl, serverConfig?.zendeskLinkUrl],
+  );
 
   const [mentionBots, setMentionBots] = useState<MobileBot[]>([]);
   // The call outlives renders, so its switch check reads the newest bot list from here.
@@ -2928,9 +2935,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     </MentionBotsContext.Provider>
   );
   return (
-    <CaseLinkContext.Provider value={serverConfig?.caseLinkUrl ?? null}>
-      {thread}
-    </CaseLinkContext.Provider>
+    <ReferenceLinksContext.Provider value={referenceLinks}>{thread}</ReferenceLinksContext.Provider>
   );
 }
 

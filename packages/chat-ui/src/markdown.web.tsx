@@ -26,10 +26,8 @@ import {
   AlertDialogTitle,
 } from "@rakazo/ui-web";
 import { CheckIcon, CopyIcon, GlobeIcon, ImageIcon } from "./icons";
-import type { ChatMarkdownProps, MentionBot } from "./markdown";
+import type { ChatMarkdownProps, MentionBot, ReferenceLinks } from "./markdown";
 import {
-  CaseLinkContext,
-  caseLinkParts,
   closeUnterminatedFence,
   hasTextSelection,
   inlineMarkdownImageSrc,
@@ -43,7 +41,9 @@ import {
   markRemoteImageLoaded,
   mentionParts,
   plainTextLinkParts,
+  ReferenceLinksContext,
   RemoteImagesContext,
+  referenceLinkParts,
   remoteImageRenders,
   remoteMarkdownImage,
   sanitizeMarkdownUrl,
@@ -110,12 +110,12 @@ function markMentions(bots: readonly MentionBot[]) {
   };
 }
 
-/** Link "case 174" in text outside links and code through the deployment's case link. */
-function markCaseLinks(template: string | null) {
+/** Link "case 174" and "ZD #3529" in text outside links and code through the deployment's links. */
+function markReferenceLinks(links: ReferenceLinks) {
   return (tree: HastNode) => {
-    if (!template) return;
+    if (!links.case && !links.zendesk) return;
     splitText(tree, (value) => {
-      const parts = caseLinkParts(value, template);
+      const parts = referenceLinkParts(value, links);
       if (parts.length === 1 && parts[0]?.type === "text") return null;
       return parts.map((part) =>
         part.type === "text"
@@ -123,7 +123,7 @@ function markCaseLinks(template: string | null) {
           : {
               type: "element",
               tagName: "a",
-              properties: { href: part.href, dataCaseLink: "" },
+              properties: { href: part.href, dataReferenceLink: "" },
               children: [{ type: "text", value: part.value }],
             },
       );
@@ -131,8 +131,8 @@ function markCaseLinks(template: string | null) {
   };
 }
 
-/** A case link opens the tracker in a new tab; the deployment chose the address, so no prompt. */
-function CaseLink({ href, children }: { href: string; children: ReactNode }) {
+/** A reference link opens the tracker or ticket in a new tab; the deployment chose the address, so no prompt. */
+function ReferenceLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a href={href} target="_blank" rel="noreferrer noopener" className="text-link underline">
       {children}
@@ -192,18 +192,18 @@ function MarkdownSpan({
   return <span {...props}>{children}</span>;
 }
 
-/** Plain text with "case 174" linked and `@Name` mentions coloured. */
+/** Plain text with "case 174" and "ZD #3529" linked and `@Name` mentions coloured. */
 function MentionedText({ children }: { children: string }) {
   const bots = useContext(MentionBotsContext);
-  const caseLink = useContext(CaseLinkContext);
-  return caseLinkParts(children, caseLink).map((casePart, caseIndex) =>
-    casePart.type === "case" ? (
-      <CaseLink key={caseIndex} href={casePart.href}>
-        {casePart.value}
-      </CaseLink>
+  const referenceLinks = useContext(ReferenceLinksContext);
+  return referenceLinkParts(children, referenceLinks).map((reference, referenceIndex) =>
+    reference.type === "reference" ? (
+      <ReferenceLink key={referenceIndex} href={reference.href}>
+        {reference.value}
+      </ReferenceLink>
     ) : (
-      <Fragment key={caseIndex}>
-        {mentionParts(casePart.value, bots).map((part, index) =>
+      <Fragment key={referenceIndex}>
+        {mentionParts(reference.value, bots).map((part, index) =>
           part.type === "text" ? (
             part.value
           ) : (
@@ -611,11 +611,11 @@ function WebsiteLink({
 function MarkdownAnchor({
   node,
   ...props
-}: React.ComponentPropsWithoutRef<"a"> & { node?: MarkdownHast; "data-case-link"?: string }) {
+}: React.ComponentPropsWithoutRef<"a"> & { node?: MarkdownHast; "data-reference-link"?: string }) {
   const loadRemote = useContext(RemoteImagesContext);
   const href = typeof props.href === "string" ? props.href : "";
-  if (href && props["data-case-link"] !== undefined) {
-    return <CaseLink href={href}>{props.children}</CaseLink>;
+  if (href && props["data-reference-link"] !== undefined) {
+    return <ReferenceLink href={href}>{props.children}</ReferenceLink>;
   }
   const image = href ? soleRemoteImage(node) : undefined;
   if (image && !remoteImageRenders(image.href, loadRemote, false)) {
@@ -688,10 +688,14 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   const { request, dialog } = useExternalLinkConfirm();
   const source = streaming ? closeUnterminatedFence(children) : children;
   const mentionBots = useContext(MentionBotsContext);
-  const caseLink = useContext(CaseLinkContext);
+  const referenceLinks = useContext(ReferenceLinksContext);
   const rehypePlugins = useMemo<Options["rehypePlugins"]>(
-    () => [preserveSkippedTableText, [markMentions, mentionBots], [markCaseLinks, caseLink]],
-    [mentionBots, caseLink],
+    () => [
+      preserveSkippedTableText,
+      [markMentions, mentionBots],
+      [markReferenceLinks, referenceLinks],
+    ],
+    [mentionBots, referenceLinks],
   );
 
   return (
@@ -724,13 +728,19 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   );
 });
 
-export type { ChatMarkdownProps, LinkFavicons, MentionBot, MentionOpenBot } from "./markdown";
+export type {
+  ChatMarkdownProps,
+  LinkFavicons,
+  MentionBot,
+  MentionOpenBot,
+  ReferenceLinks,
+} from "./markdown";
 export {
-  CaseLinkContext,
   hasTextSelection,
   LinkFaviconsContext,
   MentionBotsContext,
   MentionOpenBotContext,
+  ReferenceLinksContext,
   RemoteImagesContext,
 } from "./markdown";
 

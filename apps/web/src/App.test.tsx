@@ -5,13 +5,13 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 
-const capability = vi.hoisted(() => ({ enabled: false, boardLoaded: vi.fn() }));
+const capability = vi.hoisted(() => ({ enabled: false, boardLoaded: vi.fn(), references: {} }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
 }));
 vi.mock("./lib/bootstrap", () => ({
-  getCaseLinkUrl: () => null,
+  getReferenceLinks: () => capability.references,
   getTicketBoardEnabled: () => capability.enabled,
   subscribeTicketBoardEnabled: () => () => {},
 }));

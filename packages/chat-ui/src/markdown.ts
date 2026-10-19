@@ -541,16 +541,20 @@ export function mentionParts(text: string, bots: readonly MentionBot[]): Mention
 }
 
 /**
- * The deployment's case link (`RAKAZO_CASE_LINK_URL`): a URL with `{n}` where the case number
- * goes. Apps provide it from `me`; null leaves "case 174" as text.
+ * The deployment's reference links, each a URL with `{n}` where the number goes:
+ * `case` (`RAKAZO_CASE_LINK_URL`) for "case 174", `zendesk` (`RAKAZO_ZENDESK_LINK_URL`) for
+ * "ZD #3529". Apps provide them from `me`; a missing one leaves its references as text.
  */
-export const CaseLinkContext = createContext<string | null>(null);
+export type ReferenceLinks = { case?: string | null; zendesk?: string | null };
 
-export type CaseLinkPart =
+export const ReferenceLinksContext = createContext<ReferenceLinks>({});
+
+export type ReferenceLinkPart =
   | { type: "text"; value: string }
-  | { type: "case"; value: string; href: string };
+  | { type: "reference"; value: string; href: string };
 
-const CASE_REFERENCE = /case[^\S\r\n]+#?(\d+)/giu;
+// "case 174", "Case #174", "ZD 3529", "zd #3529", "Zendesk #3529", "Zendesk ticket #3529".
+const REFERENCE = /(case|zd|zendesk(?:[^\S\r\n]+ticket)?)[^\S\r\n]+#?(\d+)/giu;
 
 /** Code spans in `text` as [start, end) ranges; a run of backticks that never closes is text. */
 function codeSpanRanges(text: string): [number, number][] {
@@ -569,35 +573,37 @@ function codeSpanRanges(text: string): [number, number][] {
   return ranges;
 }
 
-/** The link for case `number`, or undefined when the template is not an http(s) URL with `{n}`. */
-export function caseLinkHref(template: string, number: string): string | undefined {
+/** The link for reference `number`, or undefined when the template is not an http(s) URL with `{n}`. */
+export function referenceLinkHref(template: string, number: string): string | undefined {
   if (!template.includes("{n}")) return undefined;
   const href = sanitizeMarkdownUrl(template.replaceAll("{n}", number));
   return href && httpUrl(href) ? href : undefined;
 }
 
 /**
- * Split message text into literal runs and "case 174" / "Case #174" references linked through
- * the template. Only the whole word "case" before a number counts: "cases 12", "showcase 5", a
- * bare "#174" and code spans stay text.
+ * Split message text into literal runs and "case 174" / "ZD #3529" references linked through
+ * the deployment's templates. Only whole words before a number count: "cases 12", "showcase 5",
+ * a bare "#174" and code spans stay text, and so does a reference whose template is not set.
  */
-export function caseLinkParts(text: string, template: string | null | undefined): CaseLinkPart[] {
-  if (!template || !/case/i.test(text)) return [{ type: "text", value: text }];
+export function referenceLinkParts(text: string, links: ReferenceLinks): ReferenceLinkPart[] {
+  if ((!links.case && !links.zendesk) || !/case|zd|zendesk/i.test(text)) {
+    return [{ type: "text", value: text }];
+  }
   const code = text.includes("`") ? codeSpanRanges(text) : [];
-  const parts: CaseLinkPart[] = [];
+  const parts: ReferenceLinkPart[] = [];
   let last = 0;
-  for (const match of text.matchAll(CASE_REFERENCE)) {
+  for (const match of text.matchAll(REFERENCE)) {
     const start = match.index;
     const end = start + match[0].length;
-    const number = match[1] ?? "";
+    const template = match[1]?.toLowerCase() === "case" ? links.case : links.zendesk;
     // "case 1.5" is a decimal, not case 1.
     const decimal = /^[.,]\d/.test(text.slice(end, end + 2));
     if (isWordChar(text[start - 1]) || isWordChar(text[end]) || decimal) continue;
     if (code.some(([from, to]) => start >= from && start < to)) continue;
-    const href = caseLinkHref(template, number);
-    if (!href) return [{ type: "text", value: text }];
+    const href = template ? referenceLinkHref(template, match[2] ?? "") : undefined;
+    if (!href) continue;
     if (start > last) parts.push({ type: "text", value: text.slice(last, start) });
-    parts.push({ type: "case", value: match[0], href });
+    parts.push({ type: "reference", value: match[0], href });
     last = end;
   }
   if (last < text.length || parts.length === 0) {

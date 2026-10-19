@@ -173,12 +173,12 @@ import { createRoot } from "react-dom/client";
 import { Platform, Pressable } from "react-native";
 import type { LinkFavicons, MermaidDiagramProps } from "./markdown.native";
 import {
-  CaseLinkContext,
   ChatMarkdown,
   LinkFaviconsContext,
   LinkifiedText,
   MarkdownLinkPromptProvider,
   MermaidDiagramContext,
+  ReferenceLinksContext,
   RemoteImagesContext,
   RemoteMarkdownImage,
 } from "./markdown.native";
@@ -1309,8 +1309,11 @@ describe("native markdown diagrams", () => {
   });
 });
 
-describe("native case links", () => {
-  const template = "https://tracker.example.test/issues/{n}";
+describe("native reference links", () => {
+  const templates = {
+    case: "https://tracker.example.test/issues/{n}",
+    zendesk: "https://help.example.test/agent/tickets/{n}",
+  };
 
   async function render(node: ReactNode) {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -1319,7 +1322,9 @@ describe("native case links", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
     await act(async () => {
-      root.render(<CaseLinkContext.Provider value={template}>{node}</CaseLinkContext.Provider>);
+      root.render(
+        <ReferenceLinksContext.Provider value={templates}>{node}</ReferenceLinksContext.Provider>,
+      );
     });
     const links = [...container.querySelectorAll<HTMLElement>("[data-accessibility-role='link']")];
     return {
@@ -1353,13 +1358,30 @@ describe("native case links", () => {
     await view.cleanup();
   });
 
-  it("links case numbers in a person's plain text", async () => {
+  it("links a case and a Zendesk ticket in one sentence and opens the ticket", async () => {
+    const view = await render(
+      <ChatMarkdown>{"[ZD #3536] Case 174 tracks Zendesk #3529. `ZD #1`"}</ChatMarkdown>,
+    );
+    expect(view.links.map((link) => link.textContent)).toEqual([
+      "ZD #3536",
+      "Case 174",
+      "Zendesk #3529",
+    ]);
+    await act(async () => view.links[2]?.click());
+    await vi.waitFor(() => {
+      expect(linking.openURL).toHaveBeenCalledWith("https://help.example.test/agent/tickets/3529");
+    });
+    expect(alert).not.toHaveBeenCalled();
+    await view.cleanup();
+  });
+
+  it("links references in a person's plain text", async () => {
     const view = await render(
       <LinkifiedText color="#000" linkColor="#00f" palette={darkTokens}>
-        {"see case 175 and `case 6`"}
+        {"see case 175, zd 3529 and `case 6`"}
       </LinkifiedText>,
     );
-    expect(view.links.map((link) => link.textContent)).toEqual(["case 175"]);
+    expect(view.links.map((link) => link.textContent)).toEqual(["case 175", "zd 3529"]);
     await view.cleanup();
   });
 });

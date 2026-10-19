@@ -1,8 +1,6 @@
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import {
-  caseLinkHref,
-  caseLinkParts,
   closeUnterminatedFence,
   inlineMarkdownImageSrc,
   linkFaviconOrigin,
@@ -13,6 +11,8 @@ import {
   markdownLinkRequiresConfirmation,
   mentionParts,
   plainTextLinkParts,
+  referenceLinkHref,
+  referenceLinkParts,
   sanitizeMarkdownImageUrl,
   sanitizeMarkdownUrl,
 } from "./markdown";
@@ -397,10 +397,15 @@ describe("mentionParts", () => {
   });
 });
 
-describe("caseLinkParts", () => {
-  const template = "https://tracker.example.test/issues/{n}";
-  const linked = (text: string) =>
-    caseLinkParts(text, template).filter((part) => part.type === "case");
+describe("referenceLinkParts", () => {
+  const links = {
+    case: "https://tracker.example.test/issues/{n}",
+    zendesk: "https://help.example.test/agent/tickets/{n}",
+  };
+  const caseHref = (n: number) => `https://tracker.example.test/issues/${n}`;
+  const ticketHref = (n: number) => `https://help.example.test/agent/tickets/${n}`;
+  const linked = (text: string, using: typeof links | { case?: string } = links) =>
+    referenceLinkParts(text, using).filter((part) => part.type === "reference");
 
   it.each([
     ["case 174", "case 174"],
@@ -408,10 +413,19 @@ describe("caseLinkParts", () => {
     ["CASE 174.", "CASE 174"],
     ["see case #174, then", "case #174"],
     ["(case 174)", "case 174"],
-  ])("links %j", (text, value) => {
-    expect(linked(text)).toEqual([
-      { type: "case", value, href: "https://tracker.example.test/issues/174" },
-    ]);
+  ])("links the case in %j", (text, value) => {
+    expect(linked(text)).toEqual([{ type: "reference", value, href: caseHref(174) }]);
+  });
+
+  it.each([
+    ["ZD #3529", "ZD #3529"],
+    ["zd 3529", "zd 3529"],
+    ["Zendesk #3529", "Zendesk #3529"],
+    ["see zendesk ticket #3529.", "zendesk ticket #3529"],
+    ["Zendesk Ticket 3529", "Zendesk Ticket 3529"],
+    ["[ZD #3529] Login fails", "ZD #3529"],
+  ])("links the Zendesk ticket in %j", (text, value) => {
+    expect(linked(text)).toEqual([{ type: "reference", value, href: ticketHref(3529) }]);
   });
 
   it.each([
@@ -421,21 +435,34 @@ describe("caseLinkParts", () => {
     "case 174abc",
     "case 1.5",
     "#174",
-    "Zendesk #3536",
+    "ticket #3536",
+    "PR #246",
+    "ZDs 12",
+    "AZD 12",
+    "zendesk tickets 12",
+    "ZD-3529",
     "case\n174",
     "case",
     "`case 174`",
+    "`ZD #3529`",
     "``a `case 174` b``",
   ])("leaves %j as text", (text) => {
-    expect(caseLinkParts(text, template)).toEqual([{ type: "text", value: text }]);
+    expect(referenceLinkParts(text, links)).toEqual([{ type: "text", value: text }]);
   });
 
-  it("keeps the text around each link and skips only the code span", () => {
-    expect(caseLinkParts("case 1 `case 2` and Case #3!", template)).toEqual([
-      { type: "case", value: "case 1", href: "https://tracker.example.test/issues/1" },
-      { type: "text", value: " `case 2` and " },
-      { type: "case", value: "Case #3", href: "https://tracker.example.test/issues/3" },
-      { type: "text", value: "!" },
+  it("links a case and a Zendesk ticket in one sentence, each to its own address", () => {
+    expect(referenceLinkParts("For case 174 see ZD #3529 `case 2`!", links)).toEqual([
+      { type: "text", value: "For " },
+      { type: "reference", value: "case 174", href: caseHref(174) },
+      { type: "text", value: " see " },
+      { type: "reference", value: "ZD #3529", href: ticketHref(3529) },
+      { type: "text", value: " `case 2`!" },
+    ]);
+  });
+
+  it("links only the kinds whose address is set", () => {
+    expect(linked("case 174 and ZD #3529", { case: links.case })).toEqual([
+      { type: "reference", value: "case 174", href: caseHref(174) },
     ]);
   });
 
@@ -451,12 +478,14 @@ describe("caseLinkParts", () => {
       "https://tracker.example.test/issues",
       "javascript:{n}",
     ]) {
-      expect(caseLinkParts("case 174", value)).toEqual([{ type: "text", value: "case 174" }]);
+      expect(referenceLinkParts("case 174 ZD 1", { case: value, zendesk: value })).toEqual([
+        { type: "text", value: "case 174 ZD 1" },
+      ]);
     }
   });
 
-  it("builds only http(s) case links", () => {
-    expect(caseLinkHref(template, "9")).toBe("https://tracker.example.test/issues/9");
-    expect(caseLinkHref("mailto:x@example.test?subject={n}", "9")).toBeUndefined();
+  it("builds only http(s) links", () => {
+    expect(referenceLinkHref(links.case, "9")).toBe(caseHref(9));
+    expect(referenceLinkHref("mailto:x@example.test?subject={n}", "9")).toBeUndefined();
   });
 });

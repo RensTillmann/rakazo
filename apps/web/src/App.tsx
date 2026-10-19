@@ -1,6 +1,10 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { LinkFavicons } from "@rakazo/chat-ui/web";
-import { CaseLinkContext, LinkFaviconsContext, RemoteImagesContext } from "@rakazo/chat-ui/web";
+import {
+  LinkFaviconsContext,
+  ReferenceLinksContext,
+  RemoteImagesContext,
+} from "@rakazo/chat-ui/web";
 import { LOCAL_SETTINGS_PAGE } from "@rakazo/contracts";
 import { Button, Skeleton } from "@rakazo/ui-web";
 import {
@@ -18,7 +22,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SubscriptionGate } from "./components/SubscriptionGate";
 import { authClient } from "./lib/auth";
 import {
-  getCaseLinkUrl,
+  getReferenceLinks,
   getTicketBoardEnabled,
   subscribeTicketBoardEnabled,
 } from "./lib/bootstrap";
@@ -100,8 +104,12 @@ function SessionApp() {
     getTicketBoardEnabled,
     () => false,
   );
-  // Every bootstrap capability change notifies the same listeners, the case link included.
-  const caseLinkUrl = useSyncExternalStore(subscribeTicketBoardEnabled, getCaseLinkUrl, () => null);
+  // Every bootstrap capability change notifies the same listeners, the reference links included.
+  const referenceLinks = useSyncExternalStore(
+    subscribeTicketBoardEnabled,
+    getReferenceLinks,
+    getReferenceLinks,
+  );
   const session = authClient.useSession();
   const gate = sessionGate(session);
   const [holdingUnreachable, setHoldingUnreachable] = useState(false);
@@ -190,7 +198,9 @@ function SessionApp() {
       </Suspense>
     </div>
   );
-  return <CaseLinkContext.Provider value={caseLinkUrl}>{routes}</CaseLinkContext.Provider>;
+  return (
+    <ReferenceLinksContext.Provider value={referenceLinks}>{routes}</ReferenceLinksContext.Provider>
+  );
 }
 
 /**

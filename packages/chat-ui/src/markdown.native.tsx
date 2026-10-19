@@ -34,8 +34,6 @@ import {
 } from "react-native";
 import type { ChatMarkdownProps, MentionBot } from "./markdown";
 import {
-  CaseLinkContext,
-  caseLinkParts,
   inlineMarkdownImageSrc,
   LinkFaviconsContext,
   LinkFaviconsPausedContext,
@@ -48,7 +46,9 @@ import {
   markRemoteImageLoaded,
   mentionParts,
   plainTextLinkParts,
+  ReferenceLinksContext,
   RemoteImagesContext,
+  referenceLinkParts,
   remoteImageRenders,
   remoteMarkdownImage,
   sanitizeMarkdownUrl,
@@ -421,7 +421,7 @@ function mentionStyle(bot: MentionBot, scheme: ResolvedAppearance): TextStyle {
   };
 }
 
-/** Text with "case 174" linked and `@Name` mentions of known bots drawn in each bot's colour. */
+/** Text with "case 174" and "ZD #3529" linked and `@Name` mentions drawn in each bot's colour. */
 function MentionedText({
   children,
   scheme,
@@ -434,7 +434,7 @@ function MentionedText({
   const bots = useContext(MentionBotsContext);
   const contextScheme = useContext(MentionSchemeContext);
   const open = useContext(MentionOpenBotContext);
-  const caseLink = useContext(CaseLinkContext);
+  const referenceLinks = useContext(ReferenceLinksContext);
   const mentions = (text: string) =>
     mentionParts(text, bots).map((part, index) =>
       part.type === "text" ? (
@@ -456,13 +456,13 @@ function MentionedText({
         </Text>
       ),
     );
-  const parts = caseLinkParts(children, caseLink);
+  const parts = referenceLinkParts(children, referenceLinks);
   if (parts.length === 1 && parts[0]?.type === "text") return mentions(children);
   return parts.map((part, index) =>
     part.type === "text" ? (
       <Fragment key={index}>{mentions(part.value)}</Fragment>
     ) : (
-      // The deployment chose the case link's address, so it opens without a prompt.
+      // The deployment chose the reference link's address, so it opens without a prompt.
       <Text
         key={index}
         style={linkStyle}
@@ -1243,12 +1243,18 @@ const layout = StyleSheet.create({
   },
 });
 
-export type { ChatMarkdownProps, LinkFavicons, MentionBot, MentionOpenBot } from "./markdown";
+export type {
+  ChatMarkdownProps,
+  LinkFavicons,
+  MentionBot,
+  MentionOpenBot,
+  ReferenceLinks,
+} from "./markdown";
 export {
-  CaseLinkContext,
   LinkFaviconsContext,
   MentionBotsContext,
   MentionOpenBotContext,
+  ReferenceLinksContext,
   RemoteImagesContext,
 } from "./markdown";
 export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";

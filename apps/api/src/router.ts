@@ -647,6 +647,8 @@ export interface RouterDeps {
     flagLabel?: string;
     /** `RAKAZO_CASE_LINK_URL`: URL with `{n}` that "case 174" in messages links to; unset = off. */
     caseLinkUrl?: string;
+    /** `RAKAZO_ZENDESK_LINK_URL`: URL with `{n}` that "ZD #3529" in messages links to; unset = off. */
+    zendeskLinkUrl?: string;
   };
 }
 
@@ -6737,6 +6739,7 @@ async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     phoneCallsEnabled: deps.env.phoneCallsEnabled === true,
     maxUploadSizeBytes: attachmentMaxBytes(deps.env),
     caseLinkUrl: deps.env.caseLinkUrl,
+    zendeskLinkUrl: deps.env.zendeskLinkUrl,
     userId: actor.userId,
     email: user.email,
     name: user.name,

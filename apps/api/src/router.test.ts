@@ -338,6 +338,7 @@ describe("model setup gate", () => {
     agentRuntime: string;
     maxUploadSizeBytes?: number;
     caseLinkUrl?: string;
+    zendeskLinkUrl?: string;
     deploymentModelConfigured?: boolean;
     deploymentModelHostCredentials?: boolean;
     deploymentModelCredentialCipher?: string;
@@ -367,6 +368,7 @@ describe("model setup gate", () => {
         agentRuntime: options.agentRuntime,
         maxUploadSizeBytes: options.maxUploadSizeBytes,
         caseLinkUrl: options.caseLinkUrl,
+        zendeskLinkUrl: options.zendeskLinkUrl,
         defaultProvider: "openrouter",
         defaultModel: "test-model",
         deploymentModelConfigured: options.deploymentModelConfigured,
@@ -410,14 +412,16 @@ describe("model setup gate", () => {
     },
   );
 
-  it("advertises the case link in me only when it is set", async () => {
+  it("advertises the reference links in me only when they are set", async () => {
     const off = modelGateDeps({ agentRuntime: "scripted" });
     const offMe = (await (await call(off.handler, off.actor, "me", null)).json()).json;
     expect(offMe).not.toHaveProperty("caseLinkUrl");
+    expect(offMe).not.toHaveProperty("zendeskLinkUrl");
     const caseLinkUrl = "https://tracker.example.test/issues/{n}";
-    const on = modelGateDeps({ agentRuntime: "scripted", caseLinkUrl });
+    const zendeskLinkUrl = "https://help.example.test/agent/tickets/{n}";
+    const on = modelGateDeps({ agentRuntime: "scripted", caseLinkUrl, zendeskLinkUrl });
     expect(await (await call(on.handler, on.actor, "me", null)).json()).toMatchObject({
-      json: { caseLinkUrl },
+      json: { caseLinkUrl, zendeskLinkUrl },
     });
   });
 
