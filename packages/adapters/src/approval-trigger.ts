@@ -28,7 +28,9 @@ export async function loadApprovalTrigger(
 
   if (run.trigger === "bot_message") {
     const context = botMessageContext(blocks);
-    return context ? { kind: "bot_message", botName: context.fromBotName, text: context.text } : undefined;
+    return context
+      ? { kind: "bot_message", botName: context.fromBotName, text: context.text }
+      : undefined;
   }
   if (run.routineId && (run.trigger === "routine" || run.trigger === "webhook")) {
     const routine = await prisma.routine.findUnique({
@@ -36,7 +38,8 @@ export async function loadApprovalTrigger(
       select: { name: true },
     });
     if (!routine) return undefined;
-    const event = run.trigger === "webhook" ? inboundSourceFromClientNonce(source?.clientNonce) : undefined;
+    const event =
+      run.trigger === "webhook" ? inboundSourceFromClientNonce(source?.clientNonce) : undefined;
     return { kind: "routine", routineName: routine.name, ...(event ? { event } : {}) };
   }
   if (run.trigger !== "user" && run.trigger !== "follow_up") return undefined;

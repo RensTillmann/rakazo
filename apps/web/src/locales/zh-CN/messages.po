@@ -605,6 +605,14 @@ msgstr ""
 msgid "An API key is stored for this provider, not a subscription sign-in."
 msgstr "此提供方存储的是 API 密钥，不是订阅登录。"
 
+#: src/lib/answered-by-label.ts
+msgid "Android phone"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "Android tablet"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Answer"
 msgstr "回答"
@@ -612,6 +620,10 @@ msgstr "回答"
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "已回答"
+
+#: src/components/AskCard.tsx
+msgid "Answered by {device} · {time}"
+msgstr ""
 
 #. placeholder {0}: selectedAskActionLabel(answer, actions)
 #: src/components/AskCard.tsx
@@ -2487,6 +2499,10 @@ msgstr "正在完成 MCP 连接…"
 msgid "Flag unexpected actions"
 msgstr "标记异常操作"
 
+#: src/lib/answered-by-label.ts
+msgid "fleet service"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "忘记密码？"
@@ -2719,6 +2735,14 @@ msgstr "间隔数量"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "间隔单位"
+
+#: src/lib/answered-by-label.ts
+msgid "iPad"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "iPhone"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4665,6 +4689,10 @@ msgstr "测试"
 msgid "Test API key"
 msgstr "测试 API 密钥"
 
+#: src/lib/answered-by-label.ts
+msgid "test browser"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "测试运行"
@@ -4898,6 +4926,10 @@ msgstr "撤销"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "unknown device"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx

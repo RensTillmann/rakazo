@@ -15,6 +15,7 @@ import type {
   ConnectorCall,
   ConnectorProvider,
   ConnectorTool,
+  DurableMemoryScope,
   JobPublisher,
   ManagedConnectorProvider,
   MediaGenerationProvider,
@@ -26,7 +27,6 @@ import type {
   SandboxProvider,
   SecretStore,
   SemanticMemoryProvider,
-  DurableMemoryScope,
   SubscriptionLimitReading,
   WebProvider,
 } from "@rakazo/adapter-kit";
@@ -147,7 +147,6 @@ import {
   redactShellStreams,
 } from "./agent-environment.js";
 import { approvalPush, buildApprovalAskBlock } from "./approval-ask.js";
-import { loadApprovalTrigger } from "./approval-trigger.js";
 import {
   approvalPausedToolResult,
   approvalReplayPathError,
@@ -175,6 +174,7 @@ import {
   settleUncertainEffect,
   uncertainEffectResult,
 } from "./approval-effect.js";
+import { loadApprovalTrigger } from "./approval-trigger.js";
 import {
   approvalEveryRun,
   autoReviewTimeoutMs,

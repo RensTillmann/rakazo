@@ -5,6 +5,7 @@ import type { PrismaClient } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   appendToolCompletionAudit,
+  attachSteeringRecall,
   createRunExecutor,
   createRunWorkspaceCheckpoint,
   dockerComputerToolInstruction,
@@ -15,11 +16,10 @@ import {
   parseUpdateBotPatch,
   persistentComputerInstruction,
   RECALL_QUERY_MAX_CHARS,
+  recallForSteeringMessages,
   runNotificationsEnabled,
   selectBuiltinToolsForRun,
   semanticRecallQuery,
-  recallForSteeringMessages,
-  attachSteeringRecall,
   settleSteeringAttachmentLoads,
   threadContextForRun,
   toolCompletionAuditPayload,
@@ -1601,7 +1601,10 @@ describe("createRunExecutor", () => {
         ok: true as const,
         value: [{ memory: "Conditional logic lives under Form settings." }],
       }));
-      const items = [botItem, userItem("What do the Super Forms docs say about conditional logic?")];
+      const items = [
+        botItem,
+        userItem("What do the Super Forms docs say about conditional logic?"),
+      ];
       const block = await recallForSteeringMessages({
         ...base,
         items,
