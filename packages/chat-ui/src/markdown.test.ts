@@ -8,6 +8,8 @@ import {
   linkLabel,
   markdownLinkDisplayParts,
   markdownLinkRequiresConfirmation,
+  type MentionBot,
+  mentionParts,
   plainTextLinkParts,
   sanitizeMarkdownImageUrl,
   sanitizeMarkdownUrl,
@@ -342,5 +344,53 @@ it("highlights the destination host after userinfo containing the same host text
     before: "https://docs.example:docs.example@",
     host: "docs.example",
     after: "/a",
+  });
+});
+
+describe("mentionParts", () => {
+  const color = { onLight: "#5B21B6", onDark: "#A97EFE" };
+  const quinn: MentionBot = { id: "quinn", names: ["Quinn"], color };
+  const superBot: MentionBot = { id: "super", names: ["Super"], color };
+  const superForms: MentionBot = { id: "super-forms", names: ["Super Forms Bot"], color };
+  const bots = [quinn, superBot, superForms];
+
+  it("marks a known bot's name and keeps the text around it", () => {
+    expect(mentionParts("Room test received. @Quinn, please confirm", bots)).toEqual([
+      { type: "text", value: "Room test received. " },
+      { type: "mention", value: "@Quinn", bot: quinn },
+      { type: "text", value: ", please confirm" },
+    ]);
+  });
+
+  it("leaves an unknown name as plain text", () => {
+    expect(mentionParts("Hi @Robin", bots)).toEqual([{ type: "text", value: "Hi @Robin" }]);
+  });
+
+  it("leaves names inside code spans alone", () => {
+    expect(mentionParts("Run `ping @Quinn` and ``say @Quinn`` now", bots)).toEqual([
+      { type: "text", value: "Run `ping @Quinn` and ``say @Quinn`` now" },
+    ]);
+  });
+
+  it("leaves email addresses alone", () => {
+    expect(mentionParts("Write to a@quinn.com", bots)).toEqual([
+      { type: "text", value: "Write to a@quinn.com" },
+    ]);
+  });
+
+  it("prefers the longest name and needs a whole word", () => {
+    expect(mentionParts("@Super Forms Bot and @Super, not @Superb", bots)).toEqual([
+      { type: "mention", value: "@Super Forms Bot", bot: superForms },
+      { type: "text", value: " and " },
+      { type: "mention", value: "@Super", bot: superBot },
+      { type: "text", value: ", not @Superb" },
+    ]);
+  });
+
+  it("matches names regardless of case and keeps the text as written", () => {
+    expect(mentionParts("@qUINN?", bots)).toEqual([
+      { type: "mention", value: "@qUINN", bot: quinn },
+      { type: "text", value: "?" },
+    ]);
   });
 });
