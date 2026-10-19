@@ -8862,10 +8862,13 @@ export async function recallForSteeringMessages(options: {
     HINDSIGHT_RECALL_TIMEOUT_MS,
   );
   const timeout = new AbortController();
-  const timedOut = Promise.withResolvers<never>();
+  let rejectTimedOut: (error: Error) => void = () => undefined;
+  const timedOut = new Promise<never>((_resolve, reject) => {
+    rejectTimedOut = reject;
+  });
   const timer = setTimeout(() => {
     timeout.abort();
-    timedOut.reject(new Error(`steering recall timed out after ${timeoutMs} ms`));
+    rejectTimedOut(new Error(`steering recall timed out after ${timeoutMs} ms`));
   }, timeoutMs);
   try {
     const recalled = await Promise.race([
@@ -8881,7 +8884,7 @@ export async function recallForSteeringMessages(options: {
         },
         { ...options.context, signal: AbortSignal.any([options.context.signal, timeout.signal]) },
       ),
-      timedOut.promise,
+      timedOut,
     ]);
     if (!recalled.ok) {
       getLogger().error("steering memory recall failed", recalled.error);

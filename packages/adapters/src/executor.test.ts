@@ -1597,7 +1597,7 @@ describe("createRunExecutor", () => {
     };
 
     it("recalls with the steered user text and lands the block with that message", async () => {
-      const recall = vi.fn(async () => ({
+      const recall = vi.fn(async (_request: unknown, _context: unknown) => ({
         ok: true as const,
         value: [{ memory: "Conditional logic lives under Form settings." }],
       }));
@@ -1656,7 +1656,7 @@ describe("createRunExecutor", () => {
         vi.fn(async () => {
           throw new Error("boom");
         }),
-        vi.fn(() => Promise.withResolvers<never>().promise),
+        vi.fn(() => new Promise<never>(() => undefined)),
       ]) {
         await expect(
           recallForSteeringMessages({ ...base, items, provider: provider(recall), timeoutMs: 5 }),
