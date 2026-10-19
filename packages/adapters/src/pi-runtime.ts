@@ -256,8 +256,9 @@ export function runBudgetWarnAt(env: NodeJS.ProcessEnv = process.env): number {
   return Number.isFinite(parsed) && parsed > 0 && parsed < 1 ? parsed : 0;
 }
 
-export const RUN_BUDGET_FINAL_PROMPT =
-  "Budget reached: this task hit its limit and tools are now off. Do not call any tools. In one line: what you did and what is blocked.";
+export const RUN_BUDGET_FINAL_PROMPT = automated(
+  "Budget reached: this task hit its limit and tools are now off. Do not call any tools. In one line: what you did and what is blocked.",
+);
 /** Published when the budget's final turn fails or writes nothing. */
 export const RUN_BUDGET_FALLBACK_TEXT =
   "I stopped because this task reached its limit, before I could write a summary. Send another message to continue.";
@@ -295,7 +296,9 @@ export function runBudgetWarningPrompt(
       `${formatBudgetMinutes(usage.usedMs)} of ${formatBudgetMinutes(limits.maxMs)} minutes`,
     );
   }
-  return `Run budget almost used (${parts.join(" / ")}). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.`;
+  return automated(
+    `Run budget almost used (${parts.join(" / ")}). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.`,
+  );
 }
 
 function runBudgetWarningDue(

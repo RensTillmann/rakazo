@@ -195,6 +195,7 @@ import {
   webhookRunsHonorRules,
 } from "./auto-review.js";
 import { createAutoReviewProvider } from "./auto-review-factory.js";
+import { automated } from "./automated-messages.js";
 import { attachedImageArtifactIds, resolveUpdateBotAvatar } from "./bot-avatar.js";
 import { loadBotMessageContext, messageBot, returnBotMessageOutcome } from "./bot-messages.js";
 import {
@@ -370,8 +371,6 @@ import { actorMayUsePrivateEndpoint } from "./private-endpoint.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { assertSafeRemoteUrl } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
-import { tickRoutineWatch } from "./routine-watch.js";
-import { lazyRunComputer } from "./run-computer.js";
 import {
   isRoomToolName,
   roomArchive,
@@ -382,6 +381,8 @@ import {
   roomToolsAllowedForBot,
   roomUpdate,
 } from "./room-tools.js";
+import { tickRoutineWatch } from "./routine-watch.js";
+import { lazyRunComputer } from "./run-computer.js";
 import {
   commitConsumedRunSecret,
   normalizeSecretAskPurpose,
@@ -4024,13 +4025,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           allowSilentPeerMessage || messagingChannelRun || runAllowsSilentEmpty(behaviorTrigger);
         // A person's own message always gets a real answer, never the silent marker.
         const personReplyRun = !allowSilentEmptyRun && runAnswersPerson(run, messagingChannelRun);
-        const sourceMessage = messages.find((message) => message.id === run.sourceMessageId);
+        const personSourceMessage = messages.find((message) => message.id === run.sourceMessageId);
         // The current turn carries the same mark its message gets in a later run's 1:1 history.
         const markPersonPrompt =
           personReplyRun &&
           !thread.groupId &&
-          sourceMessage !== undefined &&
-          isPersonMessage(sourceMessage);
+          personSourceMessage !== undefined &&
+          isPersonMessage(personSourceMessage);
         const emptyResponseText = peerMessage
           ? peerMessage.intent === "result" ||
             peerMessage.intent === "status" ||
@@ -9414,7 +9415,9 @@ export function runAnswersPerson(
 }
 
 /** The one extra turn a run answering a person gets when its reply is only the silent marker. */
-export const PERSON_SILENT_REPLY_NUDGE = `The user wrote to you directly in your chat. ${NO_RESPONSE} is not allowed here: answer them in one to three plain sentences.`;
+export const PERSON_SILENT_REPLY_NUDGE = automated(
+  `The user wrote to you directly in your chat. ${NO_RESPONSE} is not allowed here: answer them in one to three plain sentences.`,
+);
 
 /**
  * Whether text written before a tool call may become a durable mid-turn chat bubble.

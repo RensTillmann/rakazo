@@ -21,7 +21,6 @@ vi.mock("@earendil-works/pi-ai/providers/all", () => ({
   }),
 }));
 
-vi.mock("./pi-current-models.js", () => ({ supplementPiModels: (models: unknown) => models }));
 vi.mock("./pi-local-provider.js", () => ({ registerLocalProvider: (models: unknown) => models }));
 vi.mock("./pi-openai-compatible-provider.js", () => ({
   OPENAI_COMPATIBLE_PROVIDER_ID: "openai-compatible",
@@ -29,6 +28,7 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
   registerOpenAiCompatibleRuntime: (models: unknown) => models,
 }));
 
+import { AUTOMATED_MESSAGE_LABEL } from "./automated-messages.js";
 import {
   PiAgentRuntime,
   RUN_BUDGET_FALLBACK_TEXT,
@@ -137,7 +137,7 @@ function warningText(context: unknown): string | undefined {
       : Array.isArray(content)
         ? content.map((part: { text?: unknown }) => String(part?.text ?? "")).join("")
         : "";
-  return text.startsWith("Run budget almost used (") ? text : undefined;
+  return text.startsWith(`${AUTOMATED_MESSAGE_LABEL} Run budget almost used (`) ? text : undefined;
 }
 
 function request(executeTool = vi.fn(async () => ({ ok: true }))): AgentRunRequest {
@@ -423,7 +423,7 @@ describe("run budget", () => {
       undefined,
       undefined,
       undefined,
-      "Run budget almost used (4 of 5 model calls). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.",
+      `${AUTOMATED_MESSAGE_LABEL} Run budget almost used (4 of 5 model calls). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.`,
       undefined,
     ]);
     // The warning turn keeps tools on: its tool call ran.
@@ -463,7 +463,7 @@ describe("run budget", () => {
       undefined,
       undefined,
       undefined,
-      "Run budget almost used (3 of 100 model calls / 9 of 10 minutes). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.",
+      `${AUTOMATED_MESSAGE_LABEL} Run budget almost used (3 of 100 model calls / 9 of 10 minutes). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.`,
       undefined,
     ]);
     expect(isFinalTurn(contexts.at(-1))).toBe(true);
