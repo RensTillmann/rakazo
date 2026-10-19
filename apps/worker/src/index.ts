@@ -30,6 +30,7 @@ import {
   isComposioEnabled,
   isMessagingSurfaceEnabled,
   isPipedreamEnabled,
+  isWorkerRecoverOnStartEnabled,
   LocalAgentHomeStore,
   LocalArtifactStore,
   McpConnector,
@@ -42,6 +43,7 @@ import {
   pipedreamConfigFromEnv,
   reconcileCloudAgents,
   reconcileComputerUpdates,
+  recoverOrphanedJobs,
   resolveDeploymentModel,
   resolvePiSessionRoot,
   resolveSandboxProvider,
@@ -268,6 +270,15 @@ async function main() {
       logger.error("worker job host start waiting on database capacity", error);
       await new Promise((resolve) => setTimeout(resolve, databaseCapacityBackoffMs(attempt)));
     }
+  }
+  // Fleet: RAKAZO_WORKER_RECOVER_ON_START. Once, after the runner is up so its ids are
+  // known. One worker service, so jobs locked by any other id belong to a dead worker.
+  if (jobHost instanceof GraphileJobWorkerHost && isWorkerRecoverOnStartEnabled()) {
+    await recoverOrphanedJobs({
+      enabled: true,
+      db: pool,
+      ownWorkerIds: jobHost.workerIds(),
+    }).catch((error) => logger.error("worker orphan recovery failed", error));
   }
   const reconciler = createJobReconciler({
     prisma,
