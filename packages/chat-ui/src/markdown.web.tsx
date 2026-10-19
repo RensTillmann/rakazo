@@ -106,6 +106,7 @@ export function BotMention({ bot, children }: { bot: MentionBot; children: React
     );
   }
   return (
+    // biome-ignore lint/a11y/useSemanticElements: a mention is part of running text; a <button> would stop it wrapping across lines and break selecting the sentence.
     <span
       className="rk-mention rk-mention-open"
       data-mention-bot={bot.id}

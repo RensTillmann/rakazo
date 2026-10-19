@@ -3617,6 +3617,13 @@ msgstr "कॉल खोलें"
 msgid "Open chat with {0}"
 msgstr "{0} के साथ चैट खोलें"
 
+msgid "Open chat with {name}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Open chat with {speakerName}"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Open computer settings"
 msgstr ""

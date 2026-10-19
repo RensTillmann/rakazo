@@ -3614,6 +3614,12 @@ msgstr ""
 #. placeholder {0}: call.botName
 #: src/components/call/CallCard.tsx
 msgid "Open chat with {0}"
+
+msgid "Open chat with {name}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Open chat with {speakerName}"
 msgstr ""
 
 #: src/components/ComputersUnavailableHint.tsx

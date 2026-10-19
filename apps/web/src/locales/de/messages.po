@@ -3617,6 +3617,13 @@ msgstr "Anruf öffnen"
 msgid "Open chat with {0}"
 msgstr "Chat mit {0} öffnen"
 
+msgid "Open chat with {name}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Open chat with {speakerName}"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Open computer settings"
 msgstr ""
