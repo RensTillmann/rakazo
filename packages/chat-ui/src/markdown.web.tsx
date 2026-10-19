@@ -20,11 +20,13 @@ import { CheckIcon, CopyIcon, GlobeIcon, ImageIcon } from "./icons";
 import type { ChatMarkdownProps, MentionBot } from "./markdown";
 import {
   closeUnterminatedFence,
+  hasTextSelection,
   inlineMarkdownImageSrc,
   LinkFaviconsPausedContext,
   linkFaviconOrigin,
   linkLabel,
   MentionBotsContext,
+  MentionOpenBotContext,
   markdownLinkDisplayParts,
   markdownLinkRequiresConfirmation,
   markRemoteImageLoaded,
@@ -95,8 +97,35 @@ export function BotMention({ bot, children }: { bot: MentionBot; children: React
     "--rk-mention-on-light": bot.color.onLight,
     "--rk-mention-on-dark": bot.color.onDark,
   } as CSSProperties;
+  const open = useContext(MentionOpenBotContext);
+  if (!open) {
+    return (
+      <span className="rk-mention" data-mention-bot={bot.id} style={style}>
+        {children}
+      </span>
+    );
+  }
   return (
-    <span className="rk-mention" data-mention-bot={bot.id} style={style}>
+    <span
+      className="rk-mention rk-mention-open"
+      data-mention-bot={bot.id}
+      style={style}
+      role="button"
+      tabIndex={0}
+      aria-label={open.label(bot.names[0] ?? bot.id)}
+      onClick={(event) => {
+        // A drag-select that ends on the mention must not navigate.
+        if (hasTextSelection()) return;
+        event.stopPropagation();
+        open.onOpenBot(bot.id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        open.onOpenBot(bot.id);
+      }}
+    >
       {children}
     </span>
   );
@@ -630,7 +659,13 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   );
 });
 
-export type { ChatMarkdownProps, LinkFavicons, MentionBot } from "./markdown";
-export { LinkFaviconsContext, MentionBotsContext, RemoteImagesContext } from "./markdown";
+export type { ChatMarkdownProps, LinkFavicons, MentionBot, MentionOpenBot } from "./markdown";
+export {
+  hasTextSelection,
+  LinkFaviconsContext,
+  MentionBotsContext,
+  MentionOpenBotContext,
+  RemoteImagesContext,
+} from "./markdown";
 
 export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";

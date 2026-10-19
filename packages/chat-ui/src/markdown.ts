@@ -433,6 +433,24 @@ export type MentionBot = {
 /** The bots the reader can see. Apps provide the space's bots; empty leaves mentions plain. */
 export const MentionBotsContext = createContext<readonly MentionBot[]>([]);
 
+/**
+ * Opens a mentioned bot's 1:1 chat. Apps that route provide it with a localized
+ * label; without it a mention stays plain coloured text.
+ */
+export type MentionOpenBot = {
+  onOpenBot: (botId: string) => void;
+  /** Accessible name for the mention, e.g. "Open chat with Quinn". */
+  label: (botName: string) => string;
+};
+
+export const MentionOpenBotContext = createContext<MentionOpenBot | null>(null);
+
+/** True while the reader has text selected, so a drag-select over a mention does not open it. */
+export function hasTextSelection(): boolean {
+  const selection = typeof window === "undefined" ? null : window.getSelection?.();
+  return Boolean(selection && !selection.isCollapsed && selection.toString().length > 0);
+}
+
 export type MentionPart =
   | { type: "text"; value: string }
   | { type: "mention"; value: string; bot: MentionBot };

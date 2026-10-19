@@ -6,6 +6,8 @@ import {
   LinkifiedText,
   type MentionBot,
   MentionBotsContext,
+  type MentionOpenBot,
+  MentionOpenBotContext,
 } from "@rakazo/chat-ui/web";
 import type {
   AgentSkillCatalogEntry,
@@ -356,6 +358,7 @@ import {
   ChoiceCard,
   McpApprovalCard,
 } from "./shell/message-cards";
+import { type OpenChatLocation, openBotChat } from "./shell/open-bot-chat";
 import type { RosterDropTarget } from "./shell/roster-drop";
 import { resolveRosterDrop } from "./shell/roster-drop";
 import { commitSpaceRename, sidebarGroupsForSpaces } from "./shell/space-sidebar";
@@ -2288,7 +2291,20 @@ function SpaceShell() {
     initiallyScrolledThread.current = snapshot.threadId;
   }, [active, groupId, inGroup, snapshot?.botId, snapshot?.groupId, snapshot?.threadId]);
 
-  const openBot = useCallback((id: string) => navigate(`/app/${id}`), [navigate]);
+  // Mentions and speaker headers open a bot's 1:1 chat; the ref keeps the handler stable
+  // so memoized messages do not re-render on every chat switch.
+  const openChatLocation = useRef<OpenChatLocation>({ inGroup, botId: active?.id });
+  openChatLocation.current = { inGroup, botId: active?.id };
+  const openBot = useCallback(
+    (id: string) => {
+      if (openBotChat(id, openChatLocation.current, navigate)) setMobileSidebarOpen(false);
+    },
+    [navigate],
+  );
+  const mentionOpenBot = useMemo<MentionOpenBot>(
+    () => ({ onOpenBot: openBot, label: (name) => t`Open chat with ${name}` }),
+    [openBot, t],
+  );
   const loadOlder = useCallback(() => loadOlderMessagesRef.current(), []);
   const jumpToReplyMessage = useCallback((messageId: string) => {
     const inTranscript =
@@ -5454,7 +5470,9 @@ function SpaceShell() {
 
   return (
     <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "organic"}>
-      <MentionBotsContext.Provider value={mentionBots}>{shell}</MentionBotsContext.Provider>
+      <MentionBotsContext.Provider value={mentionBots}>
+        <MentionOpenBotContext.Provider value={mentionOpenBot}>{shell}</MentionOpenBotContext.Provider>
+      </MentionBotsContext.Provider>
     </AvatarStyleProvider>
   );
 }
@@ -7387,17 +7405,25 @@ const MessageView = memo(function MessageView({
   const messageContext = (
     <>
       {speakerName ? (
-        <div
-          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight"
-          dir="auto"
-          style={{ color: speakerColorDef.light }}
-        >
-          <BotAvatar
-            color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
-            identity={message.botId}
-            size={22}
-          />
-          {speakerName}
+        <div className="mb-1.5">
+          <button
+            type="button"
+            className="flex cursor-pointer items-center gap-2 rounded-sm text-[13px] font-semibold tracking-tight hover:underline focus-visible:outline-2 focus-visible:outline-offset-1"
+            dir="auto"
+            style={{ color: speakerColorDef.light }}
+            aria-label={t`Open chat with ${speakerName}`}
+            disabled={!message.botId}
+            onClick={() => {
+              if (message.botId) onOpenBot(message.botId);
+            }}
+          >
+            <BotAvatar
+              color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
+              identity={message.botId}
+              size={22}
+            />
+            {speakerName}
+          </button>
         </div>
       ) : null}
       <ReplyLine

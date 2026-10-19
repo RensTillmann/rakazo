@@ -427,6 +427,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Message…": "Сообщение…",
   Message: "Сообщение",
   "Message {name}": "Написать {name}",
+  "Open chat with {name}": "Открыть чат с {name}",
   Model: "Модель",
   "Model id": "Идентификатор модели",
   "Model updated.": "Модель обновлена.",

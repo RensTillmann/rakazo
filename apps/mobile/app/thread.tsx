@@ -1,5 +1,11 @@
 import type { MenuAction } from "@expo/ui/community/menu";
-import { ChatMarkdown, type MentionBot, MentionBotsContext } from "@rakazo/chat-ui/native";
+import {
+  ChatMarkdown,
+  type MentionBot,
+  MentionBotsContext,
+  type MentionOpenBot,
+  MentionOpenBotContext,
+} from "@rakazo/chat-ui/native";
 import type {
   AgentSkillCatalogEntry,
   Connection,
@@ -1830,10 +1836,21 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     [botId, groupId, readOnly],
   );
 
+  // Mentions, speaker names and peer cards open a bot's chat; already there does nothing.
   const openBot = useCallback(
-    (id: string, botName: string) =>
-      router.push({ pathname: "/thread", params: { botId: id, name: botName } }),
+    (id: string, botName: string) => {
+      if (!activeGroupId.current && activeBotId.current === id) return;
+      router.push({ pathname: "/thread", params: { botId: id, name: botName } });
+    },
     [router],
+  );
+  const mentionOpenBot = useMemo<MentionOpenBot>(
+    () => ({
+      onOpenBot: (id) =>
+        openBot(id, mentionBotsRef.current.find((bot) => bot.id === id)?.name ?? ""),
+      label: (name) => t("Open chat with {name}", { name }),
+    }),
+    [openBot],
   );
 
   const openComputer = useCallback(
@@ -2400,6 +2417,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
 
   return (
     <MentionBotsContext.Provider value={mentionColorBots}>
+      <MentionOpenBotContext.Provider value={mentionOpenBot}>
       <KeyboardAvoidingView
         behavior="height"
         // Android lays out the screen below the opaque native navigation header.
@@ -2788,6 +2806,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
           />
         ) : null}
       </KeyboardAvoidingView>
+      </MentionOpenBotContext.Provider>
     </MentionBotsContext.Provider>
   );
 }
@@ -3832,6 +3851,11 @@ const MessageBubble = memo(function MessageBubble({
       >
         {speaker ? (
           <Text
+            accessibilityRole={message.botId ? "button" : undefined}
+            accessibilityLabel={
+              message.botId ? t("Open chat with {name}", { name: speaker }) : undefined
+            }
+            onPress={message.botId ? () => onOpenBot(message.botId ?? "", speaker) : undefined}
             style={{
               color: speakerColor ?? tokens.mutedForeground,
               fontSize: 12.5,
@@ -3994,6 +4018,11 @@ const MessageBubble = memo(function MessageBubble({
           message={{ ...message, blocks: segment.blocks }}
           speaker={index === firstContent ? speaker : undefined}
           speakerColor={index === firstContent ? speakerColor : undefined}
+          onOpenSpeaker={
+            index === firstContent && speaker && message.botId
+              ? () => onOpenBot(message.botId ?? "", speaker)
+              : undefined
+          }
           actionProps={actionProps}
         />
       ))}
@@ -4035,11 +4064,14 @@ function MessageTextCard({
   message,
   speaker,
   speakerColor,
+  onOpenSpeaker,
   actionProps,
 }: {
   message: MobileMessage;
   speaker?: string;
   speakerColor?: string;
+  /** Opens the speaking bot's 1:1 chat when its name is tapped. */
+  onOpenSpeaker?: () => void;
   actionProps: MessageActionProps;
 }) {
   const colorScheme = useResolvedAppearance();
@@ -4060,6 +4092,9 @@ function MessageTextCard({
     >
       {speaker ? (
         <Text
+          accessibilityRole={onOpenSpeaker ? "button" : undefined}
+          accessibilityLabel={onOpenSpeaker ? t("Open chat with {name}", { name: speaker }) : undefined}
+          onPress={onOpenSpeaker}
           style={{
             color: speakerColor ?? tokens.mutedForeground,
             fontSize: 12.5,

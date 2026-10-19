@@ -403,6 +403,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Message…": "发消息…",
   Message: "消息",
   "Message {name}": "给 {name} 发消息",
+  "Open chat with {name}": "打开与 {name} 的聊天",
   Model: "模型",
   "Model id": "模型 ID",
   "Model updated.": "模型已更新。",
