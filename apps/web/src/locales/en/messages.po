@@ -319,6 +319,10 @@ msgstr "About groups"
 msgid "About spaces"
 msgstr "About spaces"
 
+#: src/components/ApprovalDetail.tsx
+msgid "Access"
+msgstr "Access"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr "Access token"
@@ -588,6 +592,14 @@ msgstr "Always allow this tool"
 #: src/components/AskCard.tsx
 msgid "Always allowed"
 msgstr "Always allowed"
+
+#: src/components/ApprovalDetail.tsx
+msgid "Always asks you (never automatic)"
+msgstr "Always asks you (never automatic)"
+
+#: src/components/ApprovalDetail.tsx
+msgid "Amount"
+msgstr "Amount"
 
 #: src/lib/model-connection-preflight.ts
 msgid "An API key is stored for this provider, not a subscription sign-in."
@@ -1213,6 +1225,7 @@ msgstr "Comfortable"
 msgid "Coming soon"
 msgstr "Coming soon"
 
+#: src/components/ApprovalDetail.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "Command"
@@ -2416,6 +2429,10 @@ msgstr "Failed."
 msgid "Failure handling"
 msgstr "Failure handling"
 
+#: src/components/ApprovalDetail.tsx
+msgid "File"
+msgstr "File"
+
 #. placeholder {0}: attachmentSizeLabel(getMaxUploadSizeBytes())
 #: src/components/computer/FilesApp.tsx
 msgid "File exceeds the {0} upload limit."
@@ -2765,6 +2782,10 @@ msgstr "Light"
 msgid "Linear issue"
 msgstr "Linear issue"
 
+#: src/components/ApprovalDetail.tsx
+msgid "Link"
+msgstr "Link"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Link a chat app"
 msgstr "Link a chat app"
@@ -2993,6 +3014,7 @@ msgstr "Mentions"
 msgid "Mentions only"
 msgstr "Mentions only"
 
+#: src/components/ApprovalDetail.tsx
 #: src/pages/Shell.tsx
 msgid "Message"
 msgstr "Message"
@@ -3643,6 +3665,10 @@ msgstr "Private workspace with its own bots and groups."
 msgid "Project ID"
 msgstr "Project ID"
 
+#: src/components/ApprovalDetail.tsx
+msgid "Prompt"
+msgstr "Prompt"
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Protected input"
 msgstr "Protected input"
@@ -4067,6 +4093,10 @@ msgstr "Running…"
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr "Runs when this bot receives a verified message from this provider."
 
+#: src/components/ApprovalDetail.tsx
+msgid "Safety check"
+msgstr "Safety check"
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/Board.tsx
@@ -4169,6 +4199,10 @@ msgstr "Search bots and switch conversations"
 #: src/pages/PluginsOverlay.tsx
 msgid "Search by domain"
 msgstr "Search by domain"
+
+#: src/components/ApprovalDetail.tsx
+msgid "Search for"
+msgstr "Search for"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Search integrations.sh"
@@ -4539,6 +4573,10 @@ msgstr "Stream replies"
 msgid "subagent"
 msgstr "subagent"
 
+#: src/components/ApprovalDetail.tsx
+msgid "Subject"
+msgstr "Subject"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Submit"
@@ -4629,6 +4667,10 @@ msgstr "Test sign-in"
 #: src/components/ModelConnectionPreflightNotice.tsx
 msgid "Testing…"
 msgstr "Testing…"
+
+#: src/components/ApprovalDetail.tsx
+msgid "Text"
+msgstr "Text"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
@@ -4755,11 +4797,13 @@ msgstr "This week"
 msgid "Time of day"
 msgstr "Time of day"
 
+#: src/components/ApprovalDetail.tsx
 #: src/pages/Board.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"
 
+#: src/components/ApprovalDetail.tsx
 #: src/pages/ActivityList.tsx
 msgid "To"
 msgstr "To"
@@ -5094,9 +5138,17 @@ msgstr "When to run"
 msgid "When to use"
 msgstr "When to use"
 
+#: src/components/ApprovalDetail.tsx
+msgid "Where"
+msgstr "Where"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
+
+#: src/components/ApprovalDetail.tsx
+msgid "Why"
+msgstr "Why"
 
 #: src/lib/ticket-status.ts
 msgid "Won't do"
