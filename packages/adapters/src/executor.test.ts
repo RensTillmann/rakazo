@@ -1164,8 +1164,11 @@ describe("parseUpdateBotPatch", () => {
 });
 
 describe("run notification preference", () => {
-  it("silences direct messages but leaves group notifications enabled", async () => {
-    let source: { bot: { notifyOnFinish: boolean }; thread: { groupId: string | null } } | null = {
+  it("silences direct messages and muted rooms except help and takeover", async () => {
+    let source: {
+      bot: { notifyOnFinish: boolean };
+      thread: { groupId: string | null; group?: { notify: boolean } | null };
+    } | null = {
       bot: { notifyOnFinish: false },
       thread: { groupId: null },
     };
@@ -1189,19 +1192,17 @@ describe("run notification preference", () => {
       },
       select: {
         bot: { select: { notifyOnFinish: true } },
-        thread: { select: { groupId: true } },
+        thread: { select: { groupId: true, group: { select: { notify: true } } } },
       },
     });
 
-    source = { bot: { notifyOnFinish: false }, thread: { groupId: "group-1" } };
-    await expect(
-      runNotificationsEnabled(prisma, {
-        botId: "bot-1",
-        threadId: "thread-1",
-        spaceId: "workspace-1",
-        userId: "user-1",
-      }),
-    ).resolves.toBe(true);
+    source = { bot: { notifyOnFinish: false }, thread: { groupId: "group-1", group: { notify: false } } };
+    const groupRun = { botId: "bot-1", threadId: "thread-1", spaceId: "workspace-1", userId: "user-1" };
+    await expect(runNotificationsEnabled(prisma, groupRun, "completion")).resolves.toBe(false);
+    await expect(runNotificationsEnabled(prisma, groupRun, "help")).resolves.toBe(true);
+    await expect(runNotificationsEnabled(prisma, groupRun, "takeover")).resolves.toBe(true);
+    source = { bot: { notifyOnFinish: false }, thread: { groupId: "group-1", group: { notify: true } } };
+    await expect(runNotificationsEnabled(prisma, groupRun, "completion")).resolves.toBe(true);
   });
 });
 
