@@ -1107,6 +1107,24 @@ model UsageRecord {
   @@map("usage_records")
 }
 
+/// Fleet (RAKAZO_SUBSCRIPTION_LIMITS): subscription-window readings, from the
+/// `anthropic-ratelimit-unified-*` response headers or the idle `/api/oauth/usage` refresh.
+/// Append-only history; the newest row per provider is the current reading.
+model SubscriptionLimitReading {
+  id              String    @id @default(cuid())
+  provider        String
+  /// 0..1; null when the source did not report the window.
+  fiveHourUtil    Float?    @map("five_hour_util")
+  fiveHourResetAt DateTime? @map("five_hour_reset_at")
+  sevenDayUtil    Float?    @map("seven_day_util")
+  sevenDayResetAt DateTime? @map("seven_day_reset_at")
+  status          String?
+  observedAt      DateTime  @default(now()) @map("observed_at")
+
+  @@index([provider, observedAt])
+  @@map("subscription_limit_readings")
+}
+
 model NotificationPreference {
   id       String  @id @default(cuid())
   spaceId  String

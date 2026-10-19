@@ -13,6 +13,7 @@ import type {
   AgentRuntimeEvent,
   AgentUsage,
   ModelCallObserver,
+  SubscriptionLimitReading,
   UsageOperationKind,
 } from "@rakazo/adapter-kit";
 import { Agent } from "undici";
@@ -20,6 +21,7 @@ import type { ContextBudget } from "./context-selection.js";
 import { estimateModelContextTokens } from "./model-context.js";
 import { requestedPiCacheWriteRetention, resolvePiCacheRetention } from "./pi-cache-retention.js";
 import { recordPiTelemetryContent, withPiTelemetrySpan } from "./pi-telemetry.js";
+import { parseRateLimitHeaders } from "./subscription-limits.js";
 import { fetchPairedWithDispatcher } from "./undici-fetch.js";
 
 /** Pi initializes absent usage to zero. Only raw numeric fields can prove reported zero. */
@@ -226,6 +228,8 @@ export function observedPiStream(
     recordUsage?: (event: Extract<AgentRuntimeEvent, { type: "usage" }>) => void | Promise<void>;
     /** Provider failures only; excludes context, reservations and usage settlement. */
     onProviderError?: (message: AssistantMessage) => void;
+    /** Fleet: subscription-window headers of this call (RAKAZO_SUBSCRIPTION_LIMITS). */
+    onRateLimit?: (reading: SubscriptionLimitReading) => void | Promise<void>;
   },
 ) {
   const stream = createAssistantMessageEventStream();
@@ -289,10 +293,30 @@ export function observedPiStream(
         const collectRawUsage =
           /^(openai-|anthropic-)/.test(model.api) && !model.provider.startsWith("google");
         // Each guarded reservation covers one HTTP attempt, not hidden SDK retries.
+        const callerOnResponse = options?.onResponse;
+        const onRateLimit = hooks?.onRateLimit;
         const streamOptions = {
           ...options,
           ...(cacheRetention ? { cacheRetention } : {}),
           ...(observer ? { maxRetries: 0 } : {}),
+          ...(onRateLimit
+            ? {
+                onResponse: async (
+                  response: Parameters<NonNullable<SimpleStreamOptions["onResponse"]>>[0],
+                  requestModel: Parameters<NonNullable<SimpleStreamOptions["onResponse"]>>[1],
+                ) => {
+                  const reading = parseRateLimitHeaders(response.headers, model.provider);
+                  if (reading) {
+                    try {
+                      await onRateLimit(reading);
+                    } catch {
+                      /* A lost reading never fails the model call. */
+                    }
+                  }
+                  return callerOnResponse?.(response, requestModel);
+                },
+              }
+            : {}),
         };
         let upstream: ReturnType<Models["streamSimple"]>;
         try {

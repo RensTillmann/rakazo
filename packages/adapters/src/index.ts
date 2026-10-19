@@ -128,6 +128,7 @@ export { SerenityMemoryProvider } from "./serenity-memory-provider.js";
 export * from "./skill-tools.js";
 export * from "./smtp-email.js";
 export * from "./stripe-billing.js";
+export * from "./subscription-limits.js";
 export { SupermemoryMemoryProvider } from "./supermemory-memory-provider.js";
 export * from "./task-catalog.js";
 export * from "./teaching-session.js";
