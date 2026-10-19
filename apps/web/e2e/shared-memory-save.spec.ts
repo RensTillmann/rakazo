@@ -23,5 +23,5 @@ test("shared memory save writes without an approval card", async ({ page }) => {
     .toBe(content);
   await expect(page.getByRole("button", { name: "Allow once", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Deny", exact: true })).toHaveCount(0);
-  await expect(page.getByText(/Review before saving shared memory/)).toHaveCount(0);
+  await expect(page.getByText(/wants to save to the shared memory/)).toHaveCount(0);
 });

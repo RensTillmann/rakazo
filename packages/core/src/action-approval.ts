@@ -424,6 +424,12 @@ export function isSecretAskBlock(block: {
   return block.kind === "ask" && block.input === "secret" && !block.approvalEffectId;
 }
 
+/**
+ * Fleet: the approval-card detail line for a card a tool-level or shell `require_approval` rule
+ * caused; the web card shows it translated.
+ */
+export const APPROVAL_NEVER_AUTOMATIC_LINE = "Always asks you (never automatic)";
+
 export function isApprovalAskBlock(block: {
   kind: string;
   approvalEffectId?: string;

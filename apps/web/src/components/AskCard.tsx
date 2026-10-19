@@ -8,6 +8,7 @@ import { Button, Input, Textarea } from "@rakazo/ui-web";
 import { useState } from "react";
 import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
+import { ApprovalDetail } from "./ApprovalDetail";
 
 export type AskBlock = Extract<ThreadMessage["blocks"][number], { kind: "ask" }>;
 
@@ -167,15 +168,19 @@ export function AskCard({
         </div>
       ) : null}
       {block.detail && !secretInput ? (
-        <pre
-          className={
-            block.detailFormat === "text"
-              ? "mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words font-sans text-[15.5px] leading-[1.5] text-foreground"
-              : "mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.7] text-muted-foreground"
-          }
-        >
-          {block.detail}
-        </pre>
+        approvalActions && !block.instructionUpdate && !block.detailFormat ? (
+          <ApprovalDetail detail={block.detail} />
+        ) : (
+          <pre
+            className={
+              block.detailFormat === "text"
+                ? "mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words font-sans text-[15.5px] leading-[1.5] text-foreground"
+                : "mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.7] text-muted-foreground"
+            }
+          >
+            {block.detail}
+          </pre>
+        )
       ) : null}
       {block.instructionUpdate && editing && canAnswer && block.status !== "answered" ? (
         <form
