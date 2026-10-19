@@ -5,6 +5,8 @@ import {
   STUCK_WORK_EXPIRE_AFTER_MS,
   STUCK_WORK_NOTIFY_AFTER_MS,
   stuckWorkAction,
+  stuckWorkExpireAfterMs,
+  stuckWorkNotifyAfterMs,
   stuckWorkReminder,
   stuckWorkStatusMessage,
   stuckWorkStatusMessages,
@@ -30,6 +32,24 @@ describe("stuck work age", () => {
       "expire",
     );
   });
+
+  it("reads RAKAZO_STUCK_NOTIFY_HOURS and RAKAZO_STUCK_EXPIRE_HOURS", () => {
+    const hour = 60 * 60 * 1000;
+    const env = { RAKAZO_STUCK_NOTIFY_HOURS: "1", RAKAZO_STUCK_EXPIRE_HOURS: "2.5" };
+    expect(stuckWorkNotifyAfterMs(env)).toBe(hour);
+    expect(stuckWorkExpireAfterMs(env)).toBe(2.5 * hour);
+    expect(stuckWorkAction({ ageMs: hour, alreadyNotified: false }, env)).toBe("notify");
+    expect(stuckWorkAction({ ageMs: 2.5 * hour, alreadyNotified: true }, env)).toBe("expire");
+  });
+
+  it.each([undefined, "", " ", "abc", "0", "-3", "Infinity"])(
+    "keeps the constants when the hours are %j",
+    (value) => {
+      const env = { RAKAZO_STUCK_NOTIFY_HOURS: value, RAKAZO_STUCK_EXPIRE_HOURS: value };
+      expect(stuckWorkNotifyAfterMs(env)).toBe(STUCK_WORK_NOTIFY_AFTER_MS);
+      expect(stuckWorkExpireAfterMs(env)).toBe(STUCK_WORK_EXPIRE_AFTER_MS);
+    },
+  );
 
   it("treats only queued and human waits as stuck", () => {
     expect(isStuckWorkStatus("queued")).toBe(true);

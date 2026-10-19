@@ -8,6 +8,26 @@ export const STUCK_WORK_NOTIFY_AFTER_MS = 4 * 60 * 60 * 1000;
  *  the reminder for someone to answer before the thread is freed. */
 export const STUCK_WORK_EXPIRE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+type StuckWorkEnv = Record<string, string | undefined>;
+
+// The web bundle shares this module and has no `process`; it then keeps the constants.
+const runtimeEnv = (): StuckWorkEnv => (typeof process === "undefined" ? {} : process.env);
+
+function hoursFromEnv(raw: string | undefined, fallbackMs: number): number {
+  const hours = Number(raw?.trim() || Number.NaN);
+  return Number.isFinite(hours) && hours > 0 ? hours * 60 * 60 * 1000 : fallbackMs;
+}
+
+/** Fleet: RAKAZO_STUCK_NOTIFY_HOURS overrides the reminder; unset or invalid keeps 4 h. */
+export function stuckWorkNotifyAfterMs(env: StuckWorkEnv = runtimeEnv()): number {
+  return hoursFromEnv(env.RAKAZO_STUCK_NOTIFY_HOURS, STUCK_WORK_NOTIFY_AFTER_MS);
+}
+
+/** Fleet: RAKAZO_STUCK_EXPIRE_HOURS overrides the expiry; unset or invalid keeps 24 h. */
+export function stuckWorkExpireAfterMs(env: StuckWorkEnv = runtimeEnv()): number {
+  return hoursFromEnv(env.RAKAZO_STUCK_EXPIRE_HOURS, STUCK_WORK_EXPIRE_AFTER_MS);
+}
+
 /** Marker on a thread.meta event so a reminder is sent once per waiting episode. */
 export const STUCK_WORK_NOTICE = "stuck";
 
@@ -27,12 +47,12 @@ export function stuckWorkAgeMs(updatedAt: Date | string, now: Date): number {
 }
 
 /** `alreadyNotified` is for this episode (the run's current updatedAt), not an older one. */
-export function stuckWorkAction(input: {
-  ageMs: number;
-  alreadyNotified: boolean;
-}): StuckWorkAction {
-  if (input.ageMs >= STUCK_WORK_EXPIRE_AFTER_MS) return "expire";
-  if (input.ageMs >= STUCK_WORK_NOTIFY_AFTER_MS && !input.alreadyNotified) return "notify";
+export function stuckWorkAction(
+  input: { ageMs: number; alreadyNotified: boolean },
+  env: StuckWorkEnv = runtimeEnv(),
+): StuckWorkAction {
+  if (input.ageMs >= stuckWorkExpireAfterMs(env)) return "expire";
+  if (input.ageMs >= stuckWorkNotifyAfterMs(env) && !input.alreadyNotified) return "notify";
   return "none";
 }
 
@@ -43,7 +63,7 @@ export function isAgedStuckWork(
   now = Date.now(),
 ): boolean {
   if (!isStuckWorkStatus(status)) return false;
-  return stuckWorkAgeMs(updatedAt, new Date(now)) >= STUCK_WORK_NOTIFY_AFTER_MS;
+  return stuckWorkAgeMs(updatedAt, new Date(now)) >= stuckWorkNotifyAfterMs();
 }
 
 export function stuckWorkExpiredNonce(runId: string): string {
