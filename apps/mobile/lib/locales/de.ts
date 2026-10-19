@@ -282,6 +282,7 @@ export const DE_MESSAGES: Record<string, string> = {
   Name: "Name",
   "Name this bot": "Bot benennen",
   "Read replies aloud": "Antworten vorlesen",
+  "Notifications for this room": "Benachrichtigungen für diesen Raum",
   Save: "Speichern",
   "Saving…": "Wird gespeichert…",
   "Space default": "Space-Standard",

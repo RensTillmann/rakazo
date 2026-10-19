@@ -527,6 +527,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Space created": "空间已创建",
   "Space default": "空间默认",
   "Read replies aloud": "朗读回复",
+  "Notifications for this room": "此房间的通知",
   "Speak + transcribe": "朗读并转写",
   "Speak message": "朗读消息",
   Play: "播放",

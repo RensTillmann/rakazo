@@ -3,6 +3,7 @@ import { runContinueJob } from "@rakazo/adapter-kit";
 import type { StuckWorkStatus } from "@rakazo/core";
 import {
   isStuckWorkStatus,
+  runPushEnabled,
   STUCK_WORK_NOTICE,
   STUCK_WORK_STATUSES,
   stuckWorkAction,
@@ -29,7 +30,7 @@ type StuckCandidate = {
   userId: string;
   taskId: string;
   bot: { name: string; notifyOnFinish: boolean };
-  thread: { groupId: string | null };
+  thread: { groupId: string | null; group?: { notify: boolean } | null };
 };
 
 /**
@@ -86,7 +87,7 @@ export async function reconcileStuckWork(deps: {
       userId: true,
       taskId: true,
       bot: { select: { name: true, notifyOnFinish: true } },
-      thread: { select: { groupId: true } },
+      thread: { select: { groupId: true, group: { select: { notify: true } } } },
     },
   });
 
@@ -149,8 +150,12 @@ function readyStuckRun(
   };
 }
 
-function noticesEnabled(run: StuckCandidate): boolean {
-  return Boolean(run.thread.groupId || run.bot.notifyOnFinish);
+function noticesEnabled(run: StuckCandidate, kind: string): boolean {
+  return runPushEnabled({
+    groupNotify: run.thread.groupId ? (run.thread.group?.notify ?? false) : null,
+    notifyOnFinish: run.bot.notifyOnFinish,
+    kind,
+  });
 }
 
 type StuckNoticePayload = {
@@ -203,13 +208,13 @@ async function remindStuckRun(
 ) {
   // A skipped push (notices off, no provider, or no push token yet) stays unmarked
   // so a later sweep can still remind during this same wait.
-  if (!deps.notifications || !noticesEnabled(run)) return;
+  const reminder = stuckWorkReminder(run.status, run.bot.name);
+  if (!deps.notifications || !noticesEnabled(run, reminder.kind)) return;
   if (!(await pushCanDeliver(deps.notifications, run.userId))) return;
   const claimId = await withTransactionRetry(() =>
     deps.prisma.$transaction((tx) => claimStuckReminder(tx, run, deps.now)),
   );
   if (!claimId) return;
-  const reminder = stuckWorkReminder(run.status, run.bot.name);
   const delivery = await sendStuckNotice(deps.notifications, run, {
     kind: reminder.kind,
     title: reminder.title,
@@ -336,8 +341,8 @@ async function expireOne(
       getLogger().error("stuck work continuation", error);
     });
   }
-  if (!deps.notifications || !noticesEnabled(run)) return;
   const stopped = stuckWorkStoppedNotification(run.status, run.bot.name);
+  if (!deps.notifications || !noticesEnabled(run, stopped.kind)) return;
   await sendStuckNotice(deps.notifications, run, {
     kind: stopped.kind,
     title: stopped.title,

@@ -1,10 +1,11 @@
 import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN } from "@rakazo/contracts";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, Text, TextInput } from "react-native";
+import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { BotMemberPicker } from "../components/bot-member-picker";
 import { glassHeaderOptions } from "../components/glass-title";
 import { NativeActionButton } from "../components/native-action-button";
+import { NativeSwitch } from "../components/native-switch";
 import { type MobileBot, type MobileGroup, rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { native, useMobileTokens } from "../lib/native";
@@ -19,6 +20,7 @@ export default function GroupSettingsScreen() {
   const [bots, setBots] = useState<MobileBot[]>([]);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [notify, setNotify] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -35,6 +37,7 @@ export default function GroupSettingsScreen() {
         setGroup(nextGroup);
         setName(nextGroup.name);
         setSelected(nextGroup.members.map((member) => member.botId));
+        setNotify(nextGroup.notify ?? false);
         setBots(nextBots.filter((bot) => !bot.archivedAt));
       })
       .catch((err) => setError(errorText(err, t("Could not load group"))));
@@ -45,11 +48,16 @@ export default function GroupSettingsScreen() {
     setPending(true);
     setError(null);
     try {
-      const input: { groupId: string; name?: string; botIds?: string[] } = { groupId };
+      const input: { groupId: string; name?: string; botIds?: string[]; notify?: boolean } = {
+        groupId,
+      };
       if (name.trim() !== group.name) input.name = name.trim();
       const memberIds = group.members.map((member) => member.botId).join(",");
       if (selected.join(",") !== memberIds) input.botIds = selected;
-      if (input.name || input.botIds) await rpc("groups/update", input);
+      if (notify !== (group.notify ?? false)) input.notify = notify;
+      if (input.name || input.botIds || input.notify !== undefined) {
+        await rpc("groups/update", input);
+      }
       router.back();
     } catch (err) {
       setError(errorText(err, t("Could not save group")));
@@ -107,6 +115,25 @@ export default function GroupSettingsScreen() {
           onChange={setSelected}
           disabled={pending}
         />
+        <View
+          style={{
+            marginTop: 20,
+            minHeight: 44,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <Text style={{ color: tokens.mutedForeground, fontSize: 14, flex: 1 }}>
+            {t("Notifications for this room")}
+          </Text>
+          <NativeSwitch
+            accessibilityLabel={t("Notifications for this room")}
+            onValueChange={setNotify}
+            value={notify}
+          />
+        </View>
         {error ? <Text style={{ color: tokens.destructive, marginTop: 12 }}>{error}</Text> : null}
         <NativeActionButton
           disabled={

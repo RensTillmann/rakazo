@@ -32,8 +32,11 @@ describe("run activity copy", () => {
 });
 
 describe("run activity notification preference", () => {
-  it("silences only direct messages", () => {
-    expect(activityNotificationsEnabled(null, false)).toBe(false);
-    expect(activityNotificationsEnabled("group-1", false)).toBe(true);
+  it("follows the bot outside rooms and the room's switch inside one", () => {
+    expect(activityNotificationsEnabled(null, null, false)).toBe(false);
+    expect(activityNotificationsEnabled(null, null, true)).toBe(true);
+    expect(activityNotificationsEnabled("group-1", false, true)).toBe(false);
+    expect(activityNotificationsEnabled("group-1", true, false)).toBe(true);
+    expect(activityNotificationsEnabled("group-1", null, true)).toBe(false);
   });
 });

@@ -1,6 +1,11 @@
 import type { Actor, RunActivityRow } from "@rakazo/contracts";
 import { MessageBlock } from "@rakazo/contracts";
-import { ACTIVE_RUN_STATUSES, BACKGROUND_RUN_TRIGGERS, botMessageContext } from "@rakazo/core";
+import {
+  ACTIVE_RUN_STATUSES,
+  BACKGROUND_RUN_TRIGGERS,
+  botMessageContext,
+  runPushEnabled,
+} from "@rakazo/core";
 import type { PrismaClient } from "@rakazo/db";
 
 const RECENT_LIMIT = 20;
@@ -30,9 +35,13 @@ export function activityPromptSnippet(
 
 export function activityNotificationsEnabled(
   groupId: string | null,
+  groupNotify: boolean | null,
   notifyOnFinish: boolean,
 ): boolean {
-  return groupId !== null || notifyOnFinish;
+  return runPushEnabled({
+    groupNotify: groupId === null ? null : (groupNotify ?? false),
+    notifyOnFinish,
+  });
 }
 
 export async function listSpaceRuns(
@@ -58,7 +67,7 @@ export async function listSpaceRuns(
       thread: {
         select: {
           groupId: true,
-          group: { select: { name: true } },
+          group: { select: { name: true, notify: true } },
         },
       },
     },
@@ -78,7 +87,11 @@ export async function listSpaceRuns(
     threadId: row.threadId,
     status: row.status as RunActivityRow["status"],
     trigger: row.trigger as RunActivityRow["trigger"],
-    notificationsEnabled: activityNotificationsEnabled(row.thread.groupId, row.bot.notifyOnFinish),
+    notificationsEnabled: activityNotificationsEnabled(
+      row.thread.groupId,
+      row.thread.group?.notify ?? null,
+      row.bot.notifyOnFinish,
+    ),
     promptSnippet: activityPromptSnippet({
       trigger: row.trigger,
       prompt: row.task.prompt,

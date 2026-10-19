@@ -549,6 +549,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Space actions for {name}": "Действия пространства {name}",
   "Space created": "Пространство создано",
   "Read replies aloud": "Читать ответы вслух",
+  "Notifications for this room": "Уведомления для этой комнаты",
   "Speak + transcribe": "Озвучить и расшифровать",
   "Speak message": "Озвучить сообщение",
   Play: "Воспроизвести",
