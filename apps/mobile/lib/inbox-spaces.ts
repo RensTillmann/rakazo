@@ -78,8 +78,10 @@ export function spaceInboxItems(
   });
   // Fleet patch: active bots (working, waiting for an answer, unread) lead the whole list,
   // newest activity first; rooms and everything else keep their place.
-  const ordered = orderRosterWithActiveFirst(
-    perSpace.flatMap((entry) => entry.groups),
+  const allGroups = perSpace.flatMap((entry) => entry.groups);
+  type InboxGroup = (typeof allGroups)[number];
+  const ordered = orderRosterWithActiveFirst<InboxGroup["bots"][number], InboxGroup>(
+    allGroups,
     activity,
     (item) => (item.type === "bot" ? item.id : null),
   );

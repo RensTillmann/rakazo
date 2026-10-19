@@ -1,7 +1,12 @@
 import { MenuView } from "@expo/ui/community/menu";
 import type { RunActivityRow, SearchHit, SpaceBot, SpaceGroup } from "@rakazo/contracts";
 import { normalizeCreateBotProfile } from "@rakazo/contracts";
-import { ACTIVE_RUN_STATUSES, type RosterActivityState, trackRosterActivity } from "@rakazo/core";
+import {
+  ACTIVE_RUN_STATUSES,
+  type RosterActivityBot,
+  type RosterActivityState,
+  trackRosterActivity,
+} from "@rakazo/core";
 import { botColors } from "@rakazo/ui-tokens";
 import { Redirect, useFocusEffect, useNavigation, useRouter } from "expo-router";
 import type { ReactNode } from "react";
@@ -426,7 +431,7 @@ function Home() {
             ]
           : [];
     // Fleet patch: active bots lead the inbox; the state starts at the first non-empty list.
-    const rosterBots = sidebarSpaces.flatMap((space) => space.bots);
+    const rosterBots = sidebarSpaces.flatMap((space): RosterActivityBot[] => space.bots);
     const activity =
       rosterBots.length > 0
         ? trackRosterActivity(rosterActivityRef.current, rosterBots)
