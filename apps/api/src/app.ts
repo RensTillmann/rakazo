@@ -660,7 +660,10 @@ export async function createApp(
     const actor = await actorFromMembership(
       requireMembership(prisma, session.user.id, request.headers.get("x-rakazo-space-id")),
     );
-    return actor && { actor, sessionId: session.session.id };
+    // Fleet: the session's own user agent (set at sign-in; named for the fleet service and the
+    // UI driver) tells devices apart better than the request header, which a driven browser shares.
+    const sessionUserAgent = (session.session as { userAgent?: string | null }).userAgent ?? undefined;
+    return actor && { actor, sessionId: session.session.id, sessionUserAgent };
   };
   const sessionActor = async (request: Request) => (await requestSession(request))?.actor ?? null;
   app.use("/rpc/*", async (c, next) => {
@@ -674,7 +677,7 @@ export async function createApp(
       context: {
         actor,
         sessionId: session?.sessionId,
-        userAgent: c.req.header("user-agent") ?? undefined,
+        userAgent: session?.sessionUserAgent || c.req.header("user-agent") || undefined,
         signal: c.req.raw.signal,
         // Same user in the same space, so leaving the space also ends a stream.
         // A database failure rejects this check; only a missing membership is unauthorized.
