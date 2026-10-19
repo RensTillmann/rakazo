@@ -17,7 +17,12 @@ export function MessageCaption({
 }) {
   // User messages keep literal Markdown; only explicit URLs and email addresses link.
   return role === "user" ? (
-    <LinkifiedText color={tokens.secondaryForeground} linkColor={tokens.link} palette={tokens}>
+    <LinkifiedText
+      color={tokens.secondaryForeground}
+      linkColor={tokens.link}
+      palette={tokens}
+      colorScheme={colorScheme}
+    >
       {text}
     </LinkifiedText>
   ) : (

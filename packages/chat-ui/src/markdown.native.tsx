@@ -32,7 +32,7 @@ import {
   Text,
   View,
 } from "react-native";
-import type { ChatMarkdownProps } from "./markdown";
+import type { ChatMarkdownProps, MentionBot } from "./markdown";
 import {
   inlineMarkdownImageSrc,
   LinkFaviconsContext,
@@ -42,6 +42,8 @@ import {
   linkLabel,
   markdownLinkRequiresConfirmation,
   markRemoteImageLoaded,
+  MentionBotsContext,
+  mentionParts,
   plainTextLinkParts,
   RemoteImagesContext,
   remoteImageRenders,
@@ -406,6 +408,37 @@ function textStyleForParents(
   return style;
 }
 
+/** The theme a message draws in, so a mention picks its colour variant. */
+const MentionSchemeContext = createContext<ResolvedAppearance>("dark");
+
+function mentionStyle(bot: MentionBot, scheme: ResolvedAppearance): TextStyle {
+  return {
+    color: scheme === "light" ? bot.color.onLight : bot.color.onDark,
+    fontWeight: "500",
+  };
+}
+
+/** Text with `@Name` mentions of known bots drawn in each bot's colour. */
+function MentionedText({
+  children,
+  scheme,
+}: {
+  children: string;
+  scheme?: ResolvedAppearance;
+}): ReactNode {
+  const bots = useContext(MentionBotsContext);
+  const contextScheme = useContext(MentionSchemeContext);
+  return mentionParts(children, bots).map((part, index) =>
+    part.type === "text" ? (
+      part.value
+    ) : (
+      <Text key={index} style={mentionStyle(part.bot, scheme ?? contextScheme)}>
+        {part.value}
+      </Text>
+    ),
+  );
+}
+
 const TABLE_FONT_SIZE = 15.5;
 const TABLE_LINE_HEIGHT = 23;
 const TABLE_CELL_PADDING = 5;
@@ -763,7 +796,7 @@ const renderRules: RenderRules = {
   ),
   text: (node, _children, parents, styleMap, inherited) => (
     <Text key={node.key} style={textStyleForParents(inherited, parents, styleMap)}>
-      {node.content}
+      {enclosingLink(parents) ? node.content : <MentionedText>{node.content}</MentionedText>}
     </Text>
   ),
   table: (node, children, _parent, styleMap) => (
@@ -1004,6 +1037,8 @@ type LinkifiedTextProps = {
   color: string;
   linkColor: string;
   palette: ColorTokens;
+  /** The theme, so `@Name` mentions pick the readable colour variant. */
+  colorScheme?: ResolvedAppearance;
 };
 
 export const LinkifiedText = memo(function LinkifiedText({
@@ -1011,6 +1046,7 @@ export const LinkifiedText = memo(function LinkifiedText({
   color,
   linkColor,
   palette,
+  colorScheme = "dark",
 }: LinkifiedTextProps) {
   const openLink = useNativeLinkConfirm();
   const labelStyle: TextStyle = {
@@ -1027,7 +1063,13 @@ export const LinkifiedText = memo(function LinkifiedText({
       ]}
     >
       {plainTextLinkParts(children).map((part, index) => {
-        if (part.type === "text") return part.value;
+        if (part.type === "text") {
+          return (
+            <MentionedText key={index} scheme={colorScheme}>
+              {part.value}
+            </MentionedText>
+          );
+        }
         const open = () => {
           openLink(part.href);
         };
@@ -1095,6 +1137,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
       <View style={layout.wrap}>
         <LinkFaviconsPausedContext.Provider value={streaming}>
           <DiagramSurfaceContext.Provider value={diagramSurface}>
+            <MentionSchemeContext.Provider value={colorScheme}>
             {streaming ? (
               <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
                 {children}
@@ -1102,6 +1145,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
             ) : (
               <Markdown {...sharedProps}>{children}</Markdown>
             )}
+            </MentionSchemeContext.Provider>
           </DiagramSurfaceContext.Provider>
         </LinkFaviconsPausedContext.Provider>
       </View>
@@ -1155,6 +1199,6 @@ const layout = StyleSheet.create({
   },
 });
 
-export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
-export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";
+export type { ChatMarkdownProps, LinkFavicons, MentionBot } from "./markdown";
+export { LinkFaviconsContext, MentionBotsContext, RemoteImagesContext } from "./markdown";
 export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";

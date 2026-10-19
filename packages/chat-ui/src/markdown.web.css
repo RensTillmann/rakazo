@@ -340,3 +340,13 @@ a.rk-chat-link .rk-chat-link-tile > svg {
 a.rk-chat-link:hover .rk-chat-link-label {
   text-decoration-color: currentColor;
 }
+
+/* An @mention of a bot, in that bot's avatar colour for the current theme. */
+.rk-mention {
+  color: var(--rk-mention-on-light);
+  font-weight: 500;
+}
+
+[data-theme="dark"] .rk-mention {
+  color: var(--rk-mention-on-dark);
+}

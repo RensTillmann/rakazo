@@ -1,5 +1,5 @@
 import type { MenuAction } from "@expo/ui/community/menu";
-import { ChatMarkdown } from "@rakazo/chat-ui/native";
+import { ChatMarkdown, type MentionBot, MentionBotsContext } from "@rakazo/chat-ui/native";
 import type {
   AgentSkillCatalogEntry,
   Connection,
@@ -19,6 +19,7 @@ import {
   abortableDelay,
   appendNewerThreadPage,
   attachmentsForThread,
+  botMentionTextColors,
   buildComposerMentionOptions,
   cloudAgentHttpsUrl,
   expandPeerReplies,
@@ -580,6 +581,16 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   // The call outlives renders, so its switch check reads the newest bot list from here.
   const mentionBotsRef = useRef<MobileBot[]>([]);
   mentionBotsRef.current = mentionBots;
+  // `@Name` in message text takes the bot's avatar colour; the space's bots are the names known.
+  const mentionColorBots = useMemo<MentionBot[]>(
+    () =>
+      mentionBots.map((bot) => ({
+        id: bot.id,
+        names: [bot.name],
+        color: botMentionTextColors(bot.id, bot.color),
+      })),
+    [mentionBots],
+  );
   const [mentionGroups, setMentionGroups] = useState<MobileGroup[]>([]);
   const [mentionRoutines, setMentionRoutines] = useState<Array<Routine & { botName?: string }>>([]);
   const [mentionConnectors, setMentionConnectors] = useState<
@@ -2388,6 +2399,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   ));
 
   return (
+    <MentionBotsContext.Provider value={mentionColorBots}>
     <KeyboardAvoidingView
       behavior="height"
       // Android lays out the screen below the opaque native navigation header.
@@ -2776,6 +2788,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
         />
       ) : null}
     </KeyboardAvoidingView>
+    </MentionBotsContext.Provider>
   );
 }
 

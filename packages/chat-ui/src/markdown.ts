@@ -421,3 +421,105 @@ export function closeUnterminatedFence(markdown: string): string {
 
   return openFence ? `${markdown}\n${openFence.marker.repeat(openFence.length)}` : markdown;
 }
+
+/** A bot that `@Name` in message text refers to, with its avatar colour for each theme. */
+export type MentionBot = {
+  id: string;
+  /** Display name, plus any handle the mention system accepts. */
+  names: readonly string[];
+  color: { onLight: string; onDark: string };
+};
+
+/** The bots the reader can see. Apps provide the space's bots; empty leaves mentions plain. */
+export const MentionBotsContext = createContext<readonly MentionBot[]>([]);
+
+export type MentionPart =
+  | { type: "text"; value: string }
+  | { type: "mention"; value: string; bot: MentionBot };
+
+type MentionNames = { names: readonly string[]; byName: Map<string, MentionBot> };
+
+const mentionNameCache = new WeakMap<readonly MentionBot[], MentionNames>();
+
+function mentionNames(bots: readonly MentionBot[]): MentionNames {
+  const cached = mentionNameCache.get(bots);
+  if (cached) return cached;
+  const byName = new Map<string, MentionBot>();
+  for (const bot of bots) {
+    for (const name of bot.names) {
+      const key = name.trim().toLowerCase();
+      if (key && !byName.has(key)) byName.set(key, bot);
+    }
+  }
+  // Longest first, so "Super Forms Bot" wins over "Super".
+  const names = [...byName.keys()].sort((a, b) => b.length - a.length);
+  const result = { names, byName };
+  mentionNameCache.set(bots, result);
+  return result;
+}
+
+function isWordChar(char: string | undefined) {
+  if (!char) return false;
+  return /[0-9_]/.test(char) || char.toLowerCase() !== char.toUpperCase();
+}
+
+/** The index just past a code span opening at `start`, or undefined when the run never closes. */
+function codeSpanEnd(text: string, start: number): number | undefined {
+  let run = 0;
+  while (text[start + run] === "`") run += 1;
+  const fence = "`".repeat(run);
+  let close = text.indexOf(fence, start + run);
+  while (close !== -1) {
+    let closeRun = 0;
+    while (text[close + closeRun] === "`") closeRun += 1;
+    if (closeRun === run) return close + run;
+    close = text.indexOf(fence, close + closeRun);
+  }
+  return undefined;
+}
+
+/**
+ * Split message text into literal runs and `@Name` mentions of known bots. Names match without
+ * regard to case, longest first, and only as whole words; `a@quinn.com` and code spans stay text.
+ */
+export function mentionParts(text: string, bots: readonly MentionBot[]): MentionPart[] {
+  if (!text.includes("@") || bots.length === 0) return [{ type: "text", value: text }];
+  const { names, byName } = mentionNames(bots);
+  const parts: MentionPart[] = [];
+  let last = 0;
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    if (char === "`") {
+      const end = codeSpanEnd(text, index);
+      if (end !== undefined) {
+        index = end;
+        continue;
+      }
+      while (text[index] === "`") index += 1;
+      continue;
+    }
+    if (char === "@" && !isWordChar(text[index - 1])) {
+      const name = names.find((candidate) => {
+        const end = index + 1 + candidate.length;
+        return (
+          text.slice(index + 1, end).toLowerCase() === candidate && !isWordChar(text[end])
+        );
+      });
+      const bot = name ? byName.get(name) : undefined;
+      if (name && bot) {
+        const end = index + 1 + name.length;
+        if (index > last) parts.push({ type: "text", value: text.slice(last, index) });
+        parts.push({ type: "mention", value: text.slice(index, end), bot });
+        last = end;
+        index = end;
+        continue;
+      }
+    }
+    index += 1;
+  }
+  if (last < text.length || parts.length === 0) {
+    parts.push({ type: "text", value: text.slice(last) });
+  }
+  return parts;
+}

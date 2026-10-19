@@ -1,7 +1,6 @@
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { createContext, memo, useCallback, useContext, useRef, useState } from "react";
-import type { Components } from "react-markdown";
-import ReactMarkdown from "react-markdown";
+import { createContext, memo, useCallback, useContext, useMemo, useRef, useState } from "react";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { HastNode } from "./table-utils";
 import "./markdown.web.css";
@@ -18,7 +17,7 @@ import {
   AlertDialogTitle,
 } from "@rakazo/ui-web";
 import { CheckIcon, CopyIcon, GlobeIcon, ImageIcon } from "./icons";
-import type { ChatMarkdownProps } from "./markdown";
+import type { ChatMarkdownProps, MentionBot } from "./markdown";
 import {
   closeUnterminatedFence,
   inlineMarkdownImageSrc,
@@ -28,6 +27,8 @@ import {
   markdownLinkDisplayParts,
   markdownLinkRequiresConfirmation,
   markRemoteImageLoaded,
+  MentionBotsContext,
+  mentionParts,
   plainTextLinkParts,
   RemoteImagesContext,
   remoteImageRenders,
@@ -56,6 +57,74 @@ function preserveSkippedTableText() {
     };
     walk(tree);
   };
+}
+
+const MENTION_TAGS_SKIPPED = new Set(["a", "code", "pre"]);
+
+/** Wrap `@Name` mentions of known bots in text outside links and code. */
+function markMentions(bots: readonly MentionBot[]) {
+  return (tree: HastNode) => {
+    if (bots.length === 0) return;
+    const walk = (node: HastNode) => {
+      if (!node.children || MENTION_TAGS_SKIPPED.has(node.tagName ?? "")) return;
+      node.children = node.children.flatMap((child): HastNode[] => {
+        if (child.type !== "text") {
+          walk(child);
+          return [child];
+        }
+        const parts = mentionParts(child.value ?? "", bots);
+        if (parts.length === 1 && parts[0]?.type === "text") return [child];
+        return parts.map((part) =>
+          part.type === "text"
+            ? { type: "text", value: part.value }
+            : {
+                type: "element",
+                tagName: "span",
+                properties: { dataMentionBot: part.bot.id },
+                children: [{ type: "text", value: part.value }],
+              },
+        );
+      });
+    };
+    walk(tree);
+  };
+}
+
+export function BotMention({ bot, children }: { bot: MentionBot; children: ReactNode }) {
+  const style = {
+    "--rk-mention-on-light": bot.color.onLight,
+    "--rk-mention-on-dark": bot.color.onDark,
+  } as CSSProperties;
+  return (
+    <span className="rk-mention" data-mention-bot={bot.id} style={style}>
+      {children}
+    </span>
+  );
+}
+
+function MarkdownSpan({
+  node: _node,
+  children,
+  ...props
+}: React.ComponentPropsWithoutRef<"span"> & { node?: unknown; "data-mention-bot"?: string }) {
+  const bots = useContext(MentionBotsContext);
+  const botId = props["data-mention-bot"];
+  const bot = botId ? bots.find((candidate) => candidate.id === botId) : undefined;
+  if (bot) return <BotMention bot={bot}>{children}</BotMention>;
+  return <span {...props}>{children}</span>;
+}
+
+function MentionedText({ children }: { children: string }) {
+  const bots = useContext(MentionBotsContext);
+  return mentionParts(children, bots).map((part, index) =>
+    part.type === "text" ? (
+      part.value
+    ) : (
+      <BotMention key={index} bot={part.bot}>
+        {part.value}
+      </BotMention>
+    ),
+  );
 }
 
 function CopyButton({ read, label }: { read: () => string; label: string }) {
@@ -487,6 +556,7 @@ const components: Components = {
     );
   },
   pre: MarkdownPre,
+  span: MarkdownSpan,
   table({ node, children, ...props }) {
     return (
       <MarkdownTable node={node} tableProps={props}>
@@ -502,7 +572,7 @@ export function LinkifiedText({ children }: { children: string }) {
     <ConfirmLinkContext.Provider value={request}>
       {plainTextLinkParts(children).map((part, index) =>
         part.type === "text" ? (
-          part.value
+          <MentionedText key={index}>{part.value}</MentionedText>
         ) : linkFaviconOrigin(part.href) ? (
           <WebsiteLink key={index} href={part.href}>
             {linkLabel(part.value, part.href)}
@@ -524,6 +594,11 @@ export const ChatMarkdown = memo(function ChatMarkdown({
 }: ChatMarkdownProps) {
   const { request, dialog } = useExternalLinkConfirm();
   const source = streaming ? closeUnterminatedFence(children) : children;
+  const mentionBots = useContext(MentionBotsContext);
+  const rehypePlugins = useMemo<Options["rehypePlugins"]>(
+    () => [preserveSkippedTableText, [markMentions, mentionBots]],
+    [mentionBots],
+  );
 
   return (
     <ConfirmLinkContext.Provider value={request}>
@@ -536,7 +611,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
               <ReactMarkdown
                 components={components}
                 remarkPlugins={[remarkGfm]}
-                rehypePlugins={[preserveSkippedTableText]}
+                rehypePlugins={rehypePlugins}
                 skipHtml
                 // MarkdownImage decides what an image source may do, so it receives the source as written.
                 urlTransform={(url, key) =>
@@ -555,7 +630,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   );
 });
 
-export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
-export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";
+export type { ChatMarkdownProps, LinkFavicons, MentionBot } from "./markdown";
+export { LinkFaviconsContext, MentionBotsContext, RemoteImagesContext } from "./markdown";
 
 export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";

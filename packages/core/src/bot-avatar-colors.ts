@@ -149,6 +149,26 @@ export function resolvePersonaColorDef(
   return GROK_COLOR_LIST[index % GROK_COLOR_LIST.length] ?? GROK_COLOR_LIST[0]!;
 }
 
+/**
+ * The colour a bot's name takes in message text, readable on each theme. The persona's darker
+ * stop sits on light backgrounds (darkened further when it is still pale, as for Staff White);
+ * the lighter stop sits on dark ones. `rawColor` is the stored avatar value, shape suffix and all.
+ */
+export function botMentionTextColors(
+  botId: string,
+  rawColor?: string | null,
+): { onLight: string; onDark: string } {
+  const color =
+    !rawColor || rawColor.startsWith("data:image/")
+      ? "#F97316"
+      : rawColor.split("::shape_")[0] || "#F97316";
+  const def = resolvePersonaColorDef(botId || color, color);
+  return {
+    onLight: isColorBright(def.dark) ? darkenHex(def.dark, 45) : def.dark,
+    onDark: def.light,
+  };
+}
+
 function expandHex(hex: string): string {
   const c = hex.replace("#", "");
   if (c.length === 3) {
