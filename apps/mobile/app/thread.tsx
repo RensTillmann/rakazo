@@ -3027,6 +3027,8 @@ const MessageRow = memo(function MessageRow({
   const tokens = useMobileTokens();
   const colorScheme = useResolvedAppearance();
   const { t, locale } = useI18n();
+  // Fleet patch: a routine run's own output folds to one muted line in a bot's 1:1 chat.
+  const [routineLogExpanded, setRoutineLogExpanded] = useState(false);
   const artifactTarget = useMemo<MobileArtifactTarget | undefined>(
     () => (groupId ? { groupId } : botId ? { botId } : undefined),
     [botId, groupId],
@@ -3148,6 +3150,30 @@ const MessageRow = memo(function MessageRow({
       },
     };
   }, [message, actions, readOnly, onCall, colorScheme, t, locale]);
+  const routineLogRow =
+    message.routineLog && !inGroup ? (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: routineLogExpanded }}
+        onPress={() => setRoutineLogExpanded((expanded) => !expanded)}
+        style={{ paddingVertical: 4 }}
+      >
+        <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+          {t("Routine log · {name} · {time}", {
+            name: message.routineLog,
+            time: message.createdAt ? formatMessageTime(message.createdAt, dateLocaleForUi()) : "",
+          })}
+        </Text>
+      </Pressable>
+    ) : null;
+  if (routineLogRow && !routineLogExpanded) {
+    return (
+      <View key={message.id} onLayout={onLayout} style={{ marginTop: 12, width: "100%" }}>
+        {separator ? <TimeSeparator createdAt={message.createdAt} /> : null}
+        {routineLogRow}
+      </View>
+    );
+  }
   return (
     <View
       key={message.id}
@@ -3159,6 +3185,7 @@ const MessageRow = memo(function MessageRow({
       }}
     >
       {separator ? <TimeSeparator createdAt={message.createdAt} /> : null}
+      {routineLogRow}
       <View
         style={{
           width: "100%",

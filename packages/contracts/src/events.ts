@@ -431,6 +431,8 @@ export const ThreadMessageSchema = z.object({
   callId: z.string().optional(),
   /** Set when an integration delivered the message as an automatic wake, not the owner. */
   inbound: InboundDeliverySource.optional(),
+  /** Fleet patch: the routine name when this is routine output the owner's chat folds away. */
+  routineLog: z.string().optional(),
   createdAt: z.string(),
 });
 export type ThreadMessage = z.infer<typeof ThreadMessageSchema>;

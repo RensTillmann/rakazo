@@ -169,6 +169,7 @@ import { FlagMessageDialog, type FlagTarget } from "../components/FlagMessageDia
 import { InboundDeliveryCard } from "../components/InboundDeliveryCard";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { RosterAttentionBadge } from "../components/RosterAttentionBadge";
+import { RoutineLogFoldable } from "../components/RoutineLogRow";
 import { ThinkingText } from "../components/ThinkingText";
 import {
   LIVE_TOOL_STEP_WINDOW,
@@ -257,6 +258,8 @@ import {
   rosterNeedsAnswerLabel,
   rosterWorkStatusLabel,
 } from "../lib/roster-status";
+import { routineLogFolds, sidebarBotPreview } from "../lib/routine-log-folds";
+import { getRoutineOutputShown, subscribeRoutineOutput } from "../lib/routine-output-preference";
 import { clearSpaceSelection, rpc, selectedSpaceId, selectSpace } from "../lib/rpc";
 import { translateRunError } from "../lib/run-error";
 import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../lib/run-error-storage";
@@ -498,6 +501,11 @@ export function ShellPage() {
   );
   const streamResponsesRef = useRef(streamResponses);
   streamResponsesRef.current = streamResponses;
+  const showRoutineOutput = useSyncExternalStore(
+    subscribeRoutineOutput,
+    getRoutineOutputShown,
+    () => false,
+  );
   const showToolActivity = useSyncExternalStore(
     subscribeToolActivity,
     getToolActivityEnabled,
@@ -3393,7 +3401,11 @@ export function ShellPage() {
                           : (workStatusLabel ??
                             rosterNeedsAnswerLabel(rowStatus) ??
                             (item.kind === "bot"
-                              ? item.chat.preview ||
+                              ? sidebarBotPreview(
+                                  item.chat,
+                                  showRoutineOutput,
+                                  (routineName) => t`Routine log · ${routineName}`,
+                                ) ||
                                 (item.chat.status !== "idle" ? item.chat.status : "")
                               : item.chat.preview ||
                                 item.chat.members.map((member) => member.name).join(", ")));
@@ -5334,6 +5346,27 @@ const Transcript = memo(function Transcript({
     }
     return routes;
   }, [messages, threadBotId, threadBotName]);
+  // Fleet patch: a routine run's own output folds to one "Routine log" row in a bot's 1:1 chat.
+  const showRoutineOutput = useSyncExternalStore(
+    subscribeRoutineOutput,
+    getRoutineOutputShown,
+    () => false,
+  );
+  const [expandedRoutineLogs, setExpandedRoutineLogs] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const routineFolds = useMemo(
+    () =>
+      // Only a bot's 1:1 chat folds; group rooms keep every message as it is.
+      routineLogFolds(threadBotId ? reactionView.visibleMessages : [], showRoutineOutput),
+    [reactionView.visibleMessages, threadBotId, showRoutineOutput],
+  );
+  const toggleRoutineLog = (leaderId: string) =>
+    setExpandedRoutineLogs((previous) => {
+      const next = new Set(previous);
+      if (!next.delete(leaderId)) next.add(leaderId);
+      return next;
+    });
   const separatorIds = timeSeparatorIds(
     reactionView.visibleMessages.filter((message) =>
       messageHasVisibleBlocks(message.blocks, showToolActivity),
@@ -5612,6 +5645,14 @@ const Transcript = memo(function Transcript({
           const peerRoute = peerRoutes.get(item.message.id);
           const message = peerRoute?.message ?? item.message;
           if (!messageHasVisibleBlocks(message.blocks, showToolActivity)) return null;
+          const routineFold = routineFolds.get(item.message.id);
+          const routineLogExpanded = routineFold
+            ? expandedRoutineLogs.has(routineFold.leaderId)
+            : false;
+          // A folded row stands for its whole run; only the first message draws it.
+          if (routineFold && !routineLogExpanded && routineFold.leaderId !== item.message.id) {
+            return null;
+          }
           const peerReceipt = isPeerReceiptBlocks(message.blocks);
           // An automatic wake is stored with the owner's role; it sits on the bot side instead.
           const fromOwner = message.role === "user" && !message.inbound;
@@ -5621,6 +5662,12 @@ const Transcript = memo(function Transcript({
               {separatorIds.has(message.id) ? (
                 <TimeSeparator createdAt={message.createdAt} locale={i18n.locale || "en"} />
               ) : null}
+              <RoutineLogFoldable
+                fold={routineFold}
+                messageId={item.message.id}
+                expanded={routineLogExpanded}
+                onToggle={toggleRoutineLog}
+              >
               <div
                 data-message-id={message.id}
                 className={peerReceipt ? "relative py-0.5" : "group/message relative hover:z-20"}
@@ -5731,6 +5778,7 @@ const Transcript = memo(function Transcript({
                   </div>
                 ) : null}
               </div>
+              </RoutineLogFoldable>
             </Fragment>
           );
         })}

@@ -1384,7 +1384,12 @@ const BotRow = memo(function BotRow({
   onAction?: (action: InboxRowAction, bot: MobileBot | SpaceBot) => void;
 }) {
   const { t } = useI18n();
-  const preview = previewSnippet(bot.preview, 40) || bot.title || t("No messages yet");
+  const preview =
+    (bot.previewRoutineName
+      ? t("Routine log · {name}", { name: bot.previewRoutineName })
+      : previewSnippet(bot.preview, 40)) ||
+    bot.title ||
+    t("No messages yet");
   const time = bot.updatedAt ? formatThreadTime(bot.updatedAt, new Date(day)) : "";
   const tag = botTag(bot.title, bot.name);
   const working = ACTIVE_RUN_STATUSES.some((status) => status === bot.status);

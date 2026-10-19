@@ -1,10 +1,17 @@
 import type { Actor, Bot, BotSection, MessageBlock, SpaceBot } from "@rakazo/contracts";
 import { BOT_COLORS, InstructionVersionSchema } from "@rakazo/contracts";
-import { BACKGROUND_RUN_TRIGGERS, isBackgroundRunTrigger, userVisibleMessages } from "@rakazo/core";
+import {
+  BACKGROUND_RUN_TRIGGERS,
+  inboundSourceFromClientNonce,
+  isBackgroundRunTrigger,
+  routineLogName,
+  userVisibleMessages,
+} from "@rakazo/core";
 import type { PrismaClient } from "./client.js";
 import type { ComputerMode } from "./computers.js";
 import { ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
+import { routineLogRunNames } from "./routine-log-runs.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import { activeRunSelection, latestBotRunSelection, previewFromBlocks } from "./thread-listing.js";
@@ -169,7 +176,14 @@ export function createRepos(prisma: PrismaClient) {
             messages: {
               orderBy: { seq: "desc" },
               take: 1,
-              select: { blocks: true, createdAt: true },
+              select: {
+                blocks: true,
+                createdAt: true,
+                role: true,
+                runId: true,
+                clientNonce: true,
+                replyToMessageId: true,
+              },
             },
             runs: latestBotRunSelection,
           },
@@ -178,8 +192,26 @@ export function createRepos(prisma: PrismaClient) {
       },
       orderBy: [{ pinned: "desc" }, { position: "asc" }, { createdAt: "asc" }],
     });
+    const routineNames = await routineLogRunNames(
+      prisma,
+      bots.flatMap((bot) => {
+        const runId = bot.thread?.messages[0]?.runId;
+        return runId ? [runId] : [];
+      }),
+    );
     return bots.map((bot) => {
       if (!bot.thread) throw new IsolationError("Bot is missing its thread");
+      const newest = bot.thread.messages[0];
+      const previewRoutineName = newest
+        ? routineLogName(
+            {
+              ...newest,
+              blocks: newest.blocks as MessageBlock[],
+              inbound: inboundSourceFromClientNonce(newest.clientNonce),
+            },
+            newest.runId ? routineNames.get(newest.runId) : undefined,
+          )
+        : undefined;
       return {
         id: bot.id,
         spaceId: bot.spaceId,
@@ -196,6 +228,7 @@ export function createRepos(prisma: PrismaClient) {
         runErrorId: rosterRunErrorId(bot.thread.runs[0], bot.runs[0]),
         updatedAt: rosterUpdatedAt(bot.thread.messages[0], bot.updatedAt).toISOString(),
         lastMessageAt: bot.thread.messages[0]?.createdAt.toISOString() ?? null,
+        ...(previewRoutineName ? { previewRoutineName } : {}),
       };
     });
   }
@@ -358,12 +391,14 @@ export function createRepos(prisma: PrismaClient) {
         for (const id of missing) checkedRunIds.add(id);
       };
       await classifyRunIds(candidateRunIds);
+      const routineNames = await routineLogRunNames(prisma, candidateRunIds);
       return Promise.all(
         bots.map(async (bot) => {
           let messages = bot.thread?.messages ?? [];
           const updatedAt = rosterUpdatedAt(messages[0], bot.updatedAt);
           const lastMessageAt = messages[0]?.createdAt ?? null;
           let preview = "";
+          let previewRoutineName: string | undefined;
           for (let attempt = 0; attempt < 5; attempt++) {
             const windowRunIds = [
               ...new Set(messages.flatMap((message) => (message.runId ? [message.runId] : []))),
@@ -384,6 +419,18 @@ export function createRepos(prisma: PrismaClient) {
               },
             );
             preview = previewFromBlocks(visible[0]?.blocks);
+            const shown = visible[0];
+            if (shown) {
+              if (shown.runId && !routineNames.has(shown.runId) && !candidateRunIds.includes(shown.runId)) {
+                for (const [id, name] of await routineLogRunNames(prisma, [shown.runId])) {
+                  routineNames.set(id, name);
+                }
+              }
+              previewRoutineName = routineLogName(
+                { ...shown, inbound: inboundSourceFromClientNonce(shown.clientNonce) },
+                shown.runId ? routineNames.get(shown.runId) : undefined,
+              );
+            }
             if (preview || messages.length === 0 || !bot.thread || attempt === 4) break;
             const oldest = messages[messages.length - 1];
             if (!oldest) break;
@@ -394,14 +441,17 @@ export function createRepos(prisma: PrismaClient) {
             });
             if (messages.length === 0) break;
           }
-          return mapBot(
-            bot,
-            preview,
-            bot.runs[0]?.status ?? "idle",
-            rosterRunErrorId(bot.thread?.runs[0], bot.runs[0]),
-            updatedAt,
-            lastMessageAt,
-          );
+          return {
+            ...mapBot(
+              bot,
+              preview,
+              bot.runs[0]?.status ?? "idle",
+              rosterRunErrorId(bot.thread?.runs[0], bot.runs[0]),
+              updatedAt,
+              lastMessageAt,
+            ),
+            ...(previewRoutineName ? { previewRoutineName } : {}),
+          };
         }),
       );
     },
