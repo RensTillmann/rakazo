@@ -6,16 +6,19 @@ import type { MemoryProviderConnectionDraft, MemoryProviderSettingsFormProps } f
 const DEFAULT_BASE_URL = "http://hindsight:8888";
 const DEFAULT_BANKS = "fleet,knowledge,public";
 const DEFAULT_EXCLUDE_TAGS = "pii:person,embargo:security";
+const DEFAULT_RECALL_LIMIT = "8";
 
 /** Hindsight is recall-only here: saving goes through memory_save on the fleet MCP. */
 export function HindsightSettingsForm({ busy, onConnect }: MemoryProviderSettingsFormProps) {
   const baseUrlId = useId();
   const banksId = useId();
   const excludeTagsId = useId();
+  const recallLimitId = useId();
   const apiKeyId = useId();
   const [baseUrl, setBaseUrl] = useState(DEFAULT_BASE_URL);
   const [banks, setBanks] = useState(DEFAULT_BANKS);
   const [excludeTags, setExcludeTags] = useState(DEFAULT_EXCLUDE_TAGS);
+  const [recallLimit, setRecallLimit] = useState(DEFAULT_RECALL_LIMIT);
   const [apiKey, setApiKey] = useState("");
 
   async function connect() {
@@ -25,6 +28,7 @@ export function HindsightSettingsForm({ busy, onConnect }: MemoryProviderSetting
         baseUrl: baseUrl.trim(),
         banks: banks.trim(),
         excludeTags: excludeTags.trim(),
+        recallLimit: recallLimit.trim(),
       },
       credentials: { apiKey: apiKey.trim() },
     };
@@ -69,6 +73,22 @@ export function HindsightSettingsForm({ busy, onConnect }: MemoryProviderSetting
           disabled={busy}
           onChange={(event) => setExcludeTags(event.target.value)}
           placeholder={DEFAULT_EXCLUDE_TAGS}
+        />
+      </Field>
+
+      <Field className="mt-4">
+        <FieldLabel htmlFor={recallLimitId}>
+          <Trans>Memories recalled per message</Trans>
+        </FieldLabel>
+        <Input
+          id={recallLimitId}
+          type="number"
+          min={1}
+          max={50}
+          value={recallLimit}
+          disabled={busy}
+          onChange={(event) => setRecallLimit(event.target.value)}
+          placeholder={DEFAULT_RECALL_LIMIT}
         />
       </Field>
 
