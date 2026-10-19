@@ -275,6 +275,15 @@ import {
 } from "./fleet-tools.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import {
+  isRoomToolName,
+  roomArchive,
+  roomCreate,
+  roomList,
+  roomPost,
+  roomToolsAllowedForBot,
+  roomUpdate,
+} from "./room-tools.js";
+import {
   COMPACTION_BATCH_SIZE,
   formatCompactedSummary,
   formatRecalledMemory,
@@ -466,6 +475,7 @@ const READ_ONLY_AGENT_TOOLS = new Set([
   "browser_snapshot",
   "list_secrets",
   "cloud_agent_status",
+  "room_list",
 ]);
 /** Added to the turn prompt when the user spoke this message on a live voice call. */
 const VOICE_CALL_BASE_INSTRUCTION =
@@ -4297,6 +4307,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             disabledBuiltinTools: bot.disabledBuiltinTools,
             fleetManagement: bot.fleetManagement,
             followUpFromUser: sourceMessage?.role === "user",
+            botId: bot.id,
           }),
           // Cross-owner agent connections only exist for chat-linked bots.
           ...(hasMessagingIdentity && !isBackgroundRunTrigger(run.trigger)
@@ -7149,6 +7160,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if ("ok" in result && result.ok) handedOff = true;
             return finish(result);
           }
+          if (isRoomToolName(name)) {
+            if (!roomToolsAllowedForBot(bot.id) || isBackgroundRunTrigger(run.trigger)) {
+              return finish({ error: `${name} is not available to this bot` });
+            }
+            if (name === "room_create") return finish(await roomCreate(deps, run, args));
+            if (name === "room_update") return finish(await roomUpdate(deps, run, args));
+            if (name === "room_archive") return finish(await roomArchive(deps, run, args));
+            if (name === "room_list") return finish(await roomList(deps, run));
+            return finish(
+              await roomPost(deps, run, { ...args, text: redactSecrets(String(args.text ?? ""), runSecrets) }, effectKey),
+            );
+          }
           if (name === "archive_bot" || name === "delete_bot") {
             const archived = await archiveSpawnedBot(
               deps,
@@ -8546,6 +8569,8 @@ export function selectBuiltinToolsForRun(options: {
   fleetManagement?: boolean;
   /** A follow-up run whose source message the user wrote. */
   followUpFromUser?: boolean;
+  /** The running bot; `RAKAZO_ROOM_TOOL_BOTS` limits the room tools to listed bots. */
+  botId?: string;
 }) {
   const disabled = disabledBuiltinToolSet(options.disabledBuiltinTools);
   const fleetToolsAllowed = isOwnerStartedRun(options.trigger, Boolean(options.followUpFromUser));
@@ -8583,6 +8608,9 @@ export function selectBuiltinToolsForRun(options: {
           "generate_image",
           "generate_video",
         ].includes(tool.name)) &&
+      (!tool.name.startsWith("room_") ||
+        (!isBackgroundRunTrigger(options.trigger) &&
+          (options.botId === undefined || roomToolsAllowedForBot(options.botId)))) &&
       (options.voiceCall || tool.name !== "end_call") &&
       // Already on a call, or reached through a messaging channel that cannot ring.
       ((options.phoneCallsEnabled &&
