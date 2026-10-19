@@ -74,7 +74,13 @@ import {
   modelStreamMaxRetries,
   REASONING_MODEL_MAX_TOKENS,
   resolveCompletionMaxTokens,
+  TOOL_RESULT_TEXT_LIMIT,
 } from "./pi-runtime-limits.js";
+import {
+  READ_TOOL_RESULT_TOOL,
+  toolResultOverflowEnabled,
+  toolResultOverflowStore,
+} from "./tool-result-overflow.js";
 import type { PiSessionHandle, PiSessionRecorder } from "./pi-session.js";
 import { PiJsonlSessionRecorder } from "./pi-session.js";
 import { recordPiTelemetryContent, withPiTelemetry, withPiTelemetrySpan } from "./pi-telemetry.js";
@@ -1056,6 +1062,7 @@ export function describeToolActivity(toolName: string, args: unknown): string {
   if (toolName === "browser_snapshot") return "Reading the page";
   if (toolName === "browser_act") return "Using the page";
   if (toolName === "computer_act") return "Operating the computer";
+  if (toolName === READ_TOOL_RESULT_TOOL) return "Reading the rest of a tool result";
   if (toolName === "run_subagent") return `Delegating to helper: ${detail(record.name)}`;
   if (toolName === "create_space") return `Creating space: ${detail(record.name)}`;
   if (toolName === "list_fleet") return "Checking the fleet";
@@ -1400,20 +1407,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     if (isToolPauseResult(result)) host.pausePending = true;
                     return result;
                   }
-                  return {
-                    content: [
-                      {
-                        type: "text",
-                        text: serializeToolResult(
-                          result,
-                          host.request.contextStrategy,
-                          tool.name,
-                          args,
-                        ),
-                      },
-                    ],
-                    details: result,
-                  };
+                  return serializedToolResult(host, result, tool.name, args);
                 }
                 host.pausePending = true;
                 return {
@@ -1422,12 +1416,29 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                   terminate: true,
                 };
               }
+              if (tool.name === READ_TOOL_RESULT_TOOL) {
+                const text = toolResultOverflowEnabled()
+                  ? toolResultOverflowStore.read(
+                      host.request.runId,
+                      String(args.ref ?? ""),
+                      Number(args.offset ?? 0) || 0,
+                      Math.min(
+                        TOOL_RESULT_TEXT_LIMIT,
+                        Number(args.length ?? TOOL_RESULT_TEXT_LIMIT) || TOOL_RESULT_TEXT_LIMIT,
+                      ),
+                    )
+                  : `${READ_TOOL_RESULT_TOOL} is turned off.`;
+                return { content: [{ type: "text", text }], details: { ref: args.ref } };
+              }
               if (tool.name === "run_subagent") {
                 const result = await executeSubagent(host, executionId, args);
-                return {
-                  content: [{ type: "text", text: result }],
+                // executeSubagent already clipped it and added the cut-off line.
+                const bounded = {
+                  content: [{ type: "text" as const, text: result }],
                   details: { result },
                 };
+                boundedToolResults.add(bounded);
+                return bounded;
               }
               if (host.request.executeTool) {
                 const result = await host.request.executeTool(
@@ -1443,22 +1454,9 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                 );
                 if (isAgentToolExecutionResult(result)) {
                   if (isToolPauseResult(result)) host.pausePending = true;
-                  return boundAgentToolResult(result);
+                  return boundAgentToolResult(result, keepOverflow(host));
                 }
-                return {
-                  content: [
-                    {
-                      type: "text",
-                      text: serializeToolResult(
-                        result,
-                        host.request.contextStrategy,
-                        tool.name,
-                        args,
-                      ),
-                    },
-                  ],
-                  details: result,
-                };
+                return serializedToolResult(host, result, tool.name, args);
               }
               return {
                 content: [
@@ -1470,8 +1468,14 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                 details: { error: "no executor" },
               };
             })();
-            if (VERBATIM_TOOL_RESULTS.has(tool.name)) return result as AgentToolResult<unknown>;
-            return boundAgentToolResult(result as AgentToolResult<unknown>);
+            if (
+              VERBATIM_TOOL_RESULTS.has(tool.name) ||
+              tool.name === READ_TOOL_RESULT_TOOL ||
+              boundedToolResults.has(result as object)
+            ) {
+              return result as AgentToolResult<unknown>;
+            }
+            return boundAgentToolResult(result as AgentToolResult<unknown>, keepOverflow(host));
           } catch (error) {
             failure = error;
             throw error;
@@ -1900,6 +1904,13 @@ function builtinParameters(tool: ConnectorTool) {
     return Type.Object({
       command: Type.String(),
       cwd: Type.Optional(Type.String()),
+    });
+  }
+  if (tool.name === READ_TOOL_RESULT_TOOL) {
+    return Type.Object({
+      ref: Type.String(),
+      offset: Type.Number(),
+      length: Type.Optional(Type.Number()),
     });
   }
   if (tool.name === "run_subagent") {
@@ -2331,26 +2342,68 @@ export function serializeToolResult(
   strategy: AgentRunRequest["contextStrategy"],
   name: string,
   args: Record<string, unknown>,
+  keep?: (fullText: string) => string | undefined,
 ) {
   try {
     const text = JSON.stringify(result);
     if (!text) return "ok";
     // skill-tools.ts already bounds skill content; the context budget selector may still shorten it.
-    if (text.length <= 12_000 || VERBATIM_TOOL_RESULTS.has(name)) return text;
+    if (text.length <= TOOL_RESULT_TEXT_LIMIT || VERBATIM_TOOL_RESULTS.has(name)) return text;
     return (strategy ?? DEFAULT_CONTEXT_STRATEGY) === "current"
-      ? clipToolResultText(text)
-      : shortenToolResultText(text, 12_000, { name, arguments: args });
+      ? clipToolResultText(text, TOOL_RESULT_TEXT_LIMIT, keep?.(text))
+      : shortenToolResultText(text, TOOL_RESULT_TEXT_LIMIT, { name, arguments: args });
   } catch {
     return "ok";
   }
 }
 
-function boundAgentToolResult<T>(result: AgentToolResult<T>): AgentToolResult<T> {
-  if (!result || !Array.isArray(result.content)) return result;
-  return {
+/** Results already clipped once; clipping again would cut into the cut-off line. */
+const boundedToolResults = new WeakSet<object>();
+
+function boundAgentToolResult<T>(
+  result: AgentToolResult<T>,
+  keep?: (fullText: string) => string | undefined,
+): AgentToolResult<T> {
+  if (!result || !Array.isArray(result.content) || boundedToolResults.has(result)) return result;
+  const bounded = {
     ...result,
-    content: clipToolResultContent(result.content),
+    content: clipToolResultContent(result.content, TOOL_RESULT_TEXT_LIMIT, keep),
   };
+  boundedToolResults.add(bounded);
+  return bounded;
+}
+
+/** A plain tool result as one bounded text part; already clipped, so never clipped again. */
+function serializedToolResult(
+  host: ToolHost,
+  result: unknown,
+  name: string,
+  args: Record<string, unknown>,
+): AgentToolResult<unknown> {
+  const text = serializeToolResult(
+    result,
+    host.request.contextStrategy,
+    name,
+    args,
+    keepOverflow(host),
+  );
+  const bounded = { content: [{ type: "text" as const, text }], details: result };
+  boundedToolResults.add(bounded);
+  return bounded;
+}
+
+/**
+ * With `RAKAZO_TOOL_RESULT_OVERFLOW`, keep a cut-off result for `read_tool_result`. The shown
+ * part is kept as is so offsets match; the unseen rest gets the same secret blanking as errors.
+ */
+function keepOverflow(host: ToolHost): ((fullText: string) => string) | undefined {
+  if (!toolResultOverflowEnabled()) return undefined;
+  return (fullText) =>
+    toolResultOverflowStore.keep(
+      host.request.runId,
+      fullText.slice(0, TOOL_RESULT_TEXT_LIMIT) +
+        sanitizeSensitiveText(fullText.slice(TOOL_RESULT_TEXT_LIMIT)),
+    );
 }
 
 function assistantText(message: unknown): string {

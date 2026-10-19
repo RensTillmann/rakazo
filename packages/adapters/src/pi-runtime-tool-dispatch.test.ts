@@ -384,6 +384,7 @@ import {
   providerFailureText,
 } from "./pi-runtime.js";
 import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
+import { toolResultOverflowStore } from "./tool-result-overflow.js";
 
 const destinationTool: ConnectorTool = {
   name: "destination.write",
@@ -2094,7 +2095,57 @@ describe("Pi connector tool dispatch", () => {
     expect(result.content).toHaveLength(3);
     expect(result.content[0]).toEqual({ type: "text", text: first });
     expect(result.content[1]).toEqual(image);
-    expect(result.content[2]).toEqual({ type: "text", text: "bbbbb…" });
+    expect(result.content[2]).toEqual({
+      type: "text",
+      text: "bbbbb\n[cut off: showed 12,000 of 12,012 characters. Ask a narrower question.]",
+    });
+  });
+
+  it("keeps a cut-off result for read_tool_result with RAKAZO_TOOL_RESULT_OVERFLOW", async () => {
+    vi.stubEnv("RAKAZO_TOOL_RESULT_OVERFLOW", "true");
+    try {
+      const labels = `${"x".repeat(TOOL_RESULT_TEXT_LIMIT)}rest password=hunter2`;
+      fakeAgentState.invoke = {
+        name: "destination_write",
+        args: { collection: "notes", title: "Result", body: "Done" },
+      };
+      const runtime = new PiAgentRuntime();
+      for await (const _event of runtime.run(
+        {
+          botId: "b",
+          threadId: "t",
+          runId: "overflow-run",
+          prompt: "write it",
+          instructions: "Use the destination.",
+          history: [],
+          tools: [destinationTool],
+          model: { provider: "test", id: "dispatch-test-model" },
+          executeTool: vi.fn(async () => ({
+            kind: "agent_tool_result",
+            content: [{ type: "text" as const, text: labels }],
+            details: {},
+          })),
+        },
+        {
+          operationId: "overflow",
+          traceId: "overflow",
+          spaceId: "w",
+          userId: "u",
+          signal: new AbortController().signal,
+        },
+      )) {
+        // Exhaust so the fake agent executes the tool.
+      }
+      const result = fakeAgentState.toolResult as { content: Array<{ text: string }> };
+      expect(result.content[0]!.text).toContain(
+        `read_tool_result("r1", offset=${TOOL_RESULT_TEXT_LIMIT})`,
+      );
+      expect(
+        toolResultOverflowStore.read("overflow-run", "r1", TOOL_RESULT_TEXT_LIMIT, 100),
+      ).toBe("rest password=[redacted]");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("delivers a skill read larger than the tool result bound verbatim", async () => {

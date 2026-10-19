@@ -270,6 +270,7 @@ const BUILTIN_ACTIONS: Record<string, string | ((args: Record<string, unknown>) 
   skill_create: "create a skill",
   skill_update: "change a skill",
   skill_delete: "delete a skill",
+  read_tool_result: "read the rest of a tool result",
   run_subagent: "start a helper bot",
   propose_instructions_update: "update their instructions",
   create_space: (args) => `create the space “${stringArg(args, "name") ?? "Untitled"}”`,
