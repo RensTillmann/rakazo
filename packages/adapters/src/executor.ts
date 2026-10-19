@@ -8195,9 +8195,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           // Preserve the last held-back preview as a normal final reply when the
           // model supplies none, unless it chose silence or already delivered that text.
           // Persisting peer results here also lets outcome delivery retry after completion.
+          // Fleet: routine runs (incl. a webhook delivery running one routine, the gate) stay
+          // silent instead: an empty finish there means nothing to report.
           recordExplicitNoResponse(lastDiscardedMidTurnNarration);
           if (
             !isBackgroundRunTrigger(run.trigger) &&
+            behaviorTrigger !== "routine" &&
             !handedOff &&
             !explicitNoResponse &&
             !assembled.trim() &&

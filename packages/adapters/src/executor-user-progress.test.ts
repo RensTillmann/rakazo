@@ -33,6 +33,7 @@ async function runTurn(
   intent: "fyi" | "request" | "question" = "fyi",
   options: {
     trigger?: string;
+    routineId?: string;
     doneText?: string;
     splitText?: boolean;
     priorProgressText?: string;
@@ -57,6 +58,7 @@ async function runTurn(
     status: "queued",
     trigger: options.trigger ?? (silent ? "bot_message" : "user"),
     sourceMessageId: "source-1",
+    routineId: options.routineId ?? null,
     leaseFence: 0,
   };
   const runtimeRun = vi.fn(async function* (_request: AgentRunRequest) {
@@ -201,7 +203,7 @@ async function runTurn(
   return { finalizeRun, append };
 }
 
-describe.each(["routine", "reaction", "bot_message", "messaging"])(
+describe.each(["reaction", "bot_message", "messaging"])(
   "held-back narration on %s runs",
   (trigger) => {
     it("restores the last non-empty narration as a normal final reply", async () => {
@@ -291,6 +293,37 @@ describe.each(["routine", "reaction", "bot_message", "messaging"])(
   },
 );
 
+// Fleet: routine runs, including a webhook delivery that runs one routine (the gate), finish
+// silently when the model ends empty; held-back narration is not posted as their reply.
+describe.each([
+  { trigger: "routine", routineId: undefined },
+  { trigger: "webhook", routineId: "routine-1" },
+])("held-back narration on $trigger routine runs", ({ trigger, routineId }) => {
+  it("posts nothing when the model ends empty after a tool call", async () => {
+    const { finalizeRun } = await runTurn(
+      "",
+      true,
+      ["I will check that.", "The draft is posted."],
+      [],
+      "fyi",
+      { trigger, routineId },
+    );
+    expect(finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")).toEqual(
+      [],
+    );
+  });
+
+  it("keeps a non-empty post-tool final", async () => {
+    const { finalizeRun } = await runTurn("Checked: all clear.", true, undefined, [], "fyi", {
+      trigger,
+      routineId,
+    });
+    expect(finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")).toEqual([
+      { kind: "text", text: "Checked: all clear." },
+    ]);
+  });
+});
+
 it("redacts restored narration", async () => {
   const { finalizeRun } = await runTurn(
     "",
@@ -298,7 +331,7 @@ it("redacts restored narration", async () => {
     "The fake-secret-value is configured.",
     ["fake-secret-value"],
     "fyi",
-    { trigger: "routine" },
+    { trigger: "reaction" },
   );
   expect(finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")).toEqual([
     { kind: "text", text: "The [redacted] is configured." },
