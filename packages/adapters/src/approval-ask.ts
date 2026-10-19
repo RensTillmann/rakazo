@@ -46,9 +46,18 @@ export type ApprovalAskOptions = {
   botName?: string;
   /** The bot's own most recent stated intention in this run, shown as the "Why" line. */
   intention?: string;
+  /** What started the run; the "Why" line when the bot stated no intention. */
+  trigger?: ApprovalTrigger;
   /** The tool's own description; an MCP tool's first sentence names its action. */
   toolDescription?: string;
 };
+
+/** What started a run, for the "Why" fallback. Webhook payloads never belong here. */
+export type ApprovalTrigger =
+  | { kind: "user"; text: string }
+  | { kind: "routine"; routineName: string; event?: string }
+  | { kind: "bot_message"; botName: string; text: string }
+  | { kind: "room"; roomName: string; text: string };
 
 export function buildApprovalAskBlock(
   effectId: string,
@@ -506,7 +515,8 @@ function formatApprovalDetail(
     }
     lines.push(...fields);
   }
-  const why = options?.intention ? oneLine(options.intention, secrets, MAX_WHY_LENGTH) : "";
+  const intention = options?.intention ? oneLine(options.intention, secrets, MAX_WHY_LENGTH) : "";
+  const why = intention || triggerWhy(options?.trigger, secrets);
   if (why) lines.push(`Why: ${why}`);
   const reviewReason = options?.reviewReason
     ? oneLine(options.reviewReason.replace(/\u2014|\u2013/g, "-"), secrets, MAX_WHY_LENGTH)
@@ -565,6 +575,36 @@ function displayValue(value: unknown): string {
 /** Redact first, so a cut never leaves part of a secret behind. */
 function oneLine(value: string, secrets: string[], maxLength: number): string {
   return truncate(redactSecrets(value, secrets).replace(/\s+/g, " ").trim(), maxLength);
+}
+
+function triggerWhy(trigger: ApprovalTrigger | undefined, secrets: string[]): string {
+  if (!trigger) return "";
+  const quote = (text: string) => {
+    const line = oneLine(text, secrets, MAX_FIELD_LENGTH);
+    return line ? `"${line}"` : "";
+  };
+  switch (trigger.kind) {
+    case "user": {
+      const text = quote(trigger.text);
+      return text ? `You asked: ${text}` : "";
+    }
+    case "routine": {
+      const name = oneLine(trigger.routineName, secrets, MAX_FIELD_LENGTH);
+      if (!name) return "";
+      const event = trigger.event ? oneLine(trigger.event, secrets, MAX_FIELD_LENGTH) : "";
+      return event ? `Routine: ${name} (${event})` : `Routine: ${name}`;
+    }
+    case "bot_message": {
+      const text = quote(trigger.text);
+      const name = oneLine(trigger.botName, secrets, MAX_FIELD_LENGTH) || "Another bot";
+      return text ? `${name} asked: ${text}` : "";
+    }
+    case "room": {
+      const text = quote(trigger.text);
+      const name = oneLine(trigger.roomName, secrets, MAX_FIELD_LENGTH);
+      return text && name ? `In ${name}: ${text}` : "";
+    }
+  }
 }
 
 // ---- Shared helpers ---------------------------------------------------------------------------
