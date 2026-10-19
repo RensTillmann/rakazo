@@ -1,6 +1,7 @@
 import type { ProductEvent } from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  activityRunStatus,
   activityStatusLine,
   publishActivityEvent,
   renderActivityLines,
@@ -120,6 +121,30 @@ describe("renderActivityLines", () => {
     const running = [event("agent.tool.called", { name: "web_search", executionId: "call-9" }, 0)];
     expect(plain(renderActivityLines(running, null))).toEqual(["● web_search()", "  ⎿ running…"]);
     expect(activityStatusLine(events)).toBe("1 steps · 2 model calls · 1m 10s");
+  });
+
+  it("reports a run that finished while the window was open as finished, not as loaded", () => {
+    const started = [event("agent.tool.called", { name: "shell", executionId: "call-1" }, 0)];
+    expect(activityRunStatus(started, "running")).toBe("running");
+    expect(activityRunStatus([...started, event("run.completed", {}, 5)], "running")).toBe(
+      "finished",
+    );
+    expect(activityRunStatus([...started, event("run.failed", {}, 5)], "running")).toBe("failed");
+    expect(activityRunStatus([...started, event("run.cancelled", {}, 5)], "running")).toBe(
+      "stopped",
+    );
+  });
+
+  it("counts cached input tokens in a model call's input", () => {
+    const call = (payload: Record<string, unknown>) =>
+      plain(
+        renderActivityLines([event("agent.model.completed", { model: "m", ...payload })], null),
+      );
+    expect(
+      call({ inputTokens: 2, cacheReadTokens: 40_100, cacheWriteTokens: 1_700, outputTokens: 155 }),
+    ).toEqual(["  · m: 41,802 in (40,100 cached) / 155 out tokens"]);
+    // Events recorded before cache tokens were stored still read as before.
+    expect(call({ inputTokens: 2, outputTokens: 155 })).toEqual(["  · m: 2 in / 155 out tokens"]);
   });
 
   it("forwards live thread events to open windows until unsubscribed", () => {

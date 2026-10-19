@@ -120,6 +120,27 @@ export function activityStatus(events: readonly ProductEvent[]): {
   return { steps, modelCalls, elapsedMs: Number.isFinite(elapsedMs) ? elapsedMs : 0 };
 }
 
+/** The run's status as the stream shows it: a finish event wins over the status loaded when the window opened. */
+export function activityRunStatus(events: readonly ProductEvent[], loaded: string): string {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const type = events[index]?.type;
+    if (type === "run.completed") return "finished";
+    if (type === "run.failed") return "failed";
+    if (type === "run.cancelled") return "stopped";
+  }
+  return loaded;
+}
+
+/** "41,802 in (40,100 cached) / 155 out": provider input excludes cache reads and writes, so add them back. */
+function modelTokens(payload: Record<string, unknown>): string {
+  const number = (value: unknown) => (typeof value === "number" ? value : 0);
+  const output = typeof payload.outputTokens === "number" ? count(payload.outputTokens) : "?";
+  if (typeof payload.inputTokens !== "number") return `? in / ${output} out`;
+  const cached = number(payload.cacheReadTokens);
+  const input = payload.inputTokens + cached + number(payload.cacheWriteTokens);
+  return `${count(input)} in${cached > 0 ? ` (${count(cached)} cached)` : ""} / ${output} out`;
+}
+
 export function activityStatusLine(events: readonly ProductEvent[]): string {
   const status = activityStatus(events);
   const parts = [`${status.steps} steps`];
@@ -214,9 +235,7 @@ export function renderActivityLines(
     }
     if (event.type === "agent.model.completed") {
       flushText();
-      const input = typeof payload.inputTokens === "number" ? count(payload.inputTokens) : "?";
-      const output = typeof payload.outputTokens === "number" ? count(payload.outputTokens) : "?";
-      lines.push(`${DIM}  · ${text(payload.model)}: ${input} in / ${output} out tokens${RESET}`);
+      lines.push(`${DIM}  · ${text(payload.model)}: ${modelTokens(payload)} tokens${RESET}`);
       continue;
     }
     if (event.type === "thread.ask" || event.type === "run.waiting_input") {

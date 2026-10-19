@@ -7532,6 +7532,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         model: event.model,
                         inputTokens: event.inputTokens,
                         outputTokens: event.outputTokens,
+                        ...(event.cacheReadTokens == null
+                          ? {}
+                          : { cacheReadTokens: event.cacheReadTokens }),
+                        ...(event.cacheWriteTokens == null
+                          ? {}
+                          : { cacheWriteTokens: event.cacheWriteTokens }),
                         ...(event.costUsd == null ? {} : { costUsd: event.costUsd }),
                         ...(event.agentId ? { agentId: event.agentId } : {}),
                       },
