@@ -399,6 +399,7 @@ export class PiAgentRuntime implements AgentRuntime {
           prepareContext: contextPolicy.prepareContext,
           imageTokens: estimatePiImageTokens,
           recordUsage: request.onUsage,
+          onRateLimit: request.onRateLimit,
           onUsage: (usage: AgentUsage) => {
             contextPolicy.onUsage(usage);
             const decision = contextPolicy.getDecision();
@@ -1636,6 +1637,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
               prepareContext: contextPolicy.prepareContext,
               imageTokens: estimatePiImageTokens,
               recordUsage: host.request.onUsage,
+              onRateLimit: host.request.onRateLimit,
               onProviderError: (message) => providerFailures.add(message.content),
               onUsage: (usage) => {
                 contextPolicy.onUsage(usage);

@@ -456,9 +456,25 @@ export interface AgentRunModel {
 export type AgentContextStrategy = "current" | "retrieval" | "snapshots" | "cache-aware";
 export const DEFAULT_CONTEXT_STRATEGY: AgentContextStrategy = "retrieval";
 
+/**
+ * Subscription-window reading from a provider's response headers (fleet patch, behind
+ * RAKAZO_SUBSCRIPTION_LIMITS). Utilization is 0..1; null when the header was absent.
+ */
+export interface SubscriptionLimitReading {
+  provider: string;
+  fiveHourUtil: number | null;
+  fiveHourResetAt: Date | null;
+  sevenDayUtil: number | null;
+  sevenDayResetAt: Date | null;
+  status: string | null;
+  observedAt: Date;
+}
+
 export interface AgentRunRequest {
   /** Awaited producer-side accounting, independent of event-consumer cancellation. */
   onUsage?: (event: Extract<AgentRuntimeEvent, { type: "usage" }>) => void | Promise<void>;
+  /** Subscription rate-limit reading, once per model call whose response carried one. */
+  onRateLimit?: (reading: SubscriptionLimitReading) => void | Promise<void>;
   contextStrategy?: AgentContextStrategy;
   /** Exclusive workflow cost bucket; retrieval tool turns are detected for answer calls. */
   usageOperationKind?: UsageOperationKind;

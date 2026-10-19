@@ -26,6 +26,7 @@ import type {
   SandboxProvider,
   SecretStore,
   SemanticMemoryProvider,
+  SubscriptionLimitReading,
   WebProvider,
 } from "@rakazo/adapter-kit";
 import {
@@ -122,6 +123,7 @@ import {
   parseComputerMode,
   readHistory,
   recordUsage,
+  recordSubscriptionLimitReading,
   reserveInstructionProposal,
   retireModelCredential,
   SpaceLimitError,
@@ -392,6 +394,7 @@ import {
   skillReadFromTool,
   skillUpdateFromTool,
 } from "./skill-tools.js";
+import { subscriptionLimitsEnabled } from "./subscription-limits.js";
 import type { TakeoverResumeCheckpoint } from "./takeover-resume.js";
 import {
   continueRunClaimFence,
@@ -7418,6 +7421,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   operationId: runId,
                 });
               },
+              ...(subscriptionLimitsEnabled()
+                ? {
+                    onRateLimit: async (reading: SubscriptionLimitReading) => {
+                      try {
+                        await recordSubscriptionLimitReading(deps.prisma, reading);
+                      } catch (error) {
+                        getLogger().warn("subscription limit reading not saved", { error });
+                      }
+                    },
+                  }
+                : {}),
               prompt,
               // Keep an explicit executor override, but let the runtime select
               // cache-aware context for connections declaring a cache window.

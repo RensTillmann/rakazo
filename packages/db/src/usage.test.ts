@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./generated/prisma/client.js";
-import { recordUsage } from "./usage.js";
+import {
+  latestSubscriptionLimitReading,
+  listFleetUsageBars,
+  recordSubscriptionLimitReading,
+  recordUsage,
+} from "./usage.js";
 
 describe("usage ledger", () => {
   it("retains charged usage arriving after its run was deleted", async () => {
@@ -97,5 +102,53 @@ describe("usage ledger", () => {
       costUsd: null,
     });
     expect(data).not.toHaveProperty("runId");
+  });
+});
+
+describe("subscription limit readings", () => {
+  const reading = {
+    provider: "anthropic",
+    fiveHourUtil: 0.42,
+    fiveHourResetAt: new Date("2026-10-19T12:00:00Z"),
+    sevenDayUtil: null,
+    sevenDayResetAt: null,
+    status: "allowed",
+    observedAt: new Date("2026-10-19T10:00:00Z"),
+  };
+  it("appends each reading and reads the newest per provider", async () => {
+    const create = vi.fn(async () => ({}));
+    const findFirst = vi.fn(async () => ({ id: "reading-fixture", ...reading }));
+    const prisma = { subscriptionLimitReading: { create, findFirst } } as unknown as Pick<
+      PrismaClient,
+      "subscriptionLimitReading"
+    >;
+    await recordSubscriptionLimitReading(prisma, reading);
+    expect(create).toHaveBeenCalledWith({ data: reading });
+    await expect(latestSubscriptionLimitReading(prisma, "anthropic")).resolves.toEqual(reading);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { provider: "anthropic" },
+      orderBy: { observedAt: "desc" },
+    });
+  });
+
+  it("lists fleet usage bars and treats a missing table as none", async () => {
+    const updated = new Date("2026-10-19T09:00:00Z");
+    const hindsight = { label: "Hindsight · this month", detail: "$4.10 of $20" };
+    const ok = {
+      $queryRawUnsafe: vi.fn(async () => [
+        { name: "hindsight", used_pct: "20.5", ...hindsight, updated_at: updated },
+        { name: "other", used_pct: null, label: null, detail: null, updated_at: null },
+      ]),
+    } as unknown as Pick<PrismaClient, "$queryRawUnsafe">;
+    await expect(listFleetUsageBars(ok)).resolves.toEqual([
+      { name: "hindsight", usedPct: 20.5, ...hindsight, updatedAt: updated },
+      { name: "other", usedPct: null, label: null, detail: null, updatedAt: null },
+    ]);
+    const missing = {
+      $queryRawUnsafe: vi.fn(async () => {
+        throw new Error('relation "fleet.usage_bars" does not exist');
+      }),
+    } as unknown as Pick<PrismaClient, "$queryRawUnsafe">;
+    await expect(listFleetUsageBars(missing)).resolves.toEqual([]);
   });
 });
