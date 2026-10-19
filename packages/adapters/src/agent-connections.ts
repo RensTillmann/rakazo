@@ -238,7 +238,7 @@ export async function messageConnectedAgent(
   }
 
   const hop = nextBotMessageHop(
-    await currentBotMessageHop(deps.prisma, run.sourceMessageId ?? null),
+    await currentBotMessageHop(deps.prisma, run.sourceMessageId ?? null, run),
   );
   if (botMessageHopExhausted(hop)) {
     return {
