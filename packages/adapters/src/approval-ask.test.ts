@@ -363,6 +363,63 @@ describe("plain-language approval cards", () => {
     );
     expect(ordinary.detail).not.toContain("Always asks you");
   });
+
+  describe("Why falls back to what started the run", () => {
+    const why = (options: Parameters<typeof buildApprovalAskBlock>[4], secrets: string[] = []) =>
+      askOf(buildApprovalAskBlock("effect-1", "web_search", {}, secrets, options)).detail;
+
+    it("quotes the user's message", () => {
+      expect(why({ trigger: { kind: "user", text: "Check the\n Ada invoice" } })).toBe(
+        'Why: You asked: "Check the Ada invoice"',
+      );
+    });
+
+    it("names the routine, with the webhook event when known", () => {
+      expect(why({ trigger: { kind: "routine", routineName: "Morning brief" } })).toBe(
+        "Why: Routine: Morning brief",
+      );
+      expect(
+        why({ trigger: { kind: "routine", routineName: "Inbox triage run", event: "inbox" } }),
+      ).toBe("Why: Routine: Inbox triage run (inbox)");
+    });
+
+    it("quotes the asking bot", () => {
+      expect(why({ trigger: { kind: "bot_message", botName: "Jill", text: "Ship it" } })).toBe(
+        'Why: Jill asked: "Ship it"',
+      );
+    });
+
+    it("quotes the room message with the room name", () => {
+      expect(why({ trigger: { kind: "room", roomName: "Launch", text: "Go live" } })).toBe(
+        'Why: In Launch: "Go live"',
+      );
+    });
+
+    it("lets the bot's stated intention win", () => {
+      expect(why({ intention: "I'll check.", trigger: { kind: "user", text: "Check" } })).toBe(
+        "Why: I'll check.",
+      );
+      expect(why({ intention: "   ", trigger: { kind: "user", text: "Check" } })).toBe(
+        'Why: You asked: "Check"',
+      );
+    });
+
+    it("blanks secrets before cutting to 160 characters", () => {
+      expect(why({ trigger: { kind: "user", text: "use sk-123 now" } }, ["sk-123"])).toBe(
+        'Why: You asked: "use [redacted] now"',
+      );
+      expect(
+        why({ trigger: { kind: "user", text: `${"x".repeat(155)}sk-123${"y".repeat(50)}` } }, [
+          "sk-123",
+        ]),
+      ).toBe(`Why: You asked: "${"x".repeat(155)}[reda…"`);
+    });
+
+    it("adds no Why line when nothing is known", () => {
+      expect(why({})).toBeUndefined();
+      expect(why({ trigger: { kind: "user", text: "  " } })).toBeUndefined();
+    });
+  });
 });
 
 describe("approvalPush", () => {

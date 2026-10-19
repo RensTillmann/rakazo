@@ -145,6 +145,7 @@ import {
   redactShellStreams,
 } from "./agent-environment.js";
 import { approvalPush, buildApprovalAskBlock } from "./approval-ask.js";
+import { loadApprovalTrigger } from "./approval-trigger.js";
 import {
   approvalPausedToolResult,
   approvalReplayPathError,
@@ -5130,6 +5131,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             await workspaceCheckpoint.flush();
             const toolDescription = (resolvedTool ?? connectorTools.get(name))?.description;
+            // Text streamed since the last narration, else the last narration itself.
+            const intention = currentTextSegment.trim() || lastStatedIntention;
+            // No stated intention: the card says what started the run instead.
+            const trigger = intention?.trim()
+              ? undefined
+              : // A failed lookup only costs the Why line, never the card.
+                await loadApprovalTrigger(deps.prisma, run, thread).catch(() => undefined);
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
               threadId: run.threadId,
@@ -5148,8 +5156,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     reviewReason,
                     allowAlways: !ruleForbidsAlways,
                     botName: bot.name,
-                    // Text streamed since the last narration, else the last narration itself.
-                    intention: currentTextSegment.trim() || lastStatedIntention,
+                    intention,
+                    trigger,
                     toolDescription,
                   },
                 ),
