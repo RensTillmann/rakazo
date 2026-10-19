@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogTitle } from "@rakazo/ui-web";
 import type { ITheme } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 import {
+  activityRunStatus,
   activityStatusLine,
   renderActivityLines,
   subscribeActivityEvents,
@@ -178,7 +179,9 @@ function LiveActivityTerminal({ target, title }: { target: LiveActivityTarget; t
         data-testid="live-activity-status"
         className="flex h-7 shrink-0 items-center gap-3 bg-[#151a20] px-4 font-mono text-[12px] text-[#9aa4b0]"
       >
-        <span>{run ? `${run.botName} · ${run.status}` : t`No runs yet`}</span>
+        <span>
+          {run ? `${run.botName} · ${activityRunStatus(events, run.status)}` : t`No runs yet`}
+        </span>
         <span className="ms-auto">{activityStatusLine(events)}</span>
       </footer>
     </>
