@@ -845,4 +845,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "This answers {bot}'s open question: '{question}'.":
     "Это ответ на открытый вопрос {bot}: «{question}».",
   "Send as answer": "Отправить как ответ",
+  "Routine log · {name} · {time}": "Журнал рутины · {name} · {time}",
+  "Routine log · {name}": "Журнал рутины · {name}",
 };
