@@ -500,6 +500,14 @@ model ChatGroup {
   sectionId  String?
   section    BotSection?       @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   archivedAt DateTime?
+  /// Set when the room brake stopped bot-started runs; cleared by a resume.
+  pausedAt      DateTime?
+  /// The run budget counts runs since this instant (or the last 24 h, whichever is later).
+  budgetResetAt DateTime?
+  /// How many times a bot resumed the room since Rens last did; the room_resume tool works once.
+  budgetResumes Int       @default(0)
+  /// Push every finished group run. Off: only help and takeover pushes reach the user.
+  notify        Boolean   @default(false)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
   members    ChatGroupMember[]

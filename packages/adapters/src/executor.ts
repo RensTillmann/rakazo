@@ -280,6 +280,7 @@ import {
   roomCreate,
   roomList,
   roomPost,
+  roomResume,
   roomToolsAllowedForBot,
   roomUpdate,
 } from "./room-tools.js";
@@ -7168,9 +7169,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (name === "room_update") return finish(await roomUpdate(deps, run, args));
             if (name === "room_archive") return finish(await roomArchive(deps, run, args));
             if (name === "room_list") return finish(await roomList(deps, run));
-            return finish(
-              await roomPost(deps, run, { ...args, text: redactSecrets(String(args.text ?? ""), runSecrets) }, effectKey),
-            );
+            if (name === "room_resume") return finish(await roomResume(deps, run, args));
+            const postText = redactSecrets(String(args.text ?? ""), runSecrets);
+            return finish(await roomPost(deps, run, { ...args, text: postText }, effectKey));
           }
           if (name === "archive_bot" || name === "delete_bot") {
             const archived = await archiveSpawnedBot(

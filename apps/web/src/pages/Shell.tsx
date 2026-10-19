@@ -4449,6 +4449,12 @@ function SpaceShell() {
                     () => undefined,
                   );
                 }}
+                onResume={async () => {
+                  const resumed = await rpc.groups.resume({ groupId: activeGroup.id });
+                  setGroups((current) =>
+                    current.map((group) => (group.id === resumed.id ? resumed : group)),
+                  );
+                }}
                 onRemove={async () => {
                   await rpc.groups.remove({ groupId: activeGroup.id });
                   const remainingGroups = groups.filter((group) => group.id !== activeGroup.id);

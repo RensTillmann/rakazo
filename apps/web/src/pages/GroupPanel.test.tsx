@@ -120,6 +120,8 @@ async function render(
   options: {
     onSave?: () => Promise<void>;
     onRemove?: () => Promise<void>;
+    onResume?: () => Promise<void>;
+    group?: Group;
     covered?: boolean;
     instance?: string;
     bots?: ComponentProps<typeof GroupSettings>["bots"];
@@ -132,9 +134,10 @@ async function render(
     root.render(
       <GroupSettings
         key={options.instance}
-        group={group}
+        group={options.group ?? group}
         bots={options.bots ?? bots}
         onSave={options.onSave ?? (async () => undefined)}
+        onResume={options.onResume}
         onRemove={onRemove}
         onClose={onClose}
         onOpenBot={options.onOpenBot}
@@ -332,5 +335,16 @@ describe("GroupSettings", () => {
         .querySelector('[role="checkbox"][aria-label="Remove Researcher from the group"]')
         ?.getAttribute("aria-checked"),
     ).toBe("true");
+  });
+});
+
+describe("room brake", () => {
+  it("shows Resume room only while the room is paused", async () => {
+    const onResume = vi.fn(async () => undefined);
+    await render({ onResume });
+    expect(container.textContent).not.toContain("Resume room");
+    await render({ onResume, group: { ...group, pausedAt: "2026-10-19T12:00:00.000Z" } });
+    await click("Resume room");
+    expect(onResume).toHaveBeenCalledTimes(1);
   });
 });

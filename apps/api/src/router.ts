@@ -2121,6 +2121,10 @@ export function createRouter(deps: RouterDeps) {
         await groupRepos.restoreGroup(context.actor, input.groupId);
         return { ok: true as const };
       }),
+      resume: authed.groups.resume.handler(async ({ context, input }) => {
+        await groupRepos.resumeGroup(context.actor, input.groupId);
+        return groupRepos.mapGroup(await groupRepos.getGroup(context.actor, input.groupId));
+      }),
       remove: authed.groups.remove.handler(async ({ context, input }) => {
         const removed = await groupRepos.removeGroup(context.actor, input.groupId);
         const cleanup = await Promise.allSettled(
