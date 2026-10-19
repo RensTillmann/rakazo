@@ -156,6 +156,7 @@ import { lazyOverlay } from "../components/ErrorBoundary";
 import { FlagMessageDialog, type FlagTarget } from "../components/FlagMessageDialog";
 import { InboundDeliveryCard } from "../components/InboundDeliveryCard";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
+import { RosterAttentionBadge } from "../components/RosterAttentionBadge";
 import { ThinkingText } from "../components/ThinkingText";
 import {
   LIVE_TOOL_STEP_WINDOW,
@@ -3470,11 +3471,15 @@ export function ShellPage() {
                                     size={compact ? 28 : 38}
                                   />
                                 )}
-                                {botsSidebarRail && attentionDot ? (
-                                  <span
-                                    aria-hidden="true"
-                                    data-roster-attention-dot=""
-                                    className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sidebar bg-warning"
+                                {botsSidebarRail ? (
+                                  <RosterAttentionBadge
+                                    label={
+                                      needsAnswer
+                                        ? t`Needs your answer`
+                                        : item.chat.unread
+                                          ? t` (unread)`.trim()
+                                          : null
+                                    }
                                   />
                                 ) : null}
                               </span>
@@ -3490,7 +3495,7 @@ export function ShellPage() {
                                     >
                                       {item.chat.name}
                                     </span>
-                                    {needsAnswer ? (
+                                    {botsSidebarRail ? null : needsAnswer ? (
                                       <span className="sr-only">
                                         <Trans> (needs your answer)</Trans>
                                       </span>
