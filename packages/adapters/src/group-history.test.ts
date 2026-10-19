@@ -2,7 +2,13 @@ import { blocksToAgentHistoryText } from "@rakazo/core";
 import { describe, expect, it, vi } from "vitest";
 import { groupHistoryTurn, groupMessageBotIds, loadGroupAuthorNames } from "./group-history.js";
 
-const names = { userName: "Rens", botNames: new Map([["josy", "Josy"], ["riona", "Riona"]]) };
+const names = {
+  userName: "Rens",
+  botNames: new Map([
+    ["josy", "Josy"],
+    ["riona", "Riona"],
+  ]),
+};
 
 describe("group history authors", () => {
   it("keeps only the bot's own messages as assistant turns", () => {
@@ -26,7 +32,13 @@ describe("group history authors", () => {
 
   it("names handoff ends and collects every bot a window mentions", async () => {
     const blocks = [
-      { kind: "handoff" as const, fromBotId: "josy", toBotId: "riona", text: "Take the refund", hop: 1 },
+      {
+        kind: "handoff" as const,
+        fromBotId: "josy",
+        toBotId: "riona",
+        text: "Take the refund",
+        hop: 1,
+      },
     ];
     expect(blocksToAgentHistoryText(blocks, names.botNames)).toBe(
       "[handoff Josy -> Riona] Take the refund",

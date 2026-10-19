@@ -1,5 +1,5 @@
 import { runJobKey } from "@rakazo/adapter-kit";
-import { type Actor } from "@rakazo/contracts";
+import type { Actor } from "@rakazo/contracts";
 import { createGroupRepos } from "@rakazo/db";
 import { cancelComputerRunWork } from "./computer-idle.js";
 import { screenLeaseIdForRun, toComputerRef } from "./computer-lifecycle.js";

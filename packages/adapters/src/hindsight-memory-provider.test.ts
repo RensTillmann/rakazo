@@ -76,7 +76,12 @@ describe("HindsightMemoryProvider", () => {
 
   it("gives every bank a fair share and lets other banks fill an empty one", async () => {
     const many = (prefix: string, n: number) =>
-      json({ results: Array.from({ length: n }, (_, i) => ({ id: `${prefix}${i}`, text: `${prefix}${i}` })) });
+      json({
+        results: Array.from({ length: n }, (_, i) => ({
+          id: `${prefix}${i}`,
+          text: `${prefix}${i}`,
+        })),
+      });
     const fetchMock = vi.fn(async (url: string) =>
       url.includes("/banks/fleet/")
         ? json({ results: [] })
@@ -99,7 +104,14 @@ describe("HindsightMemoryProvider", () => {
     );
 
     expect(result.ok && result.value.map((item) => item.id)).toEqual([
-      "k0", "p0", "k1", "p1", "k2", "p2", "k3", "p3",
+      "k0",
+      "p0",
+      "k1",
+      "p1",
+      "k2",
+      "p2",
+      "k3",
+      "p3",
     ]);
   });
 

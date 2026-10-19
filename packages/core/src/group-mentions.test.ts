@@ -124,10 +124,18 @@ describe("inferHandoffTargetBotId", () => {
 describe("resolveBotMentionedGroupBotIds", () => {
   it("wakes only named members, never the author and never a fallback", () => {
     expect(
-      resolveBotMentionedGroupBotIds({ text: "Done, no one else needed.", members, authorBotId: "a" }),
+      resolveBotMentionedGroupBotIds({
+        text: "Done, no one else needed.",
+        members,
+        authorBotId: "a",
+      }),
     ).toEqual([]);
     expect(
-      resolveBotMentionedGroupBotIds({ text: "@BotA @Writer please check", members, authorBotId: "a" }),
+      resolveBotMentionedGroupBotIds({
+        text: "@BotA @Writer please check",
+        members,
+        authorBotId: "a",
+      }),
     ).toEqual(["c"]);
     expect(
       resolveBotMentionedGroupBotIds({ text: "@everyone status?", members, authorBotId: "b" }),

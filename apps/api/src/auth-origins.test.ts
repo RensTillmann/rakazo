@@ -115,8 +115,6 @@ describe("mobile auth origins", () => {
   it("trusts an extra web origin for sign-in callbacks only when it is listed", async () => {
     expect(await trusted(`${TAILNET_ORIGIN}/app`, [TAILNET_ORIGIN])).toBe(true);
     expect(await trusted(`${TAILNET_ORIGIN}/app`)).toBe(false);
-    expect(await trusted("https://other.tail5f04cd.ts.net:5173/app", [TAILNET_ORIGIN])).toBe(
-      false,
-    );
+    expect(await trusted("https://other.tail5f04cd.ts.net:5173/app", [TAILNET_ORIGIN])).toBe(false);
   });
 });

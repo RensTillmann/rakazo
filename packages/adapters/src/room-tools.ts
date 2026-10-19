@@ -147,7 +147,9 @@ export async function roomResume(deps: RoomDeps, run: RoomRun, args: { roomId?: 
   try {
     const result = await createGroupRepos(deps.prisma).resumeGroup(run, roomId, { byBot: true });
     if (result.error) return { error: result.error };
-    return result.resumed ? { ok: true, roomId } : { ok: true, roomId, note: "room was not paused" };
+    return result.resumed
+      ? { ok: true, roomId }
+      : { ok: true, roomId, note: "room was not paused" };
   } catch (error) {
     return isolationMessage(error, "room is not available");
   }

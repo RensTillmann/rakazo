@@ -2,9 +2,21 @@ import type { PrismaClient } from "@rakazo/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
 import { selectBuiltinToolsForRun } from "./executor.js";
-import { ROOM_TOOL_NAMES, roomCreate, roomPost, roomToolsAllowedForBot, roomUpdate } from "./room-tools.js";
+import {
+  ROOM_TOOL_NAMES,
+  roomCreate,
+  roomPost,
+  roomToolsAllowedForBot,
+  roomUpdate,
+} from "./room-tools.js";
 
-const run = { id: "run-1", spaceId: "space-1", threadId: "thread-1", botId: "josy", userId: "user-1" };
+const run = {
+  id: "run-1",
+  spaceId: "space-1",
+  threadId: "thread-1",
+  botId: "josy",
+  userId: "user-1",
+};
 const unusedDeps = {
   prisma: {} as PrismaClient,
   events: { notify: vi.fn() },
@@ -62,7 +74,11 @@ describe("room tools", () => {
 
   it("refuse rooms outside 3 to 6 distinct bots before touching the database", async () => {
     await expect(
-      roomCreate(unusedDeps, run, { name: "Case 4 · Refund", botIds: ["a", "b"], roomKind: "case" }),
+      roomCreate(unusedDeps, run, {
+        name: "Case 4 · Refund",
+        botIds: ["a", "b"],
+        roomKind: "case",
+      }),
     ).resolves.toEqual({ error: "a room needs 3 to 6 bots" });
     await expect(
       roomCreate(unusedDeps, run, {
@@ -80,8 +96,8 @@ describe("room tools", () => {
   });
 
   it("refuse an empty post", async () => {
-    await expect(roomPost(unusedDeps, run, { roomId: "room-1", text: " " }, "key")).resolves.toEqual(
-      { error: "text is required" },
-    );
+    await expect(
+      roomPost(unusedDeps, run, { roomId: "room-1", text: " " }, "key"),
+    ).resolves.toEqual({ error: "text is required" });
   });
 });

@@ -72,7 +72,6 @@ function UsageMeter({ bar }: { bar: Bar }) {
 export function UsageTopBar({ refreshKey }: { refreshKey?: string | null }) {
   const { t } = useLingui();
   const [limits, setLimits] = useState<UsageLimits | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is the trigger.
   useEffect(() => {
     let cancelled = false;
     // Through a promise so a missing or failing endpoint never throws into React.
@@ -166,7 +165,6 @@ export function ThreadUsageLine({
 }) {
   const { t } = useLingui();
   const [usage, setUsage] = useState<ThreadUsage | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is the trigger.
   useEffect(() => {
     if (!botId && !groupId) {
       setUsage(null);

@@ -240,7 +240,8 @@ export class HindsightMemoryProvider implements SemanticMemoryProvider {
         signal,
       },
     );
-    if (!response.ok) throw new Error(`Hindsight recall from ${bank} failed: HTTP ${response.status}`);
+    if (!response.ok)
+      throw new Error(`Hindsight recall from ${bank} failed: HTTP ${response.status}`);
     return toResults(bank, await response.json());
   }
 

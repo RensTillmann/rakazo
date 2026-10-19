@@ -1196,12 +1196,23 @@ describe("run notification preference", () => {
       },
     });
 
-    source = { bot: { notifyOnFinish: false }, thread: { groupId: "group-1", group: { notify: false } } };
-    const groupRun = { botId: "bot-1", threadId: "thread-1", spaceId: "workspace-1", userId: "user-1" };
+    source = {
+      bot: { notifyOnFinish: false },
+      thread: { groupId: "group-1", group: { notify: false } },
+    };
+    const groupRun = {
+      botId: "bot-1",
+      threadId: "thread-1",
+      spaceId: "workspace-1",
+      userId: "user-1",
+    };
     await expect(runNotificationsEnabled(prisma, groupRun, "completion")).resolves.toBe(false);
     await expect(runNotificationsEnabled(prisma, groupRun, "help")).resolves.toBe(true);
     await expect(runNotificationsEnabled(prisma, groupRun, "takeover")).resolves.toBe(true);
-    source = { bot: { notifyOnFinish: false }, thread: { groupId: "group-1", group: { notify: true } } };
+    source = {
+      bot: { notifyOnFinish: false },
+      thread: { groupId: "group-1", group: { notify: true } },
+    };
     await expect(runNotificationsEnabled(prisma, groupRun, "completion")).resolves.toBe(true);
   });
 });
@@ -1815,9 +1826,7 @@ describe("createRunExecutor", () => {
       historyCompactedUpToSeq: null,
       includeSemanticRecall: true,
     });
-    expect(threadContextForRun("messaging", threadContext, true).includeSemanticRecall).toBe(
-      false,
-    );
+    expect(threadContextForRun("messaging", threadContext, true).includeSemanticRecall).toBe(false);
 
     expect(memoryRecallEveryRun({})).toBe(false);
     expect(memoryRecallEveryRun({ RAKAZO_MEMORY_RECALL_EVERY_RUN: "false" })).toBe(false);

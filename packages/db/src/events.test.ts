@@ -3828,10 +3828,12 @@ describe("duplicate question sync (RAKAZO_SYNC_DUPLICATE_ASKS)", () => {
             .filter(([, message]) => message.runId === where.runId)
             .map(([id, message]) => ({ id, blocks: message.blocks })),
         ),
-        update: vi.fn(async ({ where, data }: { where: { id: string }; data: { blocks: Block[] } }) => {
-          messages[where.id]!.blocks = data.blocks;
-          return { id: where.id };
-        }),
+        update: vi.fn(
+          async ({ where, data }: { where: { id: string }; data: { blocks: Block[] } }) => {
+            messages[where.id]!.blocks = data.blocks;
+            return { id: where.id };
+          },
+        ),
       },
       run: {
         findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
@@ -3840,9 +3842,7 @@ describe("duplicate question sync (RAKAZO_SYNC_DUPLICATE_ASKS)", () => {
             : null,
         ),
         findMany: vi.fn(async ({ where }: { where: { id: { not: string } } }) =>
-          runsWaiting
-            .filter((id) => id !== where.id.not && !queued.has(id))
-            .map((id) => ({ id })),
+          runsWaiting.filter((id) => id !== where.id.not && !queued.has(id)).map((id) => ({ id })),
         ),
         updateMany: vi.fn(async ({ where }: { where: { id: string } }) => {
           if (!runsWaiting.includes(where.id) || queued.has(where.id)) return { count: 0 };
