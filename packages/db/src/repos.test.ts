@@ -60,7 +60,9 @@ function classificationAnswers(answers: unknown[][]) {
 }
 
 function classificationCalls(findMany: { mock: { calls: unknown[][] } }): unknown[] {
-  return findMany.mock.calls.map((call) => call[0]).filter((query) => isClassification(query as RunQuery));
+  return findMany.mock.calls
+    .map((call) => call[0])
+    .filter((query) => isClassification(query as RunQuery));
 }
 
 describe("createRepos.listBots", () => {
