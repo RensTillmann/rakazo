@@ -104,7 +104,10 @@ interface ToolCallBudget {
 // Optional fuse is process-local. continueRun on another worker starts at zero.
 const toolCallBudgetsByRun = new Map<string, ToolCallBudget>();
 /** Model calls and active time a run used before it paused, so a resume continues the count. */
-const runBudgetUsageByRun = new Map<string, { modelCalls: number; usedMs: number }>();
+const runBudgetUsageByRun = new Map<
+  string,
+  { modelCalls: number; usedMs: number; warned: boolean }
+>();
 // Built on first use, not at module load: entry points call loadRootEnv() after
 // their imports, and ESM hoists those imports, so module-level env reads here
 // would run before .env is loaded and miss the local provider entirely.
@@ -173,17 +176,82 @@ export interface RunBudgetLimits {
 
 /**
  * Optional per-run budget. Unset, empty, 0, or invalid means unlimited (default).
- * RAKAZO_RUN_MAX_MINUTES may be fractional.
+ * RAKAZO_RUN_MAX_MINUTES may be fractional. RAKAZO_RUN_BUDGET_BY_BOT
+ * (`{"<botId>": {"modelCalls": 120, "minutes": 45}}`) replaces either limit for
+ * one bot; a missing or invalid field keeps the global value.
  */
-export function runBudgetLimits(env: NodeJS.ProcessEnv = process.env): RunBudgetLimits {
+export function runBudgetLimits(
+  env: NodeJS.ProcessEnv = process.env,
+  botId?: string,
+): RunBudgetLimits {
   const positive = (raw: string | undefined) => {
     const parsed = Number(raw?.trim() || "0");
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   };
+  const override = botId ? runBudgetOverrides(env)[botId] : undefined;
+  const minutes = override?.minutes ?? positive(env.RAKAZO_RUN_MAX_MINUTES);
   return {
-    maxModelCalls: Math.floor(positive(env.RAKAZO_RUN_MAX_MODEL_CALLS)),
-    maxMs: Math.round(positive(env.RAKAZO_RUN_MAX_MINUTES) * 60_000),
+    maxModelCalls: Math.floor(override?.modelCalls ?? positive(env.RAKAZO_RUN_MAX_MODEL_CALLS)),
+    maxMs: Math.round(minutes * 60_000),
   };
+}
+
+type RunBudgetOverride = { modelCalls?: number; minutes?: number };
+const runBudgetOverrideWarnings = new Set<string>();
+
+function warnRunBudgetOverride(message: string, detail: Record<string, unknown>) {
+  const key = `${message}:${JSON.stringify(detail)}`;
+  if (runBudgetOverrideWarnings.has(key)) return;
+  runBudgetOverrideWarnings.add(key);
+  getLogger().warn(message, detail);
+}
+
+/** Parses RAKAZO_RUN_BUDGET_BY_BOT; anything invalid is logged once and ignored. */
+function runBudgetOverrides(env: NodeJS.ProcessEnv): Record<string, RunBudgetOverride> {
+  const raw = env.RAKAZO_RUN_BUDGET_BY_BOT?.trim();
+  if (!raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    warnRunBudgetOverride("RAKAZO_RUN_BUDGET_BY_BOT is not valid JSON; ignored", {});
+    return {};
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    warnRunBudgetOverride("RAKAZO_RUN_BUDGET_BY_BOT must be a JSON object; ignored", {});
+    return {};
+  }
+  const overrides: Record<string, RunBudgetOverride> = {};
+  for (const [botId, entry] of Object.entries(parsed)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      warnRunBudgetOverride("RAKAZO_RUN_BUDGET_BY_BOT entry is not an object; ignored", { botId });
+      continue;
+    }
+    const override: RunBudgetOverride = {};
+    for (const field of ["modelCalls", "minutes"] as const) {
+      const value = (entry as Record<string, unknown>)[field];
+      if (value === undefined) continue;
+      if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+        override[field] = value;
+      } else {
+        warnRunBudgetOverride("RAKAZO_RUN_BUDGET_BY_BOT value is not a positive number; ignored", {
+          botId,
+          field,
+        });
+      }
+    }
+    overrides[botId] = override;
+  }
+  return overrides;
+}
+
+/**
+ * RAKAZO_RUN_BUDGET_WARN_AT: fraction of either limit at which the bot is asked once
+ * to save its progress. Unset, 0, or anything outside (0, 1) means no warning.
+ */
+export function runBudgetWarnAt(env: NodeJS.ProcessEnv = process.env): number {
+  const parsed = Number(env.RAKAZO_RUN_BUDGET_WARN_AT?.trim() || "0");
+  return Number.isFinite(parsed) && parsed > 0 && parsed < 1 ? parsed : 0;
 }
 
 export const RUN_BUDGET_FINAL_PROMPT =
@@ -202,9 +270,40 @@ function runBudgetReachedReason(
     return `${limits.maxModelCalls} model calls`;
   }
   if (limits.maxMs > 0 && usage.usedMs >= limits.maxMs) {
-    return `${Math.round((limits.maxMs / 60_000) * 10) / 10} minutes`;
+    return `${formatBudgetMinutes(limits.maxMs)} minutes`;
   }
   return undefined;
+}
+
+function formatBudgetMinutes(ms: number): string {
+  return String(Math.round((ms / 60_000) * 10) / 10);
+}
+
+/** The one early note when a run first reaches the warning fraction of either limit. */
+export function runBudgetWarningPrompt(
+  limits: RunBudgetLimits,
+  usage: { modelCalls: number; usedMs: number },
+): string {
+  const parts: string[] = [];
+  if (limits.maxModelCalls > 0) {
+    parts.push(`${usage.modelCalls} of ${limits.maxModelCalls} model calls`);
+  }
+  if (limits.maxMs > 0) {
+    parts.push(`${formatBudgetMinutes(usage.usedMs)} of ${formatBudgetMinutes(limits.maxMs)} minutes`);
+  }
+  return `Run budget almost used (${parts.join(" / ")}). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.`;
+}
+
+function runBudgetWarningDue(
+  limits: RunBudgetLimits,
+  usage: { modelCalls: number; usedMs: number },
+  warnAt: number,
+): boolean {
+  if (warnAt <= 0) return false;
+  return (
+    (limits.maxModelCalls > 0 && usage.modelCalls >= limits.maxModelCalls * warnAt) ||
+    (limits.maxMs > 0 && usage.usedMs >= limits.maxMs * warnAt)
+  );
 }
 
 export interface PiAgentRuntimeOptions {
@@ -297,7 +396,8 @@ export class PiAgentRuntime implements AgentRuntime {
       let resumeHost: ToolHost | undefined;
       // Run budget: counts top-level model requests and active time, carried over a pause.
       const now = this.now;
-      const budgetLimits = runBudgetLimits();
+      const budgetLimits = runBudgetLimits(process.env, request.botId);
+      const budgetWarnAt = runBudgetWarnAt();
       const budgetStartedAt = now();
       const budgetCarried = runBudgetUsageByRun.get(request.runId);
       runBudgetUsageByRun.delete(request.runId);
@@ -306,6 +406,8 @@ export class PiAgentRuntime implements AgentRuntime {
         modelCalls: budgetModelCalls,
         usedMs: (budgetCarried?.usedMs ?? 0) + now() - budgetStartedAt,
       });
+      // The early "save your progress" note goes out once per run, pauses included.
+      let budgetWarned = budgetCarried?.warned ?? false;
       let budgetFinalTurn = false;
       let budgetFinalMessage: AssistantMessage | undefined;
       let streamedBeforeBudgetFinal = 0;
@@ -517,12 +619,32 @@ export class PiAgentRuntime implements AgentRuntime {
             return undefined;
           },
           // Every top-level model request passes here, so it is where the budget counts.
-          // Once a limit is reached, the request becomes the final turn.
+          // Once a limit is reached, the request becomes the final turn. Before that, the
+          // first request at the warning fraction carries one "save your progress" note.
           prepareRequest: ({ context: requestContext }) => {
             if (budgetFinalTurn) return undefined;
-            const reached = runBudgetReachedReason(budgetLimits, budgetUsage());
+            const usage = budgetUsage();
+            const reached = runBudgetReachedReason(budgetLimits, usage);
             budgetModelCalls += 1;
-            if (!reached) return undefined;
+            if (!reached) {
+              if (budgetWarned || !runBudgetWarningDue(budgetLimits, usage, budgetWarnAt)) {
+                return undefined;
+              }
+              budgetWarned = true;
+              return {
+                context: {
+                  ...requestContext,
+                  messages: [
+                    ...requestContext.messages,
+                    {
+                      role: "user",
+                      content: runBudgetWarningPrompt(budgetLimits, usage),
+                      timestamp: Date.now(),
+                    },
+                  ],
+                },
+              };
+            }
             budgetFinalTurn = true;
             streamedBeforeBudgetFinal = streamed.length;
             queue.push({
@@ -833,7 +955,7 @@ export class PiAgentRuntime implements AgentRuntime {
           (budgetLimits.maxModelCalls > 0 || budgetLimits.maxMs > 0) &&
           (signal.aborted || Boolean(resumeHost?.pausePending))
         ) {
-          runBudgetUsageByRun.set(request.runId, budgetUsage());
+          runBudgetUsageByRun.set(request.runId, { ...budgetUsage(), warned: budgetWarned });
         }
       }
     });

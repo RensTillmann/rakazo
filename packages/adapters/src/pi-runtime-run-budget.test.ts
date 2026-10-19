@@ -34,6 +34,7 @@ import {
   RUN_BUDGET_FALLBACK_TEXT,
   RUN_BUDGET_FINAL_PROMPT,
   runBudgetLimits,
+  runBudgetWarnAt,
 } from "./pi-runtime.js";
 
 const testModel: Model<"openai-completions"> = {
@@ -125,6 +126,20 @@ function isFinalTurn(context: unknown): boolean {
   return JSON.stringify(messages.at(-1) ?? null).includes(RUN_BUDGET_FINAL_PROMPT);
 }
 
+/** The text of the request's last message when it is the early budget warning. */
+function warningText(context: unknown): string | undefined {
+  if (!context || typeof context !== "object" || !("messages" in context)) return undefined;
+  const messages = Array.isArray(context.messages) ? context.messages : [];
+  const content = (messages.at(-1) as { content?: unknown } | undefined)?.content;
+  const text =
+    typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? content.map((part: { text?: unknown }) => String(part?.text ?? "")).join("")
+        : "";
+  return text.startsWith("Run budget almost used (") ? text : undefined;
+}
+
 function request(executeTool = vi.fn(async () => ({ ok: true }))): AgentRunRequest {
   return {
     botId: "bot",
@@ -163,7 +178,12 @@ async function run(input: AgentRunRequest, runtime = new PiAgentRuntime()) {
   return events;
 }
 
-const BUDGET_ENV = ["RAKAZO_RUN_MAX_MODEL_CALLS", "RAKAZO_RUN_MAX_MINUTES"] as const;
+const BUDGET_ENV = [
+  "RAKAZO_RUN_MAX_MODEL_CALLS",
+  "RAKAZO_RUN_MAX_MINUTES",
+  "RAKAZO_RUN_BUDGET_BY_BOT",
+  "RAKAZO_RUN_BUDGET_WARN_AT",
+] as const;
 const previousEnv = Object.fromEntries(BUDGET_ENV.map((name) => [name, process.env[name]]));
 
 beforeEach(() => {
@@ -311,5 +331,162 @@ describe("run budget", () => {
     expect(executeTool).toHaveBeenCalledTimes(60);
     expect(providerState.stream.mock.calls.some(([, context]) => isFinalTurn(context))).toBe(false);
     expect(events.at(-1)).toEqual({ type: "done", text: "Done after sixty tool calls." });
+  });
+
+  it("replaces the global limits for the named bot only", () => {
+    const env = {
+      RAKAZO_RUN_MAX_MODEL_CALLS: "40",
+      RAKAZO_RUN_MAX_MINUTES: "20",
+      RAKAZO_RUN_BUDGET_BY_BOT: JSON.stringify({ jill: { modelCalls: 120, minutes: 45 } }),
+    };
+    expect(runBudgetLimits(env, "jill")).toEqual({ maxModelCalls: 120, maxMs: 2_700_000 });
+    expect(runBudgetLimits(env, "josy")).toEqual({ maxModelCalls: 40, maxMs: 1_200_000 });
+    expect(runBudgetLimits(env)).toEqual({ maxModelCalls: 40, maxMs: 1_200_000 });
+  });
+
+  it("falls back to the global value for a missing or invalid per-bot field", () => {
+    const base = { RAKAZO_RUN_MAX_MODEL_CALLS: "40", RAKAZO_RUN_MAX_MINUTES: "20" };
+    expect(
+      runBudgetLimits(
+        { ...base, RAKAZO_RUN_BUDGET_BY_BOT: JSON.stringify({ jill: { modelCalls: 120 } }) },
+        "jill",
+      ),
+    ).toEqual({ maxModelCalls: 120, maxMs: 1_200_000 });
+    expect(
+      runBudgetLimits(
+        { ...base, RAKAZO_RUN_BUDGET_BY_BOT: JSON.stringify({ jill: { minutes: 45 } }) },
+        "jill",
+      ),
+    ).toEqual({ maxModelCalls: 40, maxMs: 2_700_000 });
+    expect(
+      runBudgetLimits(
+        {
+          ...base,
+          RAKAZO_RUN_BUDGET_BY_BOT: JSON.stringify({ jill: { modelCalls: -1, minutes: "lots" } }),
+        },
+        "jill",
+      ),
+    ).toEqual({ maxModelCalls: 40, maxMs: 1_200_000 });
+  });
+
+  it("ignores per-bot budgets that are not valid JSON or not an object", () => {
+    const base = { RAKAZO_RUN_MAX_MODEL_CALLS: "40", RAKAZO_RUN_MAX_MINUTES: "20" };
+    for (const raw of ['{"jill": {"modelCalls": 120', "[1, 2]", "null", '{"jill": 5}']) {
+      expect(runBudgetLimits({ ...base, RAKAZO_RUN_BUDGET_BY_BOT: raw }, "jill")).toEqual({
+        maxModelCalls: 40,
+        maxMs: 1_200_000,
+      });
+    }
+  });
+
+  it("applies the run's own bot budget at run time", async () => {
+    process.env.RAKAZO_RUN_MAX_MODEL_CALLS = "5";
+    process.env.RAKAZO_RUN_BUDGET_BY_BOT = JSON.stringify({ bot: { modelCalls: 1 } });
+    providerState.stream.mockImplementation((_model, context) =>
+      stream(isFinalTurn(context) ? textTurn("Ran one command.") : toolTurn()),
+    );
+    const executeTool = vi.fn(async () => ({ ok: true }));
+
+    const events = await run(request(executeTool));
+
+    expect(providerState.stream).toHaveBeenCalledTimes(2);
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(events).toContainEqual({
+      type: "progress",
+      text: "Stopped: this task reached its limit of 1 model calls.",
+    });
+  });
+
+  it("reads the warning fraction and treats unset, 0, and out-of-range values as off", () => {
+    expect(runBudgetWarnAt({})).toBe(0);
+    expect(runBudgetWarnAt({ RAKAZO_RUN_BUDGET_WARN_AT: "0" })).toBe(0);
+    expect(runBudgetWarnAt({ RAKAZO_RUN_BUDGET_WARN_AT: "1.2" })).toBe(0);
+    expect(runBudgetWarnAt({ RAKAZO_RUN_BUDGET_WARN_AT: "soon" })).toBe(0);
+    expect(runBudgetWarnAt({ RAKAZO_RUN_BUDGET_WARN_AT: " 0.8 " })).toBe(0.8);
+  });
+
+  it("warns once at 80% of model calls, tools on, then keeps the final turn unchanged", async () => {
+    process.env.RAKAZO_RUN_MAX_MODEL_CALLS = "5";
+    process.env.RAKAZO_RUN_BUDGET_WARN_AT = "0.8";
+    const finalLine = "Saved progress to notes.md; next step is the failing test.";
+    providerState.stream.mockImplementation((_model, context) =>
+      stream(isFinalTurn(context) ? textTurn(finalLine) : toolTurn()),
+    );
+    const executeTool = vi.fn(async () => ({ ok: true }));
+
+    const events = await run(request(executeTool));
+
+    const contexts = providerState.stream.mock.calls.map(([, context]) => context);
+    expect(contexts).toHaveLength(6);
+    expect(contexts.map((context) => warningText(context))).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "Run budget almost used (4 of 5 model calls). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.",
+      undefined,
+    ]);
+    // The warning turn keeps tools on: its tool call ran.
+    expect(executeTool).toHaveBeenCalledTimes(5);
+    expect(contexts.map((context) => isFinalTurn(context))).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+    ]);
+    expect(events).toContainEqual({
+      type: "progress",
+      text: "Stopped: this task reached its limit of 5 model calls.",
+    });
+    expect(events.at(-1)).toEqual({ type: "done", text: finalLine });
+  });
+
+  it("warns once at 80% of minutes when that comes before 80% of model calls", async () => {
+    process.env.RAKAZO_RUN_MAX_MODEL_CALLS = "100";
+    process.env.RAKAZO_RUN_MAX_MINUTES = "10";
+    process.env.RAKAZO_RUN_BUDGET_WARN_AT = "0.8";
+    let clock = 0;
+    providerState.stream.mockImplementation((_model, context) =>
+      stream(isFinalTurn(context) ? textTurn("Out of time.") : toolTurn()),
+    );
+    const executeTool = vi.fn(async () => {
+      clock += 3 * 60_000;
+      return { ok: true };
+    });
+
+    const events = await run(request(executeTool), new PiAgentRuntime({ now: () => clock }));
+
+    const contexts = providerState.stream.mock.calls.map(([, context]) => context);
+    expect(contexts.map((context) => warningText(context))).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      "Run budget almost used (3 of 100 model calls / 9 of 10 minutes). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.",
+      undefined,
+    ]);
+    expect(isFinalTurn(contexts.at(-1))).toBe(true);
+    expect(events).toContainEqual({
+      type: "progress",
+      text: "Stopped: this task reached its limit of 10 minutes.",
+    });
+    expect(events.at(-1)).toEqual({ type: "done", text: "Out of time." });
+  });
+
+  it.each([undefined, "0"])("does not warn when the warning setting is %s", async (warnAt) => {
+    process.env.RAKAZO_RUN_MAX_MODEL_CALLS = "5";
+    if (warnAt !== undefined) process.env.RAKAZO_RUN_BUDGET_WARN_AT = warnAt;
+    providerState.stream.mockImplementation((_model, context) =>
+      stream(isFinalTurn(context) ? textTurn("Stopped.") : toolTurn()),
+    );
+
+    const events = await run(request());
+
+    const contexts = providerState.stream.mock.calls.map(([, context]) => context);
+    expect(contexts).toHaveLength(6);
+    expect(contexts.some((context) => warningText(context) !== undefined)).toBe(false);
+    expect(isFinalTurn(contexts.at(-1))).toBe(true);
+    expect(events.at(-1)).toEqual({ type: "done", text: "Stopped." });
   });
 });
