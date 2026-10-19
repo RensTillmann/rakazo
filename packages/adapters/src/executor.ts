@@ -144,7 +144,7 @@ import {
   formatAgentEnvironmentInstruction,
   redactShellStreams,
 } from "./agent-environment.js";
-import { buildApprovalAskBlock } from "./approval-ask.js";
+import { approvalPush, buildApprovalAskBlock } from "./approval-ask.js";
 import {
   approvalPausedToolResult,
   approvalReplayPathError,
@@ -4322,6 +4322,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let discardedMidTurnNarration = false;
         let lastDiscardedMidTurnNarration = "";
         const midTurnUserTexts: string[] = [];
+        // Fleet: the bot's latest stated intention in this run, the "Why" on its approval cards.
+        let lastStatedIntention = "";
         let midTurnProgressCount = 0;
         const turnStartedAtMs = run.startedAt?.getTime() ?? Date.now();
         // Durable interim messages only on genuinely long turns, capped per run.
@@ -4403,6 +4405,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const publishMidTurnNarration = async () => {
           const extracted = extractNarrationText(messageSegments, currentTextSegment);
           const narration = clampUserProgressMessage(redactSecrets(extracted.text, runSecrets));
+          if (narration) lastStatedIntention = narration;
           const canPublish = canPublishDurableNarration();
           if (
             narration &&
@@ -5124,6 +5127,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return pauseForApproval();
             }
             await workspaceCheckpoint.flush();
+            const toolDescription = (resolvedTool ?? connectorTools.get(name))?.description;
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
               threadId: run.threadId,
@@ -5141,6 +5145,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   {
                     reviewReason,
                     allowAlways: !ruleForbidsAlways,
+                    botName: bot.name,
+                    // Text streamed since the last narration, else the last narration itself.
+                    intention: currentTextSegment.trim() || lastStatedIntention,
+                    toolDescription,
                   },
                 ),
               ],
@@ -5153,8 +5161,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             await notifyRun(deps, run, {
               kind: "help",
-              title: `${bot.name} needs approval`,
-              body: `Review before ${(batchedActions ?? [name]).join(", ")}`,
+              ...approvalPush(bot.name, name, args, runSecrets, toolDescription),
               botId: bot.id,
               threadId: thread.id,
             });
@@ -6824,6 +6831,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const maxLength = messageUserMaxLength();
             const text = clampUserProgressMessage(rawMessage, maxLength);
             if (!text) return finish({ error: "message is required" });
+            lastStatedIntention = text;
             const truncated = isProgressMessageTruncated(rawMessage, maxLength);
             await flushProgress();
             await publishMidTurnNarration();
