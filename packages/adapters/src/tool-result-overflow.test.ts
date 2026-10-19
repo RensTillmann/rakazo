@@ -12,16 +12,18 @@ describe("cut-off line", () => {
   it("says how much was shown and how to read the rest", () => {
     const clipped = clipToolResultText("x".repeat(20_483), 12_000, "r1");
     expect(clipped.startsWith("x".repeat(12_000))).toBe(true);
-    expect(clipped.endsWith(
-      '\n[cut off: showed 12,000 of 20,483 characters. Ask a narrower question, or read the rest with read_tool_result("r1", offset=12000).]',
-    )).toBe(true);
+    expect(
+      clipped.endsWith(
+        '\n[cut off: showed 12,000 of 20,483 characters. Ask a narrower question, or read the rest with read_tool_result("r1", offset=12000).]',
+      ),
+    ).toBe(true);
   });
 
   it("without a kept copy only gives the counts and the narrower-question advice", () => {
     const clipped = clipToolResultText("x".repeat(20_483));
-    expect(clipped.endsWith(
-      "\n[cut off: showed 12,000 of 20,483 characters. Ask a narrower question.]",
-    )).toBe(true);
+    expect(
+      clipped.endsWith("\n[cut off: showed 12,000 of 20,483 characters. Ask a narrower question.]"),
+    ).toBe(true);
     expect(clipped).not.toContain("read_tool_result");
   });
 
@@ -101,9 +103,7 @@ describe("read_tool_result", () => {
 
   it("is a read for approvals, also in unattended runs", () => {
     expect(toolRequiresApproval("read_tool_result", false)).toBe(false);
-    expect(unattendedTriggerToolRequiresApproval("webhook", "read_tool_result", false)).toBe(
-      false,
-    );
+    expect(unattendedTriggerToolRequiresApproval("webhook", "read_tool_result", false)).toBe(false);
   });
 
   it("is offered only with RAKAZO_TOOL_RESULT_OVERFLOW=true", () => {

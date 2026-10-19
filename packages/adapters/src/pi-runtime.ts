@@ -76,11 +76,6 @@ import {
   resolveCompletionMaxTokens,
   TOOL_RESULT_TEXT_LIMIT,
 } from "./pi-runtime-limits.js";
-import {
-  READ_TOOL_RESULT_TOOL,
-  toolResultOverflowEnabled,
-  toolResultOverflowStore,
-} from "./tool-result-overflow.js";
 import type { PiSessionHandle, PiSessionRecorder } from "./pi-session.js";
 import { PiJsonlSessionRecorder } from "./pi-session.js";
 import { recordPiTelemetryContent, withPiTelemetry, withPiTelemetrySpan } from "./pi-telemetry.js";
@@ -91,6 +86,11 @@ import { SCHEDULE_TOOL_NAMES } from "./schedule-tools.js";
 import type { FinishedShellCommand } from "./shell-command-stream.js";
 import { deliverFinishedShells } from "./shell-command-stream.js";
 import { isThinkingSignatureMismatch, withoutThinkingBlocks } from "./thinking-signatures.js";
+import {
+  READ_TOOL_RESULT_TOOL,
+  toolResultOverflowEnabled,
+  toolResultOverflowStore,
+} from "./tool-result-overflow.js";
 import { textContentArg } from "./tool-text.js";
 import { argumentGiven } from "./update-bot-patch.js";
 

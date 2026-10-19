@@ -444,6 +444,7 @@ import {
   updateTicket,
 } from "./ticket-tools.js";
 import { advanceToolCallLoopGuard, loopGuardStopText } from "./tool-loop.js";
+import { READ_TOOL_RESULT_TOOL, toolResultOverflowEnabled } from "./tool-result-overflow.js";
 import { textContentArg } from "./tool-text.js";
 import { argumentGiven, parseUpdateBotPatch } from "./update-bot-patch.js";
 import {
@@ -459,7 +460,6 @@ import {
   userProgressClientNonce,
 } from "./user-progress.js";
 import { createWebProvider } from "./web-provider-factory.js";
-import { READ_TOOL_RESULT_TOOL, toolResultOverflowEnabled } from "./tool-result-overflow.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
 
 const READ_ONLY_AGENT_TOOLS = new Set([
