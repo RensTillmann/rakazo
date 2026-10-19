@@ -2524,6 +2524,10 @@ msgstr ""
 msgid "Fullscreen"
 msgstr "전체 화면"
 
+#: src/pages/Shell.tsx
+msgid "fyi"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Gateway ID"
@@ -3510,6 +3514,10 @@ msgstr ""
 msgid "Open computer settings"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Open conversation"
+msgstr ""
+
 #: src/components/markdown-link-prompt.tsx
 msgid "Open external link?"
 msgstr "외부 링크를 열까요?"
@@ -3719,6 +3727,10 @@ msgstr "서비스"
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "풀 리퀘스트"
+
+#: src/pages/Shell.tsx
+msgid "question"
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Questions and takeovers always notify you"
@@ -3963,6 +3975,10 @@ msgstr ""
 msgid "Replying to {0}"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "request"
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr ""
@@ -4031,6 +4047,10 @@ msgstr "복원됨"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "result"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
@@ -4563,6 +4583,10 @@ msgstr "시작 중"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "시작하는 중…"
+
+#: src/pages/Shell.tsx
+msgid "status"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx

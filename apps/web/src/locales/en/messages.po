@@ -2524,6 +2524,10 @@ msgstr "From {0}"
 msgid "Fullscreen"
 msgstr "Fullscreen"
 
+#: src/pages/Shell.tsx
+msgid "fyi"
+msgstr "fyi"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Gateway ID"
@@ -3510,6 +3514,10 @@ msgstr "Open chat with {speakerName}"
 msgid "Open computer settings"
 msgstr "Open computer settings"
 
+#: src/pages/Shell.tsx
+msgid "Open conversation"
+msgstr "Open conversation"
+
 #: src/components/markdown-link-prompt.tsx
 msgid "Open external link?"
 msgstr "Open external link?"
@@ -3719,6 +3727,10 @@ msgstr "Providers"
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "Pull request"
+
+#: src/pages/Shell.tsx
+msgid "question"
+msgstr "question"
 
 #: src/pages/GroupPanel.tsx
 msgid "Questions and takeovers always notify you"
@@ -3963,6 +3975,10 @@ msgstr "Reply cancelled"
 msgid "Replying to {0}"
 msgstr "Replying to {0}"
 
+#: src/pages/Shell.tsx
+msgid "request"
+msgstr "request"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr "Research & writing"
@@ -4032,6 +4048,10 @@ msgstr "Restored"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
 msgstr "Restoring your workspace"
+
+#: src/pages/Shell.tsx
+msgid "result"
+msgstr "result"
 
 #: src/pages/GroupPanel.tsx
 msgid "Resume room"
@@ -4563,6 +4583,10 @@ msgstr "Starting"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "Starting…"
+
+#: src/pages/Shell.tsx
+msgid "status"
+msgstr "status"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx

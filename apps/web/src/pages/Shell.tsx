@@ -232,13 +232,13 @@ import { localTimezone } from "../lib/local-timezone";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import { parseModelOptionKey } from "../lib/model-catalog";
+import { type PeerRoomView, peerRoomView } from "../lib/peer-messages";
 import {
   isFileDrag,
   isFilePaste,
   readFileAsBase64,
   revokePendingAttachmentPreviews,
 } from "../lib/pending-attachments";
-import { type PeerRoomView, peerRoomView } from "../lib/peer-messages";
 import { markAfterPaint, markOnce } from "../lib/performance";
 import { quoteDraftForSelection } from "../lib/quote-selection";
 import { getResponseStreamingEnabled, subscribeResponseStreaming } from "../lib/response-streaming";

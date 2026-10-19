@@ -645,7 +645,8 @@ export async function createApp(
     );
     // Fleet: the session's own user agent (set at sign-in; named for the fleet service and the
     // UI driver) tells devices apart better than the request header, which a driven browser shares.
-    const sessionUserAgent = (session.session as { userAgent?: string | null }).userAgent ?? undefined;
+    const sessionUserAgent =
+      (session.session as { userAgent?: string | null }).userAgent ?? undefined;
     return actor && { actor, sessionId: session.session.id, sessionUserAgent };
   };
   const sessionActor = async (request: Request) => (await requestSession(request))?.actor ?? null;

@@ -2524,6 +2524,10 @@ msgstr ""
 msgid "Fullscreen"
 msgstr "Vollbild"
 
+#: src/pages/Shell.tsx
+msgid "fyi"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Gateway ID"
@@ -3510,6 +3514,10 @@ msgstr ""
 msgid "Open computer settings"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Open conversation"
+msgstr ""
+
 #: src/components/markdown-link-prompt.tsx
 msgid "Open external link?"
 msgstr "Externen Link öffnen?"
@@ -3719,6 +3727,10 @@ msgstr "Anbieter"
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "Pull Request"
+
+#: src/pages/Shell.tsx
+msgid "question"
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Questions and takeovers always notify you"
@@ -3963,6 +3975,10 @@ msgstr ""
 msgid "Replying to {0}"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "request"
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr ""
@@ -4031,6 +4047,10 @@ msgstr "Wiederhergestellt"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "result"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
@@ -4563,6 +4583,10 @@ msgstr "Startet"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "Wird gestartet…"
+
+#: src/pages/Shell.tsx
+msgid "status"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
