@@ -293,25 +293,28 @@ export async function liveRoutineLogName(
   return row ? routineLogName({ role, blocks: blocks.data, ...row }, name) : undefined;
 }
 
-function toThreadMessage(row: {
-  id: string;
-  threadId: string;
-  seq: number;
-  role: string;
-  blocks: Prisma.JsonValue;
-  botId: string | null;
-  replyToMessageId: string | null;
-  replyQuote: string | null;
-  replyTo?: {
+function toThreadMessage(
+  row: {
+    id: string;
     threadId: string;
+    seq: number;
     role: string;
-    botId: string | null;
     blocks: Prisma.JsonValue;
-  } | null;
-  runId: string | null;
-  clientNonce?: string | null;
-  createdAt: Date;
-}, routineNames: ReadonlyMap<string, string>): ThreadMessage {
+    botId: string | null;
+    replyToMessageId: string | null;
+    replyQuote: string | null;
+    replyTo?: {
+      threadId: string;
+      role: string;
+      botId: string | null;
+      blocks: Prisma.JsonValue;
+    } | null;
+    runId: string | null;
+    clientNonce?: string | null;
+    createdAt: Date;
+  },
+  routineNames: ReadonlyMap<string, string>,
+): ThreadMessage {
   const parent = row.replyTo?.threadId === row.threadId ? row.replyTo : null;
   const inbound = inboundSourceFromClientNonce(row.clientNonce);
   const parsed = parent ? MessageBlockSchema.array().safeParse(parent.blocks) : undefined;

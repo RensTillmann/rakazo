@@ -4121,6 +4121,14 @@ msgstr ""
 msgid "Routine"
 msgstr "Rutin"
 
+#: src/pages/Shell.tsx
+msgid "Routine log · {routineName}"
+msgstr ""
+
+#: src/components/RoutineLogRow.tsx
+msgid "Routine log · {routineName} · {time}"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "Rutinler"
@@ -4455,6 +4463,10 @@ msgstr "Daha fazla göster"
 
 #: src/components/I18nBootstrap.tsx
 msgid "Show password"
+msgstr ""
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Show routine output"
 msgstr ""
 
 #: src/pages/Shell.tsx

@@ -3405,8 +3405,7 @@ export function ShellPage() {
                                   item.chat,
                                   showRoutineOutput,
                                   (routineName) => t`Routine log · ${routineName}`,
-                                ) ||
-                                (item.chat.status !== "idle" ? item.chat.status : "")
+                                ) || (item.chat.status !== "idle" ? item.chat.status : "")
                               : item.chat.preview ||
                                 item.chat.members.map((member) => member.name).join(", ")));
                         const rowDropTarget: RosterDropTarget | null =
@@ -5668,116 +5667,116 @@ const Transcript = memo(function Transcript({
                 expanded={routineLogExpanded}
                 onToggle={toggleRoutineLog}
               >
-              <div
-                data-message-id={message.id}
-                className={peerReceipt ? "relative py-0.5" : "group/message relative hover:z-20"}
-              >
                 <div
-                  className={
-                    peerReceipt
-                      ? undefined
-                      : `relative flex ${fromOwner ? "justify-end" : "justify-start"}`
-                  }
+                  data-message-id={message.id}
+                  className={peerReceipt ? "relative py-0.5" : "group/message relative hover:z-20"}
                 >
                   <div
-                    data-testid={peerReceipt ? undefined : "message-bubble-frame"}
                     className={
                       peerReceipt
                         ? undefined
-                        : `relative w-fit min-w-0 ${
-                            fromOwner
-                              ? "max-w-[min(84%,calc(100%_-_8rem))] [@media(hover:none)]:max-w-[84%]"
-                              : "max-w-[min(88%,calc(100%_-_8rem))] [@media(hover:none)]:max-w-[88%]"
-                          }`
+                        : `relative flex ${fromOwner ? "justify-end" : "justify-start"}`
                     }
                   >
-                    <MessageView
-                      artifactTarget={artifactTarget}
-                      message={message}
-                      canAnswer={message.id === answerableAskMessageId}
-                      onOpenBot={onOpenBot}
-                      onOpenPeerMessages={onOpenPeerMessages}
-                      onAnswer={onAnswer}
-                      onAnswerInChat={onAnswerInChat}
-                      speakerName={
-                        peerRoute
-                          ? peerRoute.speakerName
-                          : peerReceipt
-                            ? undefined
-                            : message.role === "bot"
-                              ? memberName?.(message.botId)
-                              : undefined
+                    <div
+                      data-testid={peerReceipt ? undefined : "message-bubble-frame"}
+                      className={
+                        peerReceipt
+                          ? undefined
+                          : `relative w-fit min-w-0 ${
+                              fromOwner
+                                ? "max-w-[min(84%,calc(100%_-_8rem))] [@media(hover:none)]:max-w-[84%]"
+                                : "max-w-[min(88%,calc(100%_-_8rem))] [@media(hover:none)]:max-w-[88%]"
+                            }`
                       }
-                      memberName={memberName}
-                      peerBot={peerBot}
-                      peerRoute={peerRoute}
-                      replyParent={
-                        message.replyToMessageId
-                          ? messageById.get(message.replyToMessageId)
-                          : undefined
-                      }
-                      onJumpToMessage={onJumpToMessage}
-                      onRefresh={onRefresh}
-                      onBotChanged={onBotChanged}
-                      onAddRoutine={onAddRoutine}
-                      voiceReady={voiceReady}
-                      speaking={speakingMessageId === message.id}
-                      onSpeak={() => onSpeak(message)}
-                      onOpenComputer={onOpenComputer}
-                      showToolActivity={showToolActivity}
-                    />
-                    {peerReceipt ? null : (
-                      <MessageHoverActions
+                    >
+                      <MessageView
+                        artifactTarget={artifactTarget}
                         message={message}
-                        side={fromOwner ? "start" : "end"}
-                        onReply={onReply}
-                        onReact={onReact}
-                        flagLabel={flagLabel}
-                        onFlag={onFlag}
+                        canAnswer={message.id === answerableAskMessageId}
+                        onOpenBot={onOpenBot}
+                        onOpenPeerMessages={onOpenPeerMessages}
+                        onAnswer={onAnswer}
+                        onAnswerInChat={onAnswerInChat}
+                        speakerName={
+                          peerRoute
+                            ? peerRoute.speakerName
+                            : peerReceipt
+                              ? undefined
+                              : message.role === "bot"
+                                ? memberName?.(message.botId)
+                                : undefined
+                        }
+                        memberName={memberName}
+                        peerBot={peerBot}
+                        peerRoute={peerRoute}
+                        replyParent={
+                          message.replyToMessageId
+                            ? messageById.get(message.replyToMessageId)
+                            : undefined
+                        }
+                        onJumpToMessage={onJumpToMessage}
+                        onRefresh={onRefresh}
+                        onBotChanged={onBotChanged}
+                        onAddRoutine={onAddRoutine}
+                        voiceReady={voiceReady}
+                        speaking={speakingMessageId === message.id}
+                        onSpeak={() => onSpeak(message)}
+                        onOpenComputer={onOpenComputer}
+                        showToolActivity={showToolActivity}
                       />
-                    )}
+                      {peerReceipt ? null : (
+                        <MessageHoverActions
+                          message={message}
+                          side={fromOwner ? "start" : "end"}
+                          onReply={onReply}
+                          onReact={onReact}
+                          flagLabel={flagLabel}
+                          onFlag={onFlag}
+                        />
+                      )}
+                    </div>
                   </div>
+                  {!peerReceipt && !message.id.startsWith("progress:") ? (
+                    <time
+                      dateTime={message.createdAt}
+                      data-testid="message-hover-time"
+                      className={cn(
+                        "pointer-events-none absolute top-1 z-10 text-xs tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100 group-has-[[aria-expanded=true]]/message:opacity-100 [@media(hover:none)]:transition-none",
+                        // Hover keeps the date in the side margin. Touch leaves that margin for the bubble and drops the revealed time under it.
+                        fromOwner
+                          ? "start-0 max-w-[max(8rem,16%)] text-start"
+                          : "end-0 max-w-[max(8rem,12%)] text-end",
+                        "[@media(hover:none)]:group-hover/message:static [@media(hover:none)]:group-focus-within/message:static [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:static",
+                        "[@media(hover:none)]:group-hover/message:block [@media(hover:none)]:group-focus-within/message:block [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:block",
+                        "[@media(hover:none)]:group-hover/message:mt-1 [@media(hover:none)]:group-focus-within/message:mt-1 [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:mt-1",
+                        "[@media(hover:none)]:group-hover/message:w-full [@media(hover:none)]:group-focus-within/message:w-full [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:w-full",
+                        "[@media(hover:none)]:group-hover/message:max-w-none [@media(hover:none)]:group-focus-within/message:max-w-none [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:max-w-none",
+                        fromOwner
+                          ? "[@media(hover:none)]:group-hover/message:text-end [@media(hover:none)]:group-focus-within/message:text-end [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:text-end"
+                          : "[@media(hover:none)]:group-hover/message:text-start [@media(hover:none)]:group-focus-within/message:text-start [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:text-start",
+                      )}
+                    >
+                      {formatMessageTime(message.createdAt, i18n.locale || "en")}
+                    </time>
+                  ) : null}
+                  {!peerReceipt && messageReactions ? (
+                    <div
+                      data-testid="message-reactions"
+                      className={cn("mt-1 flex flex-wrap gap-1", fromOwner && "justify-end")}
+                    >
+                      {[...messageReactions].map(([emoji, count]) => (
+                        <span
+                          key={emoji}
+                          className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs"
+                        >
+                          {emoji}
+                          {count > 1 ? ` ${count}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-                {!peerReceipt && !message.id.startsWith("progress:") ? (
-                  <time
-                    dateTime={message.createdAt}
-                    data-testid="message-hover-time"
-                    className={cn(
-                      "pointer-events-none absolute top-1 z-10 text-xs tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100 group-has-[[aria-expanded=true]]/message:opacity-100 [@media(hover:none)]:transition-none",
-                      // Hover keeps the date in the side margin. Touch leaves that margin for the bubble and drops the revealed time under it.
-                      fromOwner
-                        ? "start-0 max-w-[max(8rem,16%)] text-start"
-                        : "end-0 max-w-[max(8rem,12%)] text-end",
-                      "[@media(hover:none)]:group-hover/message:static [@media(hover:none)]:group-focus-within/message:static [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:static",
-                      "[@media(hover:none)]:group-hover/message:block [@media(hover:none)]:group-focus-within/message:block [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:block",
-                      "[@media(hover:none)]:group-hover/message:mt-1 [@media(hover:none)]:group-focus-within/message:mt-1 [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:mt-1",
-                      "[@media(hover:none)]:group-hover/message:w-full [@media(hover:none)]:group-focus-within/message:w-full [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:w-full",
-                      "[@media(hover:none)]:group-hover/message:max-w-none [@media(hover:none)]:group-focus-within/message:max-w-none [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:max-w-none",
-                      fromOwner
-                        ? "[@media(hover:none)]:group-hover/message:text-end [@media(hover:none)]:group-focus-within/message:text-end [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:text-end"
-                        : "[@media(hover:none)]:group-hover/message:text-start [@media(hover:none)]:group-focus-within/message:text-start [@media(hover:none)]:group-has-[[aria-expanded=true]]/message:text-start",
-                    )}
-                  >
-                    {formatMessageTime(message.createdAt, i18n.locale || "en")}
-                  </time>
-                ) : null}
-                {!peerReceipt && messageReactions ? (
-                  <div
-                    data-testid="message-reactions"
-                    className={cn("mt-1 flex flex-wrap gap-1", fromOwner && "justify-end")}
-                  >
-                    {[...messageReactions].map(([emoji, count]) => (
-                      <span
-                        key={emoji}
-                        className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs"
-                      >
-                        {emoji}
-                        {count > 1 ? ` ${count}` : ""}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
               </RoutineLogFoldable>
             </Fragment>
           );

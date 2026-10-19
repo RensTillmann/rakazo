@@ -8,7 +8,11 @@ export async function routineLogRunNames(
 ): Promise<Map<string, string>> {
   if (runIds.length === 0) return new Map();
   const runs = await prisma.run.findMany({
-    where: { id: { in: [...runIds] }, trigger: { in: ["routine", "webhook"] }, routineId: { not: null } },
+    where: {
+      id: { in: [...runIds] },
+      trigger: { in: ["routine", "webhook"] },
+      routineId: { not: null },
+    },
     select: { id: true, trigger: true, routineId: true, routine: { select: { name: true } } },
   });
   return new Map(

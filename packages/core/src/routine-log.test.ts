@@ -55,7 +55,9 @@ describe("routineLogName", () => {
   });
 
   it("leaves a normal user-triggered reply unchanged", () => {
-    expect(routineLogName({ role: "bot", blocks: text("Here you go.") }, undefined)).toBeUndefined();
+    expect(
+      routineLogName({ role: "bot", blocks: text("Here you go.") }, undefined),
+    ).toBeUndefined();
     expect(routineLogName({ role: "user", blocks: text('Run routine "X":') }, undefined)).toBe(
       undefined,
     );
@@ -73,7 +75,10 @@ describe("routineLogName", () => {
       ),
     ).toBe("Inbox triage");
     expect(
-      routineLogName({ role: "user", inbound: "github", blocks: text("[GitHub Event: push]") }, undefined),
+      routineLogName(
+        { role: "user", inbound: "github", blocks: text("[GitHub Event: push]") },
+        undefined,
+      ),
     ).toBeUndefined();
   });
 });

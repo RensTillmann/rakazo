@@ -4121,6 +4121,14 @@ msgstr "Rotar clave"
 msgid "Routine"
 msgstr "Rutina"
 
+#: src/pages/Shell.tsx
+msgid "Routine log · {routineName}"
+msgstr ""
+
+#: src/components/RoutineLogRow.tsx
+msgid "Routine log · {routineName} · {time}"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "Rutinas"
@@ -4456,6 +4464,10 @@ msgstr "Mostrar más"
 #: src/components/I18nBootstrap.tsx
 msgid "Show password"
 msgstr "Mostrar contraseña"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Show routine output"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show settings"

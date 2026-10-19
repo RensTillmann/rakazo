@@ -421,7 +421,11 @@ export function createRepos(prisma: PrismaClient) {
             preview = previewFromBlocks(visible[0]?.blocks);
             const shown = visible[0];
             if (shown) {
-              if (shown.runId && !routineNames.has(shown.runId) && !candidateRunIds.includes(shown.runId)) {
+              if (
+                shown.runId &&
+                !routineNames.has(shown.runId) &&
+                !candidateRunIds.includes(shown.runId)
+              ) {
                 for (const [id, name] of await routineLogRunNames(prisma, [shown.runId])) {
                   routineNames.set(id, name);
                 }

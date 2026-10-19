@@ -948,15 +948,30 @@ describe("routine log marking", () => {
 
   it("marks a routine run's final reply, but not its asks, message_user posts or user replies", async () => {
     const rows = [
-      { id: "final", runId: "run-routine", clientNonce: null, blocks: [{ kind: "text", text: "Run budget: 3/20" }] },
-      { id: "ask", runId: "run-routine", clientNonce: null, blocks: [{ kind: "ask", text: "Send it?" }] },
+      {
+        id: "final",
+        runId: "run-routine",
+        clientNonce: null,
+        blocks: [{ kind: "text", text: "Run budget: 3/20" }],
+      },
+      {
+        id: "ask",
+        runId: "run-routine",
+        clientNonce: null,
+        blocks: [{ kind: "ask", text: "Send it?" }],
+      },
       {
         id: "message-user",
         runId: "run-routine",
         clientNonce: "user-progress:run-routine:0:a:b",
         blocks: [{ kind: "text", text: "Rens, the invoice bounced." }],
       },
-      { id: "user-reply", runId: "run-user", clientNonce: null, blocks: [{ kind: "text", text: "Hi" }] },
+      {
+        id: "user-reply",
+        runId: "run-user",
+        clientNonce: null,
+        blocks: [{ kind: "text", text: "Hi" }],
+      },
     ].map((row, index) => ({
       ...row,
       threadId: "thread-1",
@@ -974,7 +989,9 @@ describe("routine log marking", () => {
 
     const page = await loadMessagePage(prisma, "thread-1", undefined, 10);
 
-    expect(Object.fromEntries(page.messages.map((message) => [message.id, message.routineLog]))).toEqual({
+    expect(
+      Object.fromEntries(page.messages.map((message) => [message.id, message.routineLog])),
+    ).toEqual({
       "user-reply": undefined,
       "message-user": undefined,
       ask: undefined,

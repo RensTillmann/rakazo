@@ -4121,6 +4121,14 @@ msgstr "key 교체"
 msgid "Routine"
 msgstr "자동 실행"
 
+#: src/pages/Shell.tsx
+msgid "Routine log · {routineName}"
+msgstr ""
+
+#: src/components/RoutineLogRow.tsx
+msgid "Routine log · {routineName} · {time}"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "자동 실행"
@@ -4456,6 +4464,10 @@ msgstr "더 보기"
 #: src/components/I18nBootstrap.tsx
 msgid "Show password"
 msgstr "비밀번호 표시"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Show routine output"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show settings"

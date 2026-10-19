@@ -30,7 +30,11 @@ export function routineLogFolds(
       fold.createdAt = message.createdAt;
       if (message.role === "bot") fold.routineName = message.routineLog;
     } else {
-      fold = { leaderId: message.id, routineName: message.routineLog, createdAt: message.createdAt };
+      fold = {
+        leaderId: message.id,
+        routineName: message.routineLog,
+        createdAt: message.createdAt,
+      };
     }
     folds.set(message.id, fold);
     previous = { message, fold };

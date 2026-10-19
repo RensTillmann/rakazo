@@ -9,7 +9,10 @@ import { RoutineLogFoldable } from "./RoutineLogRow";
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (strings: TemplateStringsArray, ...values: unknown[]) =>
-      strings.reduce((out, part, i) => out + part + (i < values.length ? String(values[i]) : ""), ""),
+      strings.reduce(
+        (out, part, i) => out + part + (i < values.length ? String(values[i]) : ""),
+        "",
+      ),
     i18n: { locale: "en-GB" },
   }),
 }));
