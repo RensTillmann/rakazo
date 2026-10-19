@@ -46,6 +46,23 @@ function reposFor(memoryScope: string | null) {
   return createRepos(prisma as unknown as PrismaClient);
 }
 
+type RunQuery = { where?: { trigger?: { in?: string[] } } };
+
+/** Peer/ticket classification queries filter on the bot_message trigger; the routine-log name lookup does not. */
+function isClassification(query: RunQuery): boolean {
+  return Boolean(query.where?.trigger?.in?.includes("bot_message"));
+}
+
+/** A run.findMany fake: classification queries get the next queued answer, any other run query gets []. */
+function classificationAnswers(answers: unknown[][]) {
+  const queue = [...answers];
+  return vi.fn(async (query: RunQuery) => (isClassification(query) ? (queue.shift() ?? []) : []));
+}
+
+function classificationCalls(findMany: { mock: { calls: unknown[][] } }): unknown[] {
+  return findMany.mock.calls.map((call) => call[0]).filter((query) => isClassification(query as RunQuery));
+}
+
 describe("createRepos.listBots", () => {
   it("surfaces a failed foreground run and clears the signal after recovery", async () => {
     const findMany = vi.fn(async () => [
@@ -119,10 +136,13 @@ describe("createRepos.listBots", () => {
     const bots = await createRepos(prisma as unknown as PrismaClient).listBots(actor);
 
     expect(bots.map((bot) => bot.preview)).toEqual(["Answer one", "Answer two"]);
-    expect(prisma.run.findMany).toHaveBeenCalledExactlyOnceWith({
-      where: { id: { in: ["run-one", "run-two"] }, trigger: { in: ["bot_message", "tickets"] } },
-      select: { id: true, trigger: true },
-    });
+    // The routine-log name lookup is a separate query; the peer classification still runs once.
+    expect(classificationCalls(prisma.run.findMany)).toEqual([
+      {
+        where: { id: { in: ["run-one", "run-two"] }, trigger: { in: ["bot_message", "tickets"] } },
+        select: { id: true, trigger: true },
+      },
+    ]);
   });
 
   it("classifies unseen runs in older pages and retains negative results between pages", async () => {
@@ -141,10 +161,7 @@ describe("createRepos.listBots", () => {
         ]),
       },
       run: {
-        findMany: vi
-          .fn()
-          .mockResolvedValueOnce([{ id: "peer-new" }])
-          .mockResolvedValueOnce([{ id: "peer-old" }]),
+        findMany: classificationAnswers([[{ id: "peer-new" }], [{ id: "peer-old" }]]),
       },
       message: {
         findMany: vi
@@ -163,8 +180,9 @@ describe("createRepos.listBots", () => {
     const bots = await createRepos(prisma as unknown as PrismaClient).listBots(actor);
 
     expect(bots[0]?.preview).toBe("Visible answer");
-    expect(prisma.run.findMany).toHaveBeenCalledTimes(2);
-    expect(prisma.run.findMany).toHaveBeenNthCalledWith(2, {
+    const calls = classificationCalls(prisma.run.findMany);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual({
       where: {
         id: { in: ["peer-old", "user-old"] },
         trigger: { in: ["bot_message", "tickets"] },
@@ -435,7 +453,15 @@ describe("createRepos.listSpaceBotsForSpaces", () => {
           messages: {
             orderBy: { seq: "desc" },
             take: 1,
-            select: { blocks: true, createdAt: true },
+            // The routine-log label needs to know which run (and kind of message) is newest.
+            select: {
+              blocks: true,
+              createdAt: true,
+              role: true,
+              runId: true,
+              clientNonce: true,
+              replyToMessageId: true,
+            },
           },
         }),
       }),

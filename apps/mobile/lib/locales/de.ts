@@ -880,4 +880,6 @@ export const DE_MESSAGES: Record<string, string> = {
   "This answers {bot}'s open question: '{question}'.":
     "Das beantwortet die offene Frage von {bot}: „{question}“.",
   "Send as answer": "Als Antwort senden",
+  "Routine log · {name} · {time}": "Routine-Protokoll · {name} · {time}",
+  "Routine log · {name}": "Routine-Protokoll · {name}",
 };

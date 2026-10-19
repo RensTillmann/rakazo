@@ -449,6 +449,7 @@ describe("thread message pages", () => {
     ]);
     const prisma = {
       message: { findMany, count: vi.fn(async () => 0) },
+      run: { findMany: vi.fn(async () => []) },
     } as unknown as PrismaClient;
 
     const page = await loadMessagePage(
@@ -489,8 +490,9 @@ describe("thread message pages", () => {
     const prisma = {
       message: { findMany },
       run: {
+        // Later lookups (routine-log names) find no routine runs.
         findMany: vi
-          .fn()
+          .fn(async () => [])
           .mockResolvedValueOnce([{ id: "run-peer" }])
           .mockResolvedValueOnce([]),
       },
@@ -569,8 +571,9 @@ describe("thread message pages", () => {
     const prisma = {
       message: { findMany },
       run: {
+        // Later lookups (routine-log names) find no routine runs.
         findMany: vi
-          .fn()
+          .fn(async () => [])
           .mockResolvedValueOnce([{ id: "run-peer" }])
           .mockResolvedValueOnce([]),
       },
