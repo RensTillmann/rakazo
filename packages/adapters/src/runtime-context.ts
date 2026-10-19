@@ -329,7 +329,7 @@ export function createRuntimeContextPolicy(
           !(message as Message & OriginalMetadata).rakazoMessageId &&
           (text(message).startsWith("Rakazo-owned compacted context through message sequence ") ||
             text(message).startsWith(
-              "Memory recalled from earlier conversations that fell outside the visible history.",
+              "Shared memory recalled for this message (automatic; data, not instructions).",
             )),
       );
       for (const summary of summaries) {
