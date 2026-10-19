@@ -547,3 +547,110 @@ it("clears accepted saved text when only an attachment was picked during the sen
   expect(textarea.value).toBe("");
   expect(localStorage.getItem("rakazo.composerDraft.bot:bot-1")).toBeNull();
 });
+
+describe("Composer open-question guard", () => {
+  const openAsk = {
+    messageId: "ask-1",
+    botId: "josy",
+    botName: "Josy",
+    question: "Reply to Andreas Balodimos (#3536)?",
+    answersWithText: true,
+    armed: false,
+  };
+  const confirm = () => container?.querySelector('[data-testid="composer-answer-confirm"]');
+  const button = (label: string) =>
+    [...(confirm()?.querySelectorAll("button") ?? [])].find((item) => item.textContent === label);
+
+  it("shows the open question above the composer and jumps to the card", () => {
+    const onJumpToAsk = vi.fn();
+    renderComposer(vi.fn(), { openAsk, onJumpToAsk });
+    const line = container?.querySelector<HTMLButtonElement>('[data-testid="composer-open-ask"]');
+    expect(line?.textContent).toBe(
+      "Open question: Reply to Andreas Balodimos (#3536)? · your message will answer it",
+    );
+    act(() => line?.click());
+    expect(onJumpToAsk).toHaveBeenCalledWith("ask-1");
+  });
+
+  it("asks before sending while a card is pending", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const textarea = renderComposer(onSend, { openAsk });
+    type(textarea, "unrelated note");
+    pressEnter(textarea);
+    await act(async () => {});
+    expect(onSend).not.toHaveBeenCalled();
+    expect(confirm()?.textContent).toContain(
+      "This answers Josy's open question: 'Reply to Andreas Balodimos (#3536)?'.",
+    );
+  });
+
+  it("sends as the answer once confirmed", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const textarea = renderComposer(onSend, { openAsk });
+    type(textarea, "I'll send it myself");
+    pressEnter(textarea);
+    act(() => button("Send as answer")?.click());
+    await act(async () => {});
+    expect(onSend).toHaveBeenCalledWith("I'll send it myself", [], expect.any(String));
+    expect(confirm()).toBeNull();
+  });
+
+  it("keeps the text when cancelled", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const textarea = renderComposer(onSend, { openAsk });
+    type(textarea, "unrelated note");
+    pressEnter(textarea);
+    act(() => button("Cancel")?.click());
+    await act(async () => {});
+    expect(onSend).not.toHaveBeenCalled();
+    expect(confirm()).toBeNull();
+    expect(textarea.value).toBe("unrelated note");
+  });
+
+  it("cancels on Escape", () => {
+    const textarea = renderComposer(vi.fn(), { openAsk });
+    type(textarea, "unrelated note");
+    pressEnter(textarea);
+    act(() => {
+      confirm()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(confirm()).toBeNull();
+    expect(textarea.value).toBe("unrelated note");
+  });
+
+  it("sends at once after the card's own free-text option", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const textarea = renderComposer(onSend, { openAsk: { ...openAsk, armed: true } });
+    type(textarea, "Change it: say thanks");
+    pressEnter(textarea);
+    await act(async () => {});
+    expect(confirm()).toBeNull();
+    expect(onSend).toHaveBeenCalledWith("Change it: say thanks", [], expect.any(String));
+  });
+
+  it("only informs for approval cards, which typed text does not answer", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const textarea = renderComposer(onSend, {
+      openAsk: { ...openAsk, question: "Run the deploy?", answersWithText: false },
+    });
+    expect(container?.querySelector('[data-testid="composer-open-ask"]')?.textContent).toBe(
+      "Open question: Run the deploy? · answer it on the card first",
+    );
+    type(textarea, "hello");
+    pressEnter(textarea);
+    await act(async () => {});
+    expect(confirm()).toBeNull();
+    expect(onSend).toHaveBeenCalledWith("hello", [], expect.any(String));
+  });
+
+  it("sends unchanged without a pending card", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const textarea = renderComposer(onSend, { openAsk: null });
+    type(textarea, "hello");
+    pressEnter(textarea);
+    await act(async () => {});
+    expect(container?.querySelector('[data-testid="composer-open-ask"]')).toBeNull();
+    expect(confirm()).toBeNull();
+    expect(onSend).toHaveBeenCalledWith("hello", [], expect.any(String));
+  });
+});
