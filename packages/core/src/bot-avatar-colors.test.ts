@@ -21,4 +21,14 @@ describe("bot mention text colors", () => {
     expect(colors.onDark).toBe("#FFFFFF");
     expect(colors.onLight).not.toBe("#CBD5E1");
   });
+
+  it("gives a photo avatar the speaker-name colour of its own id, not a shared fallback", () => {
+    const photo = "data:image/png;base64,AAAA";
+    for (const id of ["cmvag1it0001h4epbvls4w5nn", "cmvag1iox00184epb1t9edqer"]) {
+      expect(botMentionTextColors(id, photo).onDark).toBe(resolvePersonaColorDef(id, photo).light);
+    }
+    const ids = ["josy-id", "quinn-id", "riona-id", "elena-id", "maya-id", "isabella-id"];
+    const shades = new Set(ids.map((id) => botMentionTextColors(id, photo).onDark));
+    expect(shades.size).toBeGreaterThan(1);
+  });
 });
