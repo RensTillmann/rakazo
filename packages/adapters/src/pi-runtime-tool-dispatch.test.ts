@@ -1044,6 +1044,64 @@ describe("Pi connector tool dispatch", () => {
     ]);
   });
 
+  describe("activity details (RAKAZO_ACTIVITY_DETAILS)", () => {
+    const bigResult = "x".repeat(89_404);
+    const runWith = async (runId: string) => {
+      const completions: AgentToolCompletion[] = [];
+      for await (const _event of new PiAgentRuntime().run(
+        {
+          botId: "b",
+          threadId: "t",
+          runId,
+          prompt: "read the inbox",
+          instructions: "Use the destination tool.",
+          history: [],
+          tools: [destinationTool],
+          model: { provider: "test", id: "dispatch-test-model" },
+          contextStrategy: "current",
+          executeTool: vi.fn(async () => bigResult),
+          onToolCompleted: (completion) => {
+            completions.push(completion);
+          },
+        },
+        { signal: new AbortController().signal },
+      )) {
+        // Exhaust the fake agent's runtime event stream.
+      }
+      return completions;
+    };
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("records the full size, what the model saw and that it was cut off", async () => {
+      vi.stubEnv("RAKAZO_ACTIVITY_DETAILS", "true");
+      const [completion] = await runWith("activity-on");
+      expect(completion?.shown?.resultChars).toBe(JSON.stringify(bigResult).length);
+      expect(typeof completion?.budget?.modelCalls).toBe("number");
+      const payload = toolCompletionAuditPayload(completion!);
+      expect(payload).toMatchObject({
+        resultChars: 89_406,
+        shownChars: 12_000,
+        clipped: true,
+      });
+      expect(String(payload.resultPreview)).toHaveLength(2_000);
+      expect(typeof payload.modelCalls).toBe("number");
+      expect(typeof payload.elapsedMinutes).toBe("number");
+    });
+
+    it("records nothing extra with the setting off", async () => {
+      const [completion] = await runWith("activity-off");
+      expect(completion?.shown).toBeUndefined();
+      expect(completion?.budget).toBeUndefined();
+      const payload = toolCompletionAuditPayload(completion!);
+      for (const key of ["resultChars", "shownChars", "clipped", "resultPreview", "modelCalls"]) {
+        expect(payload).not.toHaveProperty(key);
+      }
+    });
+  });
+
   it("fails a tool turn that never writes a final answer instead of asking to continue", async () => {
     fakeAgentState.mode = "silent-continuation";
     fakeAgentState.emitFinalAfterFollowUp = false;

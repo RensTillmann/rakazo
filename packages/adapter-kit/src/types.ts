@@ -209,6 +209,13 @@ export interface AgentToolCompletion {
   result?: unknown;
   error?: unknown;
   paused?: boolean;
+  /**
+   * Fleet (RAKAZO_ACTIVITY_DETAILS): the text the model was given and the result's full length
+   * before clipping. Unredacted; audit hooks must blank secrets before persisting it.
+   */
+  shown?: { text: string; resultChars: number };
+  /** Fleet (RAKAZO_ACTIVITY_DETAILS): run-budget counters when the tool finished. */
+  budget?: { modelCalls: number; usedMs: number };
 }
 
 export interface ControlLeaseRef {
