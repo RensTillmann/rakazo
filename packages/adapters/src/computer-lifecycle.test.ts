@@ -1903,10 +1903,10 @@ describe("computer execution leases", () => {
       .fn()
       .mockResolvedValueOnce([{ id: "bot-1" }])
       .mockResolvedValueOnce([{ id: "computer-1", scope: "dedicated" }])
-      .mockResolvedValueOnce([{ id: "run-1" }])
+      .mockResolvedValueOnce([{ id: "run-1", createdAt: new Date() }])
       .mockResolvedValueOnce([{ id: "bot-1" }])
       .mockResolvedValueOnce([{ id: "computer-1", scope: "dedicated" }])
-      .mockResolvedValueOnce([{ id: "run-2" }])
+      .mockResolvedValueOnce([{ id: "run-2", createdAt: new Date() }])
       .mockResolvedValueOnce([{ id: "bot-1" }])
       .mockResolvedValueOnce([{ id: "computer-1", scope: "dedicated" }])
       .mockResolvedValueOnce([]);
@@ -1920,7 +1920,7 @@ describe("computer execution leases", () => {
         updateManyAndReturn,
         create: vi.fn(),
       },
-      run: { aggregate: vi.fn() },
+      run: { aggregate: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
     };
     const prisma = {
       $transaction: vi.fn(async (work: (client: typeof tx) => unknown) => work(tx)),
@@ -1943,6 +1943,81 @@ describe("computer execution leases", () => {
       acquireDedicatedScreenLeaseFence(prisma, { ...base, runId: "run-unowned" }),
     ).rejects.toBeInstanceOf(ComputerBusyError);
     expect(updateManyAndReturn).toHaveBeenCalledTimes(2);
+  });
+
+  describe("one run at a time on a dedicated computer", () => {
+    const createdAt = new Date("2026-10-20T10:00:00Z");
+    function fenceTx(
+      foreign: Array<{ id: string; createdAt: Date }>,
+      holderRunId: string | null = null,
+    ) {
+      const tx = {
+        $queryRaw: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: "bot-1" }])
+          .mockResolvedValueOnce([{ id: "computer-1", scope: "dedicated" }])
+          .mockResolvedValueOnce([{ id: "run-self", createdAt }]),
+        computerExecutionLease: {
+          findFirst: vi.fn().mockResolvedValue(holderRunId ? { runId: holderRunId } : null),
+          updateManyAndReturn: vi.fn().mockResolvedValue([{ fence: 4 }]),
+          create: vi.fn(),
+        },
+        run: { aggregate: vi.fn(), findMany: vi.fn().mockResolvedValue(foreign) },
+      };
+      const prisma = {
+        $transaction: vi.fn(async (work: (client: typeof tx) => unknown) => work(tx)),
+      } as unknown as PrismaClient;
+      return { tx, prisma };
+    }
+    const input = {
+      computerId: "computer-1",
+      botId: "bot-1",
+      workerId: "worker-1",
+      runFence: 1,
+      runId: "run-self",
+    };
+
+    it("takes the fence when no other run on the computer holds a live lease", async () => {
+      const { tx, prisma } = fenceTx([]);
+      await expect(acquireDedicatedScreenLeaseFence(prisma, input)).resolves.toMatchObject({
+        runId: "run-self",
+        fence: 4,
+      });
+      expect(tx.run.findMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          bot: { computerId: "computer-1" },
+          leaseExpiresAt: { gt: expect.any(Date) },
+          id: { not: "run-self" },
+        }),
+        select: { id: true, createdAt: true },
+      });
+    });
+
+    it("waits behind an older run with a live lease", async () => {
+      const { tx, prisma } = fenceTx([{ id: "run-older", createdAt: new Date(0) }]);
+      await expect(acquireDedicatedScreenLeaseFence(prisma, input)).rejects.toBeInstanceOf(
+        ComputerBusyError,
+      );
+      expect(tx.computerExecutionLease.updateManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it("waits behind a newer run that already holds the fence", async () => {
+      const newer = { id: "run-newer", createdAt: new Date(createdAt.getTime() + 60_000) };
+      const { tx, prisma } = fenceTx([newer], "run-newer");
+      await expect(acquireDedicatedScreenLeaseFence(prisma, input)).rejects.toBeInstanceOf(
+        ComputerBusyError,
+      );
+      expect(tx.computerExecutionLease.updateManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it("goes first when the only other live run is newer and not working yet", async () => {
+      const newer = { id: "run-newer", createdAt: new Date(createdAt.getTime() + 60_000) };
+      const { prisma } = fenceTx([newer], "run-finished");
+      await expect(acquireDedicatedScreenLeaseFence(prisma, input)).resolves.toMatchObject({
+        runId: "run-self",
+        fence: 4,
+      });
+    });
   });
 
   it("acquires a team lease on a stale suspending computer", async () => {

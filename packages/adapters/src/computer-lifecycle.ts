@@ -492,6 +492,12 @@ export function screenLeaseIdForRun(
 /**
  * Dedicated computers do not take an active computer-execution lease, but a retained screen
  * needs an increasing fence across runs. Keep the sequence in the expired per-computer/bot row.
+ *
+ * One run works a dedicated computer at a time: while another run on it holds a live worker
+ * lease, this throws `ComputerBusyError` and the caller requeues with backoff. A card answer
+ * resumes a paused run while a newer run may be working; the resumed run waits its turn. Two
+ * runs that both reach this point before either holds the fence must not both back off
+ * forever, so a newer foreign run that does not hold the fence yet is ignored by the older one.
  */
 export async function acquireDedicatedScreenLeaseFence(
   prisma: PrismaClient,
@@ -519,8 +525,8 @@ export async function acquireDedicatedScreenLeaseFence(
       throw new ComputerBusyError();
     }
 
-    const currentRun = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM runs
+    const currentRun = await tx.$queryRaw<Array<{ id: string; createdAt: Date }>>`
+      SELECT id, "createdAt" FROM runs
       WHERE id = ${input.runId}
         AND "botId" = ${input.botId}
         AND status = 'running'
@@ -528,7 +534,31 @@ export async function acquireDedicatedScreenLeaseFence(
         AND "leaseFence" = ${input.runFence}
         AND "leaseExpiresAt" > ${new Date()}
       FOR UPDATE SKIP LOCKED`;
-    if (currentRun.length !== 1) throw new ComputerBusyError();
+    const self = currentRun[0];
+    if (currentRun.length !== 1 || !self) throw new ComputerBusyError();
+    // Other runs on this computer whose worker lease is live (a paused run holds none).
+    const foreign = await tx.run.findMany({
+      where: {
+        status: { in: [...ACTIVE_RUN_STATUSES] },
+        bot: { computerId: input.computerId },
+        leaseExpiresAt: { gt: new Date() },
+        id: { not: input.runId },
+      },
+      select: { id: true, createdAt: true },
+    });
+    if (foreign.length > 0) {
+      const holder = await tx.computerExecutionLease.findFirst({
+        where: { computerId: input.computerId, botId: input.botId },
+        select: { runId: true },
+      });
+      const mustWait = foreign.some(
+        (run) =>
+          run.id === holder?.runId ||
+          run.createdAt < self.createdAt ||
+          (run.createdAt.getTime() === self.createdAt.getTime() && run.id < self.id),
+      );
+      if (mustWait) throw new ComputerBusyError();
+    }
 
     const expiredAt = new Date(0);
     const now = new Date();

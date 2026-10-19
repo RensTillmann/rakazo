@@ -946,6 +946,17 @@ describeIntegration("run executor lifecycle", () => {
         leaseFence: 2,
         leaseExpiresAt: new Date(Date.now() + 60_000),
       });
+      // A second live run on the computer makes the newer one wait its turn.
+      await expect(
+        acquireDedicatedScreenLeaseFence(handles.prisma, {
+          computerId,
+          runId: laterRun.id,
+          botId: seeded.bot.id,
+          workerId: "worker-later",
+          runFence: 2,
+        }),
+      ).rejects.toBeInstanceOf(ComputerBusyError);
+      await finishRuns([seeded.run.id]);
       activeRunIds.push(laterRun.id);
       const later = await acquireDedicatedScreenLeaseFence(handles.prisma, {
         computerId,
@@ -979,6 +990,8 @@ describeIntegration("run executor lifecycle", () => {
         runId: laterRun.id,
         expiresAt: new Date(0),
       });
+      // Neither may wait behind the earlier runs; they are done by now.
+      await finishRuns([laterRun.id, staleRun.id]);
 
       const parallelRuns = await Promise.all([
         createRunForBot(seeded, "parallel-dedicated-run-a", {
@@ -1003,15 +1016,31 @@ describeIntegration("run executor lifecycle", () => {
           workerId: index === 0 ? "worker-parallel-a" : "worker-parallel-b",
           runFence: 1,
         });
+      // One run works the dedicated computer at a time. The older run wins a simultaneous
+      // allocation; the newer one retries after it finishes, as the worker's requeue does.
       const attempts = await Promise.allSettled(parallelRuns.map(allocateParallel));
       const parallelLeases = [];
+      const retries = [];
       for (const [index, attempt] of attempts.entries()) {
-        if (attempt.status === "fulfilled") parallelLeases.push(attempt.value);
-        else {
+        if (attempt.status === "fulfilled") {
+          parallelLeases.push(attempt.value);
+          await finishRuns([attempt.value.runId]);
+        } else {
           expect(attempt.reason).toBeInstanceOf(ComputerBusyError);
-          // Match the worker's retry after the competing allocation completes.
-          parallelLeases.push(await allocateParallel(parallelRuns[index]!, index));
+          retries.push(index);
         }
+      }
+      retries.sort((a, b) => {
+        const left = parallelRuns[a]!;
+        const right = parallelRuns[b]!;
+        return (
+          left.createdAt.getTime() - right.createdAt.getTime() || (left.id < right.id ? -1 : 1)
+        );
+      });
+      for (const index of retries) {
+        const lease = await allocateParallel(parallelRuns[index]!, index);
+        parallelLeases.push(lease);
+        await finishRuns([lease.runId]);
       }
       expect(parallelLeases.map((lease) => lease.fence).sort((a, b) => a - b)).toEqual([10, 11]);
       await expect(
@@ -1210,6 +1239,18 @@ describeIntegration("run executor lifecycle", () => {
       },
     });
     return { cookie, me, bot, thread, task, run };
+  }
+
+  function finishRuns(runIds: string[]) {
+    return handles.prisma.run.updateMany({
+      where: { id: { in: runIds } },
+      data: {
+        status: "completed",
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        completedAt: new Date(),
+      },
+    });
   }
 
   async function createRunForBot(

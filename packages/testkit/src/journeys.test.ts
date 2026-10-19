@@ -1994,7 +1994,7 @@ describeJourneys("required product journeys", () => {
     expect(file.content).not.toContain("nonce-dup");
   });
 
-  it("15b: a free-text chat message answers a waiting ask", async () => {
+  it("15b: a chat message while a card waits starts its own run and leaves the card pending", async () => {
     const cookie = await signup(app, `ask-freetext-j-${stamp}@rakazo.test`, "Ask Free");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
@@ -2020,29 +2020,21 @@ describeJourneys("required product journeys", () => {
       ),
     ).toBe(true);
 
-    await rpc(app, cookie, "threads/send", {
+    const sent = await rpc<{ runId: string; runIds: string[] }>(app, cookie, "threads/send", {
       botId: bot.id,
       text: "Paris",
       clientNonce: `ask-freetext-${stamp}`,
     });
-    const answered = await waitFor(app, cookie, bot.id, (snap) =>
-      snap.messages.some((message) =>
-        message.blocks.some(
-          (block) =>
-            block.kind === "ask" && block.status === "answered" && block.answer === "Paris",
-        ),
-      ),
-    );
-    expect(
-      answered.messages.flatMap((message) => message.blocks).find((block) => block.kind === "ask"),
-    ).toMatchObject({ status: "answered", answer: "Paris" });
-    await waitForDatabase(async () => {
-      const run = await prisma.run.findUnique({ where: { id: asked.runId } });
-      return run?.status === "completed";
-    });
+    expect(sent.runId).toBeTruthy();
+    expect(sent.runId).not.toBe(asked.runId);
+    expect(sent.runIds).toEqual([sent.runId]);
     expect((await prisma.run.findUniqueOrThrow({ where: { id: asked.runId } })).status).toBe(
-      "completed",
+      "waiting_input",
     );
+    const askBlocks = (
+      await prisma.message.findMany({ where: { runId: asked.runId }, select: { blocks: true } })
+    ).flatMap((message) => message.blocks as Array<{ kind: string; status?: string }>);
+    expect(askBlocks.find((block) => block.kind === "ask")).toMatchObject({ status: "pending" });
   });
 
   it("16: routine test-run and plugin connect/revoke", async () => {

@@ -7,6 +7,17 @@ export const ACTIVE_RUN_STATUSES = [
   "waiting_input",
   "waiting_takeover",
 ] as const satisfies readonly RunStatus[];
+/**
+ * Runs that hold a thread's queue: a new message steers or waits behind them. A run paused
+ * at a decision card (`waiting_input`) holds no compute and does not block the chat; new
+ * messages start or queue a normal run beside it, and answering the card resumes it.
+ */
+export const QUEUE_HOLDING_RUN_STATUSES = [
+  "queued",
+  "leased",
+  "running",
+  "waiting_takeover",
+] as const satisfies readonly RunStatus[];
 const TERMINAL: RunStatus[] = ["completed", "failed", "cancelled"];
 /**
  * These turns carry their own prompt and must not take a user message as steering.

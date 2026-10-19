@@ -81,10 +81,12 @@ function fixture(
     replyTo: null,
   }));
   const prisma = {
-    // Upstream's dedicated-computer lease fence locks rows with $queryRaw, then bumps the lease.
+    // Upstream's dedicated-computer lease fence locks rows with $queryRaw, checks for another
+    // run with a live lease on the computer (none here), then bumps the lease.
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
         $queryRaw: vi.fn(async () => [{ id: "row-1", scope: "dedicated" }]),
+        run: { findMany: vi.fn(async () => []) },
         computerExecutionLease: {
           updateManyAndReturn: vi.fn(async () => [{ fence: 1 }]),
         },

@@ -8,7 +8,6 @@ import type {
   MessageBlock,
   MessageReaction,
   ReplyPreview,
-  RunStatus,
   ThreadSnapshot,
 } from "@rakazo/contracts";
 import { GROUP_MEMBER_MIN, MessageBlock as MessageBlockSchema } from "@rakazo/contracts";
@@ -18,10 +17,10 @@ import {
   blocksToAgentHistoryText,
   callIdFromClientNonce,
   capRoomWakes,
-  isActive,
   isConversationalRun,
   messageReaction,
   projectMessages,
+  QUEUE_HOLDING_RUN_STATUSES,
   resolveGroupTargetBotIds,
   runFailureError,
 } from "@rakazo/core";
@@ -72,13 +71,13 @@ const RUNS_NEEDING_CONTINUE = new Set(["queued", "waiting_takeover"]);
 const STEERABLE_RUN_STATUSES = new Set(["queued", "leased", "running", "waiting_takeover"]);
 /**
  * A routine's, webhook's, or creation intro's turn is its own prompt, not the conversation.
- * A user message that lands while one is busy (not `waiting_input`) is stored as pending
- * steering (no run): that run never claims it, and the continuation started when it finishes
- * answers with the full thread. Starting a second run beside the intro overlaps it on a
- * dedicated computer, where there is no per-bot execution lease, and both can reply.
- * Composer text answers a waiting ask, including a routine or webhook ask, only when no
- * steerable conversational run is active. When one is, the text steers that run and the
- * ask stays on its card.
+ * A user message that lands while one is busy is stored as pending steering (no run): that
+ * run never claims it, and the continuation started when it finishes answers with the full
+ * thread. Starting a second run beside the intro overlaps it on a dedicated computer, where
+ * there is no per-bot execution lease, and both can reply.
+ * A run paused at a decision card (`waiting_input`) does not hold the queue: composer text
+ * is always a normal message and never answers the card. Cards are answered explicitly
+ * through `threads.answer` or a 👍/👎 reaction on the card message.
  */
 function steersUserMessage(run: { status: string; trigger?: string | null }) {
   return STEERABLE_RUN_STATUSES.has(run.status) && isConversationalRun(run.trigger);
@@ -358,20 +357,25 @@ export async function threadSnapshot(
       deps.prisma.$transaction(
         async (tx) => {
           await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR SHARE`;
-          const [messagePage, last, waitingRun, busyOrFailed] = await Promise.all([
+          const [messagePage, last, activeRuns, busyOrFailed] = await Promise.all([
             loadMessagePage(tx, target.threadId, undefined, THREAD_MESSAGE_PAGE_SIZE),
             tx.event.findFirst({
               where: { threadId: target.threadId },
               orderBy: { seq: "desc" },
               select: { seq: true },
             }),
-            // Waiting asks win over a concurrent busy run, including peer bot_message
-            // and ticket runs. Busy ticket work stays off the transcript below.
-            tx.run.findFirst({
+            // A waiting card no longer holds the chat, so this bot can have several waiting
+            // runs and a working one side by side. Waiting peer bot_message and ticket asks stay
+            // answerable; busy peer and ticket work stays off the transcript (as in groups).
+            tx.run.findMany({
               where: {
                 botId: target.botId,
                 threadId: target.threadId,
-                status: { in: ["waiting_input", "waiting_takeover"] },
+                status: { in: [...ACTIVE_RUN_STATUSES] },
+                OR: [
+                  { trigger: { notIn: ["bot_message", ...BACKGROUND_RUN_TRIGGERS] } },
+                  { status: { in: ["waiting_input", "waiting_takeover"] } },
+                ],
               },
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             }),
@@ -388,7 +392,12 @@ export async function threadSnapshot(
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             }),
           ]);
-          const run = waitingRun ?? busyOrFailed;
+          // Waiting asks win over a concurrent busy run for `run`: call sessions, Android and
+          // the waiting page read the card's run from it. `activeRuns` carries the rest.
+          const run =
+            activeRuns.find(
+              (active) => active.status === "waiting_input" || active.status === "waiting_takeover",
+            ) ?? busyOrFailed;
           // A failed run is only the thread's word while it is still the newest
           // terminal run; otherwise a stale failure would resurface in the
           // composer error strip on every load, forever. Instead of comparing
@@ -411,11 +420,11 @@ export async function threadSnapshot(
               : null;
           const currentRun = run?.status === "failed" && newestTerminal?.id !== run.id ? null : run;
           const liveEvents =
-            currentRun && isActive(currentRun.status as RunStatus)
+            activeRuns.length > 0
               ? await tx.event.findMany({
                   where: {
                     threadId: target.threadId,
-                    runId: currentRun.id,
+                    runId: { in: activeRuns.map((active) => active.id) },
                     type: {
                       in: [
                         "thread.progress",
@@ -428,7 +437,7 @@ export async function threadSnapshot(
                   orderBy: { seq: "asc" },
                 })
               : [];
-          return { messagePage, last, run: currentRun, liveEvents };
+          return { messagePage, last, run: currentRun, activeRuns, liveEvents };
         },
         { timeout: 15_000, maxWait: 5_000 },
       ),
@@ -440,6 +449,7 @@ export async function threadSnapshot(
       messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
       olderCursor: core.messagePage.olderCursor,
       run: core.run ? mapRun(core.run) : null,
+      activeRuns: core.activeRuns.map(mapRun),
       computer: toComputerStatus(target.botId, target.bot.computer, busyBotName),
     };
   }
@@ -720,64 +730,10 @@ export async function sendThreadMessage(
           where: {
             threadId: target.threadId,
             botId: target.botId,
-            status: { in: [...ACTIVE_RUN_STATUSES] },
+            status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
           },
           select: { id: true, taskId: true, status: true, trigger: true },
         });
-        const waitingRuns = activeRuns.filter((run) => run.status === "waiting_input");
-        if (waitingRuns.length && !activeRuns.some(steersUserMessage)) {
-          const answerText = input.text?.trim();
-          if (!answerText) {
-            throw new ORPCError("CONFLICT", {
-              message: "Answer the pending ask first.",
-            });
-          }
-          for (const run of waitingRuns) {
-            const answered = await answerWaitingRunWithTextInTransaction(tx, {
-              spaceId: actor.spaceId,
-              threadId: target.threadId,
-              runId: run.id,
-              answeredByUserId: actor.userId,
-              answer: answerText,
-            });
-            if (!answered) {
-              throw new ORPCError("CONFLICT", {
-                message: "Answer the pending ask first.",
-              });
-            }
-          }
-          const answered = waitingRuns.map((run) => ({ ...run, status: "queued" }));
-          const primary = answered[0];
-          if (!primary) throw new IsolationError();
-          await tx.message.update({ where: { id: message.id }, data: { runId: primary.id } });
-          const event = await appendEventInTransaction(tx, {
-            spaceId: actor.spaceId,
-            threadId: target.threadId,
-            botId: target.botId,
-            type: "thread.message.created",
-            runId: primary.id,
-            payload: {
-              messageId: message.id,
-              role: "user",
-              blocks,
-              callId,
-              runIds: answered.map((run) => run.id),
-              replyToMessageId,
-              replyQuote,
-              replyPreview,
-            },
-          });
-          return { message, runs: answered, eventSeq: event.seq };
-        }
-        if (
-          activeRuns.some(
-            (run) => run.status !== "waiting_input" && !STEERABLE_RUN_STATUSES.has(run.status),
-          )
-        ) {
-          throw new ORPCError("CONFLICT", {
-            message: "Answer the pending ask first.",
-          });
-        }
         const active = activeRuns.find(steersUserMessage) ?? activeRuns[0];
         if (active) {
           await tx.steeringMessage.create({
@@ -891,47 +847,12 @@ export async function sendThreadMessage(
         where: {
           threadId: target.threadId,
           botId: { in: targetBotIds },
-          status: { in: [...ACTIVE_RUN_STATUSES] },
+          status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
         },
         select: { id: true, taskId: true, botId: true, status: true, trigger: true },
       });
       const activeByBotId = new Map<string, (typeof activeRuns)[number]>();
-      const answeredByBotId = new Map<string, Array<(typeof activeRuns)[number]>>();
-      const conversationalBotIds = new Set(
-        activeRuns.filter(steersUserMessage).map((run) => run.botId),
-      );
       for (const run of activeRuns) {
-        if (run.status === "waiting_input") {
-          if (conversationalBotIds.has(run.botId)) continue;
-          const answerText = input.text?.trim();
-          if (!answerText) {
-            throw new ORPCError("CONFLICT", {
-              message: "Answer the pending ask first.",
-            });
-          }
-          const answered = await answerWaitingRunWithTextInTransaction(tx, {
-            spaceId: actor.spaceId,
-            threadId: target.threadId,
-            runId: run.id,
-            answeredByUserId: actor.userId,
-            answer: answerText,
-          });
-          if (!answered) {
-            throw new ORPCError("CONFLICT", {
-              message: "Answer the pending ask first.",
-            });
-          }
-          const queuedRun = { ...run, status: "queued" };
-          const queuedForBot = answeredByBotId.get(run.botId);
-          if (queuedForBot) queuedForBot.push(queuedRun);
-          else answeredByBotId.set(run.botId, [queuedRun]);
-          continue;
-        }
-        if (!STEERABLE_RUN_STATUSES.has(run.status)) {
-          throw new ORPCError("CONFLICT", {
-            message: "Answer the pending ask first.",
-          });
-        }
         const current = activeByBotId.get(run.botId);
         if (!current || (!steersUserMessage(current) && steersUserMessage(run))) {
           activeByBotId.set(run.botId, run);
@@ -939,11 +860,6 @@ export async function sendThreadMessage(
       }
       const runs: Array<{ id: string; taskId: string; botId: string; status: string }> = [];
       for (const botId of targetBotIds) {
-        const answered = answeredByBotId.get(botId);
-        if (answered) {
-          runs.push(...answered);
-          continue;
-        }
         const active = activeByBotId.get(botId);
         if (active) {
           await tx.steeringMessage.create({
@@ -987,9 +903,7 @@ export async function sendThreadMessage(
       if (!eventBotId) throw new IsolationError("Group send did not resolve a target");
       if (firstRun) {
         await tx.message.update({ where: { id: message.id }, data: { runId: firstRun.id } });
-        const createdRuns = runs.filter(
-          (run) => !activeByBotId.has(run.botId) && !answeredByBotId.has(run.botId),
-        );
+        const createdRuns = runs.filter((run) => !activeByBotId.has(run.botId));
         if (createdRuns.length) {
           await cancelSupersededQueuedRuns(tx, {
             threadId: target.threadId,
@@ -1181,6 +1095,24 @@ async function startReactionTurn(
     where: { threadId, botId, status: { in: [...ACTIVE_RUN_STATUSES] } },
     select: { id: true, taskId: true, status: true },
   });
+  // A 👍/👎 on the card message answers that pending ask, even while another run of this
+  // bot works beside the paused one. Approval and secret asks are refused here and stay on
+  // their card.
+  const waitingParent = activeRuns.find(
+    (run) => run.status === "waiting_input" && run.id === parent.runId,
+  );
+  if (waitingParent && (input.reaction === "👍" || input.reaction === "👎")) {
+    const answered = await answerWaitingRunWithTextInTransaction(tx, {
+      spaceId: actor.spaceId,
+      threadId,
+      runId: waitingParent.id,
+      answeredByUserId: actor.userId,
+      answer: input.reaction === "👍" ? "yes" : "no",
+    });
+    if (!answered) return [];
+    await tx.message.update({ where: { id: message.id }, data: { runId: waitingParent.id } });
+    return [{ ...waitingParent, status: "queued" }];
+  }
   const [active, ...others] = activeRuns;
   if (active) {
     // A 👍 while this run waits for the user to finish on the computer means "done", the
@@ -1199,26 +1131,7 @@ async function startReactionTurn(
       await tx.message.update({ where: { id: message.id }, data: { runId: active.id } });
       return [active];
     }
-    // Only the pending ask in the reacted message is answered; approval and secret asks
-    // are refused here and stay on their card.
-    if (
-      (input.reaction !== "👍" && input.reaction !== "👎") ||
-      others.length ||
-      active.status !== "waiting_input" ||
-      active.id !== parent.runId
-    ) {
-      return [];
-    }
-    const answered = await answerWaitingRunWithTextInTransaction(tx, {
-      spaceId: actor.spaceId,
-      threadId,
-      runId: active.id,
-      answeredByUserId: actor.userId,
-      answer: input.reaction === "👍" ? "yes" : "no",
-    });
-    if (!answered) return [];
-    await tx.message.update({ where: { id: message.id }, data: { runId: active.id } });
-    return [{ ...active, status: "queued" }];
+    return [];
   }
   // The cooldown limits new turns only, so a quick answer to a pending ask still goes through.
   const recentReaction = await tx.run.findFirst({
@@ -1403,7 +1316,7 @@ export async function flagThreadMessage(
         where: {
           threadId: target.threadId,
           botId: target.botId,
-          status: { in: [...ACTIVE_RUN_STATUSES] },
+          status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
         },
         select: { id: true },
       });

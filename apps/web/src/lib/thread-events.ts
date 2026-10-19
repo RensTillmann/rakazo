@@ -71,6 +71,10 @@ export function activeThreadRuns(
   return snapshot?.activeRuns ?? (snapshot?.run ? [snapshot.run] : []);
 }
 
+function isWaitingRun(run: { status: string } | null | undefined): boolean {
+  return run?.status === "waiting_input" || run?.status === "waiting_takeover";
+}
+
 /**
  * Reflect a committed direct-message send before its follow-up snapshot arrives.
  *
@@ -93,8 +97,11 @@ export function applyThreadSendReceipt(
   ) {
     return snapshot;
   }
-  const currentRuns = activeThreadRuns(snapshot);
-  if (currentRuns.some((run) => isActive(run.status as RunStatus))) return snapshot;
+  const currentRuns = activeThreadRuns(snapshot).filter((candidate) =>
+    isActive(candidate.status as RunStatus),
+  );
+  // A waiting card does not hold the chat: the send starts its own run beside it.
+  if (currentRuns.some((run) => !isWaitingRun(run))) return snapshot;
   const createdAt = receipt.createdAt ?? new Date().toISOString();
   const run: Run = {
     id: receipt.runId,
@@ -111,7 +118,12 @@ export function applyThreadSendReceipt(
     completedAt: null,
     createdAt,
   };
-  return { ...snapshot, run, activeRuns: [run] };
+  // `run` keeps preferring a waiting card, as threads.get does.
+  return {
+    ...snapshot,
+    run: currentRuns.find(isWaitingRun) ?? run,
+    activeRuns: [...currentRuns, run],
+  };
 }
 
 /** Reason the newest run stopped, until the reader dismisses that run's failure. */
@@ -293,18 +305,25 @@ export function reduceThreadSnapshot(
       prev.activeRuns?.find((candidate) => candidate.id === event.runId) ??
       (prev.run?.id === event.runId ? prev.run : undefined);
     const run = runFromStartedEvent(event, previousRun);
+    // A failed or finished run the snapshot still names in `run` is not active work.
     const without = (prev.activeRuns ?? (prev.run ? [prev.run] : [])).filter(
-      (candidate) => candidate.id !== run.id,
+      (candidate) => candidate.id !== run.id && isActive(candidate.status as RunStatus),
     );
-    // Bot threads keep a single primary run; groups accumulate concurrent member runs.
-    const activeRuns = prev.groupId ? [...without, run] : [run];
+    // Groups accumulate concurrent member runs. A 1:1 chat can likewise have a working run
+    // beside runs waiting at a card, which stay in activeRuns so their cards stay answerable.
+    const activeRuns = [...without, run];
     return {
       ...prev,
       cursor: event.seq,
       members: updateMemberStatus(prev.members, event.botId, "running"),
       // A group failure lives only in run; keep it until dismiss so a late member start
-      // cannot wipe the banner (activeRuns still tracks the new work).
-      run: prev.groupId && prev.run?.status === "failed" && prev.run.id !== run.id ? prev.run : run,
+      // cannot wipe the banner (activeRuns still tracks the new work). A 1:1 chat keeps
+      // a waiting card in run, as threads.get does.
+      run: prev.groupId
+        ? prev.run?.status === "failed" && prev.run.id !== run.id
+          ? prev.run
+          : run
+        : (without.find(isWaitingRun) ?? run),
       activeRuns,
     };
   }
@@ -436,7 +455,7 @@ export function reduceThreadSnapshot(
         endedRun && failure
           ? { ...endedRun, status: "failed", error: failure }
           : primaryEnded
-            ? (activeRuns?.[0] ?? null)
+            ? (activeRuns?.find(isWaitingRun) ?? activeRuns?.[0] ?? null)
             : prev.run,
       activeRuns,
     };

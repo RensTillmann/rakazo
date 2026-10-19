@@ -17,6 +17,7 @@ import {
   isConversationalRun,
   isSecretAskBlock,
   messagingChannelId,
+  QUEUE_HOLDING_RUN_STATUSES,
   releasedTakeoverComputerBlocks,
   resolveAskChoice,
   sanitizeJsonValue,
@@ -438,16 +439,16 @@ export async function sendUserMessage(
       const createRun = input.createRun !== false;
       // Include the creation intro. It has no tools, so it must not absorb the message, and a
       // second run would overlap it on a dedicated computer. Pending steering waits for the
-      // continuation that starts when the intro finishes.
+      // continuation that starts when the intro finishes. A run paused at a decision card
+      // (waiting_input) is not busy: the message starts or queues a normal run beside it, and
+      // the card stays answerable through threads.answer.
       const activeRuns =
         createRun && !input.allowParallelRun
           ? await tx.run.findMany({
               where: {
                 threadId: input.threadId,
                 botId: input.botId,
-                status: {
-                  in: ["running", "queued", "leased", "waiting_input", "waiting_takeover"],
-                },
+                status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
               },
               select: { id: true, taskId: true, trigger: true },
             })
@@ -1643,7 +1644,8 @@ export async function createPendingSteeringRun(
     where: {
       threadId: input.threadId,
       botId: input.botId,
-      status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+      // A run paused at a decision card does not hold back the follow-up.
+      status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
     },
     select: { id: true },
   });

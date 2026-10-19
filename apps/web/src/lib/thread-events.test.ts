@@ -61,6 +61,50 @@ describe("thread event reduction", () => {
     );
   });
 
+  it("shows a direct send as working beside a waiting card and keeps the card in run", () => {
+    const card = { ...threadRun("run-card"), status: "waiting_input" as const };
+    const initial: ThreadSnapshot = { ...snapshot([]), run: card, activeRuns: [card] };
+
+    const next = applyThreadSendReceipt(initial, {
+      botId: "bot-1",
+      runId: "run-receipt",
+      taskId: "task-receipt",
+    });
+
+    expect(next?.run).toBe(card);
+    expect(activeThreadRuns(next).map((run) => [run.id, run.status])).toEqual([
+      ["run-card", "waiting_input"],
+      ["run-receipt", "queued"],
+    ]);
+  });
+
+  it("keeps waiting cards of a direct chat when another run starts beside them", () => {
+    const card = { ...threadRun("run-card"), status: "waiting_input" as const };
+    const initial: ThreadSnapshot = {
+      ...snapshot([]),
+      run: card,
+      activeRuns: [card],
+    };
+
+    const started = reduceThreadSnapshot(
+      initial,
+      event({ type: "run.started", seq: 5, runId: "run-working", payload: { trigger: "user" } }),
+    );
+
+    expect(started?.run).toBe(card);
+    expect(activeThreadRuns(started).map((run) => [run.id, run.status])).toEqual([
+      ["run-card", "waiting_input"],
+      ["run-working", "running"],
+    ]);
+
+    const finished = reduceThreadSnapshot(
+      started,
+      event({ type: "run.completed", seq: 6, runId: "run-working" }),
+    );
+    expect(finished?.run).toBe(card);
+    expect(finished?.activeRuns).toEqual([card]);
+  });
+
   it("appends an emoji reply with its exact target", () => {
     const initial = snapshot([message("message-1", [{ kind: "text", text: "Done" }], 1)]);
 

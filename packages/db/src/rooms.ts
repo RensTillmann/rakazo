@@ -1,4 +1,4 @@
-import { ACTIVE_RUN_STATUSES, isConversationalRun, roomMaxRunsPerDay } from "@rakazo/core";
+import { isConversationalRun, QUEUE_HOLDING_RUN_STATUSES, roomMaxRunsPerDay } from "@rakazo/core";
 import type { Prisma } from "./client.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -44,11 +44,11 @@ export type RoomWake = { botId: string; runId: string | null; steered: boolean; 
 
 /**
  * Wakes group members for a message a bot wrote in the shared thread (a room post, a
- * mention or a handoff). A member with an active run in this thread is steered instead of
- * getting a second run: a conversational turn takes the message directly, any other turn
- * (a routine, a pending ask) keeps it as pending steering for its continuation. Only idle
- * members get a new `follow_up` run sourced from the message. `runNonce` deduplicates the
- * new runs when the same wake is replayed.
+ * mention or a handoff). A member with a run holding the queue in this thread is steered
+ * instead of getting a second run: a conversational turn takes the message directly, any
+ * other turn (a routine) keeps it as pending steering for its continuation. A run paused at
+ * a decision card does not count: the member gets a new `follow_up` run sourced from the
+ * message like an idle one. `runNonce` deduplicates the new runs when the same wake is replayed.
  */
 export async function wakeGroupMembersInTransaction(
   tx: Prisma.TransactionClient,
@@ -69,7 +69,7 @@ export async function wakeGroupMembersInTransaction(
     where: {
       threadId: input.threadId,
       botId: { in: botIds },
-      status: { in: [...ACTIVE_RUN_STATUSES] },
+      status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
     },
     orderBy: { createdAt: "asc" },
     select: { id: true, botId: true, status: true, trigger: true },

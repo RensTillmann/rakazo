@@ -67,3 +67,59 @@ describe("room brake", () => {
     expect(runCreate).not.toHaveBeenCalled();
   });
 });
+
+describe("room wakes beside a decision card", () => {
+  function wakeTx(runs: Array<{ id: string; botId: string; status: string; trigger: string }>) {
+    const runCreate = vi.fn(async () => ({ id: "run-new" }));
+    const steeringCreate = vi.fn();
+    const client: unknown = {
+      chatGroup: {
+        findUnique: vi.fn(async () => ({ pausedAt: null, budgetResetAt: null })),
+        update: vi.fn(),
+      },
+      run: {
+        count: vi.fn(async () => 0),
+        findMany: vi.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
+          runs.filter((run) => where.status.in.includes(run.status)),
+        ),
+        findUnique: vi.fn(async () => null),
+        create: runCreate,
+      },
+      task: { create: vi.fn(async () => ({ id: "task-new" })) },
+      steeringMessage: { findFirst: vi.fn(async () => null), create: steeringCreate },
+    };
+    return { tx: client as Prisma.TransactionClient, runCreate, steeringCreate };
+  }
+  const wake = {
+    groupId: "group-1",
+    spaceId: "space-1",
+    userId: "user-1",
+    threadId: "thread-1",
+    messageId: "message-1",
+    botIds: ["bot-b"],
+    prompt: "check",
+  };
+
+  it("starts a follow-up run for a member whose run waits at a card", async () => {
+    const { tx, runCreate, steeringCreate } = wakeTx([
+      { id: "run-waiting", botId: "bot-b", status: "waiting_input", trigger: "user" },
+    ]);
+    const wakes = await wakeGroupMembersInTransaction(tx, wake);
+    expect(wakes).toEqual([{ botId: "bot-b", runId: "run-new", steered: false }]);
+    expect(runCreate).toHaveBeenCalledOnce();
+    expect(steeringCreate).not.toHaveBeenCalled();
+  });
+
+  it("steers the member's running run and never the waiting one", async () => {
+    const { tx, runCreate, steeringCreate } = wakeTx([
+      { id: "run-waiting", botId: "bot-b", status: "waiting_input", trigger: "user" },
+      { id: "run-busy", botId: "bot-b", status: "running", trigger: "user" },
+    ]);
+    const wakes = await wakeGroupMembersInTransaction(tx, wake);
+    expect(wakes).toEqual([{ botId: "bot-b", runId: "run-busy", steered: true }]);
+    expect(steeringCreate).toHaveBeenCalledWith({
+      data: { messageId: "message-1", botId: "bot-b", userId: "user-1", runId: "run-busy" },
+    });
+    expect(runCreate).not.toHaveBeenCalled();
+  });
+});

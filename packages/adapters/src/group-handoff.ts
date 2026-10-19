@@ -1,10 +1,10 @@
 import { runContinueJob } from "@rakazo/adapter-kit";
 import { MessageBlock } from "@rakazo/contracts";
 import {
-  ACTIVE_RUN_STATUSES,
   botMessageHopExhausted,
   capRoomWakes,
   nextBotMessageHop,
+  QUEUE_HOLDING_RUN_STATUSES,
   renderGroupMembersContext,
   resolveBotMentionedGroupBotIds,
 } from "@rakazo/core";
@@ -155,7 +155,7 @@ export async function handoffToGroupBot(
       where: {
         threadId: run.threadId,
         botId: targetId,
-        status: { in: [...ACTIVE_RUN_STATUSES] },
+        status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
       },
       select: { id: true },
     });

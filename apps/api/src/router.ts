@@ -180,6 +180,7 @@ import {
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
+  QUEUE_HOLDING_RUN_STATUSES,
   shellRulePattern,
 } from "@rakazo/core";
 import type { BoardEvents, Board as BoardRow, PrismaClient, ThreadEvents } from "@rakazo/db";
@@ -2445,7 +2446,8 @@ export function createRouter(deps: RouterDeps) {
             where: {
               threadId: target.threadId,
               botId,
-              status: { in: [...ACTIVE_RUN_STATUSES] },
+              // A run paused at a decision card never takes this as steering.
+              status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
             },
             select: { id: true },
           });

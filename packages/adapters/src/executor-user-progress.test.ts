@@ -86,6 +86,8 @@ async function runTurn(
         Object.assign(run, data);
         return { count: 1 };
       }),
+      // The dedicated-computer lease fence looks for another run with a live lease: none here.
+      findMany: vi.fn(async () => []),
     },
     bot: {
       findUniqueOrThrow: vi.fn(async () => ({
