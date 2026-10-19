@@ -29,6 +29,8 @@ export interface HindsightConnectionConfig {
   excludeTags: string[];
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
+  /** Minimum number of results returned per recall; the run's limit wins when larger. */
+  recallLimit?: number;
 }
 
 /** Hindsight sits on a private address, so every connection needs the deployment owner. */
@@ -79,7 +81,33 @@ function parseHindsightConnection(
     apiKey,
     banks: parseList(settings.banks, HINDSIGHT_DEFAULT_BANKS),
     excludeTags: parseList(settings.excludeTags, HINDSIGHT_DEFAULT_EXCLUDE_TAGS),
+    recallLimit: parseRecallLimit(settings.recallLimit),
   };
+}
+
+export const HINDSIGHT_DEFAULT_RECALL_LIMIT = 8;
+
+function parseRecallLimit(value: string | undefined): number {
+  const raw = value?.trim();
+  if (!raw) return HINDSIGHT_DEFAULT_RECALL_LIMIT;
+  if (!/^\d+$/.test(raw)) throw new Error("recallLimit must be a whole number");
+  const parsed = Number(raw);
+  if (parsed < 1 || parsed > 50) throw new Error("recallLimit must be between 1 and 50");
+  return parsed;
+}
+
+/** Takes results bank by bank in the configured order so every bank gets a fair share. */
+export function mergeRoundRobin<T>(perBank: readonly (readonly T[])[], limit: number): T[] {
+  const merged: T[] = [];
+  const longest = Math.max(0, ...perBank.map((results) => results.length));
+  for (let rank = 0; rank < longest && merged.length < limit; rank++) {
+    for (const results of perBank) {
+      if (merged.length >= limit) break;
+      const item = results[rank];
+      if (item !== undefined) merged.push(item);
+    }
+  }
+  return merged;
 }
 
 function storedSettings(connection: HindsightConnectionConfig): Record<string, string> {
@@ -87,6 +115,7 @@ function storedSettings(connection: HindsightConnectionConfig): Record<string, s
     baseUrl: connection.baseUrl,
     banks: connection.banks.join(","),
     excludeTags: connection.excludeTags.join(","),
+    recallLimit: String(connection.recallLimit ?? HINDSIGHT_DEFAULT_RECALL_LIMIT),
   };
 }
 
@@ -232,10 +261,12 @@ export class HindsightMemoryProvider implements SemanticMemoryProvider {
     });
     try {
       const perBank = await Promise.race([work, deadline]);
-      const merged = perBank
-        .flat()
-        .sort((a, b) => b.score - a.score)
-        .slice(0, Math.max(0, request.limit));
+      const limit = Math.max(
+        0,
+        request.limit,
+        this.connection.recallLimit ?? HINDSIGHT_DEFAULT_RECALL_LIMIT,
+      );
+      const merged = mergeRoundRobin(perBank, limit);
       return { ok: true, value: merged };
     } catch (error) {
       work.catch(() => undefined);
