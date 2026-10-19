@@ -1138,13 +1138,13 @@ export const ChatMarkdown = memo(function ChatMarkdown({
         <LinkFaviconsPausedContext.Provider value={streaming}>
           <DiagramSurfaceContext.Provider value={diagramSurface}>
             <MentionSchemeContext.Provider value={colorScheme}>
-            {streaming ? (
-              <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
-                {children}
-              </MarkdownStream>
-            ) : (
-              <Markdown {...sharedProps}>{children}</Markdown>
-            )}
+              {streaming ? (
+                <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+                  {children}
+                </MarkdownStream>
+              ) : (
+                <Markdown {...sharedProps}>{children}</Markdown>
+              )}
             </MentionSchemeContext.Provider>
           </DiagramSurfaceContext.Provider>
         </LinkFaviconsPausedContext.Provider>
