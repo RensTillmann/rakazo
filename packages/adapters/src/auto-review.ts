@@ -73,6 +73,16 @@ export function approvalEveryRun(env: NodeJS.ProcessEnv = process.env): boolean 
   return envFlag(env, "RAKAZO_APPROVAL_EVERY_RUN");
 }
 
+/**
+ * RAKAZO_APPROVAL_DIRECT (fleet): with it on, a run resuming after "Allow" executes the
+ * approved actions itself before the first model step (same dispatch and checks as a replay)
+ * and tells the model the results, instead of asking the model to replay each call.
+ * Off (default): upstream replay behaviour.
+ */
+export function approvalDirect(env: NodeJS.ProcessEnv = process.env): boolean {
+  return envFlag(env, "RAKAZO_APPROVAL_DIRECT");
+}
+
 export function autoReviewTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.RAKAZO_AUTO_REVIEW_TIMEOUT_MS?.trim();
   if (!raw) return DEFAULT_TIMEOUT_MS;

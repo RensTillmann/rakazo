@@ -319,8 +319,12 @@ function fixture({
   let calls: { args: Record<string, unknown>; executionId: string }[] = [
     { args: { id: "item-1" }, executionId: "call-1" },
   ];
+  let lastPrompt = "";
+  let executesBeforeModel = -1;
   const runtimeRun = vi.fn(async function* (request: AgentRunRequest) {
     offeredTools = request.tools.map((tool) => tool.name);
+    lastPrompt = request.prompt;
+    executesBeforeModel = execute.mock.calls.length;
     const executeCall = async (call: (typeof calls)[number]) => {
       const result = await request.executeTool!(
         catalog ? "demo_execute_tool" : name,
@@ -417,6 +421,8 @@ function fixture({
       outsideSteering = value;
     },
     offeredTools: () => offeredTools,
+    lastPrompt: () => lastPrompt,
+    executesBeforeModel: () => executesBeforeModel,
     cancelAtInstructionCommit() {
       transactionalPrisma.$queryRaw.mockImplementation(async (...values: unknown[]) => {
         if (String(values[0]).includes("FROM threads")) run.status = "cancelled";
@@ -992,6 +998,82 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(f.effects[0]!.status).toBe("completed");
       expect(f.results.at(-1)).toEqual({ item: "item-1" });
       expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+    });
+
+    describe("RAKAZO_APPROVAL_DIRECT", () => {
+      const previous = process.env.RAKAZO_APPROVAL_DIRECT;
+      beforeEach(() => {
+        process.env.RAKAZO_APPROVAL_DIRECT = "true";
+      });
+      afterEach(() => {
+        if (previous === undefined) delete process.env.RAKAZO_APPROVAL_DIRECT;
+        else process.env.RAKAZO_APPROVAL_DIRECT = previous;
+      });
+      const approvedFixture = async () => {
+        const f = fixture({
+          catalog,
+          rules: [{ effect: "require_approval", matchKind: "tool", matchValue: "demo_get_item" }],
+        });
+        await f.run();
+        expect(f.effects).toHaveLength(1);
+        expect(f.execute).not.toHaveBeenCalled();
+        return f;
+      };
+
+      it("runs the approved action once before the first model step and reports it", async () => {
+        const f = await approvedFixture();
+        f.effects[0]!.status = "approved";
+        f.setCalls([]);
+        await f.run();
+        expect(f.execute).toHaveBeenCalledOnce();
+        expect(f.executesBeforeModel()).toBe(1);
+        expect(f.execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            args: { id: "item-1" },
+            executionId: approvalEffectKey("run-1", "demo_get_item", { id: "item-1" }),
+          }),
+          expect.anything(),
+        );
+        expect(f.effects[0]!.status).toBe("completed");
+        expect(f.lastPrompt()).toContain("Outcome: succeeded");
+        expect(f.lastPrompt()).toContain('{"item":"item-1"}');
+        expect(f.lastPrompt()).toContain("These approved actions were already carried out.");
+        expect(f.lastPrompt()).not.toContain("Call each listed approved request exactly once");
+        expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      });
+
+      it("returns the stored result when the model re-issues the executed call", async () => {
+        const f = await approvedFixture();
+        f.effects[0]!.status = "approved";
+        f.setCalls([{ args: { id: "item-1" }, executionId: "call-2" }]);
+        await f.run();
+        expect(f.execute).toHaveBeenCalledOnce();
+        expect(f.results.at(-1)).toEqual({ item: "item-1" });
+        expect(f.effects).toHaveLength(1);
+        expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      });
+
+      it("reports a failed approved action and lets the run continue", async () => {
+        const f = await approvedFixture();
+        f.effects[0]!.status = "approved";
+        f.execute.mockImplementationOnce(async function* () {
+          yield { type: "error" as const, message: "destination offline" };
+        } as never);
+        f.setCalls([]);
+        await f.run();
+        expect(f.execute).toHaveBeenCalledOnce();
+        expect(f.lastPrompt()).toContain("Outcome: failed");
+        expect(f.lastPrompt()).toContain("destination offline");
+      });
+
+      it("leaves a denied action unexecuted", async () => {
+        const f = await approvedFixture();
+        f.effects[0]!.status = "denied";
+        f.setCalls([]);
+        await f.run();
+        expect(f.execute).not.toHaveBeenCalled();
+        expect(f.lastPrompt()).not.toContain("already carried out");
+      });
     });
 
     it("executes a later identical-args call after an approved replay when approval is not required by default", async () => {
