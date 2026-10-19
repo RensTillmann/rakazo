@@ -1,4 +1,5 @@
 import { DEFAULT_MODEL_MAX_TOKENS } from "@rakazo/contracts";
+import { cutOffNote } from "./tool-result-overflow.js";
 
 /** Hung completions must fail before the typical 5-minute run lease. */
 export const MODEL_STREAM_TIMEOUT_MS = 120_000;
@@ -19,41 +20,61 @@ export function modelStreamMaxRetries(): number {
 
 export const TOOL_RESULT_TEXT_LIMIT = 12_000;
 
-export function clipToolResultText(text: string, limit: number = TOOL_RESULT_TEXT_LIMIT): string {
-  return text.length > limit ? `${text.slice(0, limit)}…` : text;
+/**
+ * Cut text over `limit` and end it with a plain line saying how much was shown.
+ * With `ref` (a kept copy, `RAKAZO_TOOL_RESULT_OVERFLOW`), the line says how to read the rest.
+ */
+export function clipToolResultText(
+  text: string,
+  limit: number = TOOL_RESULT_TEXT_LIMIT,
+  ref?: string,
+): string {
+  return text.length > limit
+    ? `${text.slice(0, limit)}\n${cutOffNote(limit, text.length, ref)}`
+    : text;
 }
 
 /**
  * Share one remaining character budget across all text parts.
  * Later text is omitted once the aggregate limit is exhausted; non-text parts stay.
+ * When text is cut, `keep` receives all text parts joined (so offsets match what was shown)
+ * and may return a ref for the cut-off line.
  */
 export function clipToolResultContent<T>(
   content: T[],
   limit: number = TOOL_RESULT_TEXT_LIMIT,
+  keep?: (fullText: string) => string | undefined,
 ): T[] {
+  const isText = (part: T): part is T & { type: "text"; text: unknown } =>
+    Boolean(part) &&
+    typeof part === "object" &&
+    "type" in (part as object) &&
+    (part as { type?: unknown }).type === "text" &&
+    "text" in (part as object);
+  const texts = content.filter(isText).map((part) => String(part.text));
+  const total = texts.reduce((sum, text) => sum + text.length, 0);
+  if (total <= limit) return content;
+  const note = cutOffNote(limit, total, keep?.(texts.join("")));
   let remaining = limit;
+  let noted = false;
   const clipped: T[] = [];
   for (const part of content) {
-    if (
-      !part ||
-      typeof part !== "object" ||
-      !("type" in part) ||
-      (part as { type?: unknown }).type !== "text" ||
-      !("text" in part)
-    ) {
+    if (!isText(part)) {
       clipped.push(part);
       continue;
     }
     if (remaining <= 0) continue;
-    const text = String((part as { text: unknown }).text);
+    const text = String(part.text);
     if (text.length <= remaining) {
       clipped.push(part);
       remaining -= text.length;
       continue;
     }
-    clipped.push({ ...part, text: clipToolResultText(text, remaining) });
+    clipped.push({ ...part, text: `${text.slice(0, remaining)}\n${note}` });
     remaining = 0;
+    noted = true;
   }
+  if (!noted) clipped.push({ type: "text", text: note } as T);
   return clipped;
 }
 
