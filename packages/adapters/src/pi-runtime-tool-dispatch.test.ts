@@ -2019,9 +2019,9 @@ describe("Pi connector tool dispatch", () => {
       expect(result.content[0]!.text).toContain(
         `read_tool_result("r1", offset=${TOOL_RESULT_TEXT_LIMIT})`,
       );
-      expect(
-        toolResultOverflowStore.read("overflow-run", "r1", TOOL_RESULT_TEXT_LIMIT, 100),
-      ).toBe("rest password=[redacted]");
+      expect(toolResultOverflowStore.read("overflow-run", "r1", TOOL_RESULT_TEXT_LIMIT, 100)).toBe(
+        "rest password=[redacted]",
+      );
     } finally {
       vi.unstubAllEnvs();
     }
