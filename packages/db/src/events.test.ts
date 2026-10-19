@@ -1,6 +1,6 @@
 import type { RealtimeFanout } from "@rakazo/adapter-kit";
 import { encodeLoginSecret } from "@rakazo/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import {
   answerRunInput,
@@ -14,6 +14,7 @@ import {
   finalizeComputerControlRelease,
   finalizeRun,
   followThreadEvents,
+  normalizeAskText,
   pauseRunForInput,
   pauseRunForTakeover,
   sendUserMessage,
@@ -3561,5 +3562,228 @@ describe("discardAnsweredSteering", () => {
         id: { in: ["answered"] },
       },
     });
+  });
+});
+
+describe("duplicate question sync (RAKAZO_SYNC_DUPLICATE_ASKS)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  type Block = Record<string, unknown>;
+
+  /** Two waiting runs in one thread, each with one open card on its own message. */
+  function duplicateAsks(cards: Record<string, Block[]>, runsWaiting = Object.keys(cards)) {
+    const messages = Object.fromEntries(
+      Object.entries(cards).map(([runId, blocks]) => [`message-${runId}`, { runId, blocks }]),
+    );
+    const queued = new Set<string>();
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      message: {
+        findFirst: vi.fn(async ({ where }: { where: { id: string; runId: string } }) => {
+          const message = messages[where.id];
+          return message && message.runId === where.runId
+            ? { id: where.id, blocks: message.blocks }
+            : null;
+        }),
+        findMany: vi.fn(async ({ where }: { where: { runId: string } }) =>
+          Object.entries(messages)
+            .filter(([, message]) => message.runId === where.runId)
+            .map(([id, message]) => ({ id, blocks: message.blocks })),
+        ),
+        update: vi.fn(async ({ where, data }: { where: { id: string }; data: { blocks: Block[] } }) => {
+          messages[where.id]!.blocks = data.blocks;
+          return { id: where.id };
+        }),
+      },
+      run: {
+        findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
+          runsWaiting.includes(where.id) && !queued.has(where.id)
+            ? { botId: "bot-1", userId: "user-1", checkpoint: null, trigger: "bot_message" }
+            : null,
+        ),
+        findMany: vi.fn(async ({ where }: { where: { id: { not: string } } }) =>
+          runsWaiting
+            .filter((id) => id !== where.id.not && !queued.has(id))
+            .map((id) => ({ id })),
+        ),
+        updateMany: vi.fn(async ({ where }: { where: { id: string } }) => {
+          if (!runsWaiting.includes(where.id) || queued.has(where.id)) return { count: 0 };
+          queued.add(where.id);
+          return { count: 1 };
+        }),
+        findUnique: vi.fn().mockResolvedValue({ status: "queued" }),
+      },
+      task: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 10 }) },
+      event: {
+        create: vi.fn(async ({ data }: { data: { seq: number; type: string } }) => ({
+          ...event(data.seq),
+          type: data.type,
+        })),
+      },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+    return { tx, prisma, messages, queued };
+  }
+
+  const answer = (prisma: PrismaClient, runId: string, value: string, onSyncedRuns = vi.fn()) =>
+    answerRunInput(
+      prisma,
+      {
+        spaceId: "workspace-1",
+        threadId: "thread-1",
+        runId,
+        messageId: `message-${runId}`,
+        answeredByUserId: "user-1",
+        answer: value,
+      },
+      undefined,
+      undefined,
+      onSyncedRuns,
+    );
+
+  it("normalises case, whitespace, punctuation and a leading URGENT marker", () => {
+    expect(normalizeAskText("URGENT · Was this  sign-in YOU?")).toBe(
+      normalizeAskText("was this sign in you"),
+    );
+    expect(normalizeAskText("Was this you?")).not.toBe(normalizeAskText("Was it you?"));
+  });
+
+  it("answers an identical button card in another run by label", async () => {
+    vi.stubEnv("RAKAZO_SYNC_DUPLICATE_ASKS", "true");
+    const { prisma, messages, queued } = duplicateAsks({
+      "run-1": [
+        {
+          kind: "ask",
+          text: "Google alert: was this sign-in you?",
+          status: "pending",
+          actions: [
+            { id: "a", label: "Yes, it was me" },
+            { id: "b", label: "No" },
+          ],
+        },
+      ],
+      "run-2": [
+        {
+          kind: "ask",
+          text: "URGENT · google alert — was this sign-in you",
+          status: "pending",
+          actions: [
+            { id: "no", label: "No" },
+            { id: "yes", label: "Yes, it was me" },
+          ],
+        },
+      ],
+    });
+    const onSyncedRuns = vi.fn();
+
+    await expect(answer(prisma, "run-1", "a", onSyncedRuns)).resolves.toBe(true);
+
+    expect([...queued].sort()).toEqual(["run-1", "run-2"]);
+    expect(onSyncedRuns).toHaveBeenCalledWith(["run-2"]);
+    expect(messages["message-run-1"]!.blocks[0]).toMatchObject({ status: "answered", answer: "a" });
+    expect(messages["message-run-1"]!.blocks[0]).not.toHaveProperty("syncedFrom");
+    expect(messages["message-run-2"]!.blocks[0]).toMatchObject({
+      status: "answered",
+      answer: "yes",
+      syncedFrom: "message-run-1",
+    });
+  });
+
+  it("copies a typed answer to an identical text card", async () => {
+    vi.stubEnv("RAKAZO_SYNC_DUPLICATE_ASKS", "true");
+    const { prisma, messages, tx } = duplicateAsks({
+      "run-1": [{ kind: "ask", text: "Which city?", status: "pending" }],
+      "run-2": [{ kind: "ask", text: "which  city", status: "pending" }],
+    });
+
+    await expect(answer(prisma, "run-2", "Paris")).resolves.toBe(true);
+
+    expect(messages["message-run-1"]!.blocks[0]).toMatchObject({
+      answer: "Paris",
+      syncedFrom: "message-run-2",
+    });
+    expect(tx.task.updateMany).toHaveBeenCalledTimes(2);
+    // The synced answer never searches for duplicates of its own.
+    expect(tx.run.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves different questions, different options and approval cards open", async () => {
+    vi.stubEnv("RAKAZO_SYNC_DUPLICATE_ASKS", "true");
+    const { prisma, queued } = duplicateAsks({
+      "run-1": [
+        {
+          kind: "ask",
+          text: "Ship it?",
+          status: "pending",
+          actions: [
+            { id: "y", label: "Yes" },
+            { id: "n", label: "No" },
+          ],
+        },
+      ],
+      "run-2": [
+        {
+          kind: "ask",
+          text: "Ship it?",
+          status: "pending",
+          actions: [
+            { id: "y", label: "Yes" },
+            { id: "l", label: "Later" },
+          ],
+        },
+      ],
+      "run-3": [{ kind: "ask", text: "Ship it now?", status: "pending" }],
+      "run-4": [
+        {
+          kind: "ask",
+          approvalEffectId: "effect-1",
+          text: "Ship it?",
+          status: "pending",
+          actions: [
+            { id: "y", label: "Yes" },
+            { id: "n", label: "No" },
+          ],
+        },
+      ],
+    });
+
+    await expect(answer(prisma, "run-1", "y")).resolves.toBe(true);
+
+    expect([...queued]).toEqual(["run-1"]);
+  });
+
+  it("keeps upstream behaviour without the setting", async () => {
+    const { prisma, queued, tx } = duplicateAsks({
+      "run-1": [{ kind: "ask", text: "Which city?", status: "pending" }],
+      "run-2": [{ kind: "ask", text: "Which city?", status: "pending" }],
+    });
+
+    await expect(answer(prisma, "run-1", "Paris")).resolves.toBe(true);
+
+    expect([...queued]).toEqual(["run-1"]);
+    expect(tx.run.findMany).not.toHaveBeenCalled();
+  });
+
+  it("does not sync from the composer path, which answers every waiting run itself", async () => {
+    vi.stubEnv("RAKAZO_SYNC_DUPLICATE_ASKS", "true");
+    const { tx, queued } = duplicateAsks({
+      "run-1": [{ kind: "ask", text: "Which city?", status: "pending" }],
+      "run-2": [{ kind: "ask", text: "Which city?", status: "pending" }],
+    });
+
+    await answerWaitingRunWithTextInTransaction(tx as never, {
+      spaceId: "workspace-1",
+      threadId: "thread-1",
+      runId: "run-1",
+      answeredByUserId: "user-1",
+      answer: "Paris",
+    });
+
+    expect([...queued]).toEqual(["run-1"]);
   });
 });
