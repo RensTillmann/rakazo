@@ -99,6 +99,7 @@ import {
   unattendedTriggerToolRequiresApproval,
   userTurnMessageForRun,
   withoutThinking,
+  runPushEnabled,
 } from "@rakazo/core";
 import {
   approvalEffectKey,
@@ -8141,14 +8142,16 @@ export function parseUpdateBotPatch(
 export async function runNotificationsEnabled(
   prisma: PrismaClient,
   run: { spaceId: string; userId: string; botId: string; threadId: string },
+  kind?: NotificationMessage["kind"],
 ): Promise<boolean> {
-  return (await runNotice(prisma, run)).enabled;
+  return (await runNotice(prisma, run, null, kind)).enabled;
 }
 
 async function runNotice(
   prisma: PrismaClient,
   run: { spaceId: string; userId: string; botId: string; threadId: string },
   routineId?: string | null,
+  kind?: NotificationMessage["kind"],
 ): Promise<{ enabled: boolean; groupId: string | null }> {
   // A routine carries its own notify setting, which decides on its failures.
   const routine = routineId
@@ -8163,12 +8166,18 @@ async function runNotice(
     },
     select: {
       bot: { select: { notifyOnFinish: true } },
-      thread: { select: { groupId: true } },
+      thread: { select: { groupId: true, group: { select: { notify: true } } } },
     },
   });
   if (!source) return { enabled: false, groupId: null };
   return {
-    enabled: routine ? routine.notify : Boolean(source.thread.groupId || source.bot.notifyOnFinish),
+    enabled: routine
+      ? routine.notify
+      : runPushEnabled({
+          groupNotify: source.thread.groupId ? (source.thread.group?.notify ?? false) : null,
+          notifyOnFinish: source.bot.notifyOnFinish,
+          kind,
+        }),
     groupId: source.thread.groupId,
   };
 }
@@ -8265,7 +8274,7 @@ async function notifyRun(
   )
     return;
   const routineId = message.kind === "failure" ? run.routineId : null;
-  const notice = await runNotice(deps.prisma, run, routineId).catch((error) => {
+  const notice = await runNotice(deps.prisma, run, routineId, message.kind).catch((error) => {
     if (options.retryOnFailure) throw error;
     getLogger().error("notification preference lookup", error);
     return null;
