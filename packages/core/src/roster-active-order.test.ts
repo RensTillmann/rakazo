@@ -62,7 +62,11 @@ describe("roster recency block", () => {
     activity = trackRosterActivity(activity, bots, T0 + 6_000);
     const result = ordered(activity);
     expect(result.active).toEqual(["sage"]);
-    expect(result.groups[1]).toEqual({ key: "section:fleet", title: "Fleet", bots: [bot("quinn")] });
+    expect(result.groups[1]).toEqual({
+      key: "section:fleet",
+      title: "Fleet",
+      bots: [bot("quinn")],
+    });
   });
 
   it("puts a newer active bot above the previous one", () => {
@@ -110,7 +114,11 @@ describe("roster recency block", () => {
     });
     const result = ordered(trackRosterActivity(null, bots, T0));
     expect(result.active).toEqual(["sage"]);
-    expect(result.groups[1]).toEqual({ key: "section:fleet", title: "Fleet", bots: [bot("quinn")] });
+    expect(result.groups[1]).toEqual({
+      key: "section:fleet",
+      title: "Fleet",
+      bots: [bot("quinn")],
+    });
     expect(result.groups[2]).toEqual(roster()[2]);
   });
 
@@ -145,7 +153,11 @@ describe("roster recency block", () => {
     );
     let activity = trackRosterActivity(null, bots, T0);
     expect(ordered(activity).active).toEqual(["riona", "quinn"]);
-    bots = withBot(bots, { ...fresh("quinn"), unread: true, lastMessageAt: "2026-10-19T07:00:00.000Z" });
+    bots = withBot(bots, {
+      ...fresh("quinn"),
+      unread: true,
+      lastMessageAt: "2026-10-19T07:00:00.000Z",
+    });
     activity = trackRosterActivity(activity, bots, T0 + 1_000);
     expect(ordered(activity).active).toEqual(["quinn", "riona"]);
   });
@@ -157,7 +169,11 @@ describe("roster recency block", () => {
       lastMessageAt: "2026-10-19T07:30:00.000Z",
     });
     const first = trackRosterActivity(null, bots, T0);
-    const polled = trackRosterActivity(first, bots.map((entry) => ({ ...entry })), T0 + 30_000);
+    const polled = trackRosterActivity(
+      first,
+      bots.map((entry) => ({ ...entry })),
+      T0 + 30_000,
+    );
     expect(polled).toBe(first);
   });
 });
