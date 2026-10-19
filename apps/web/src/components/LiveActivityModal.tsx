@@ -76,7 +76,12 @@ function LiveActivityTerminal({ target, title }: { target: LiveActivityTarget; t
     };
     const unsubscribe = subscribeActivityEvents((event) => {
       if (event.seq === 0 || (threadId && event.threadId !== threadId)) return;
-      if (event.type === "run.started" && !pickedRunId && event.runId && event.runId !== loadedRunId) {
+      if (
+        event.type === "run.started" &&
+        !pickedRunId &&
+        event.runId &&
+        event.runId !== loadedRunId
+      ) {
         // A new run started while following the latest one: switch to it.
         setReload((value) => value + 1);
         return;

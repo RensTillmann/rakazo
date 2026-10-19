@@ -12,7 +12,8 @@ export const ACTIVITY_ARGS_PREVIEW_MAX = 4_000;
 export const ACTIVITY_RESULT_PREVIEW_MAX = 2_000;
 export const DEFAULT_ACTIVITY_DETAILS_DAYS = 14;
 const RETENTION_INTERVAL_MS = 60 * 60_000;
-const SENSITIVE_KEY = /^(?:.*[_-])?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret|authorization|auth)$/i;
+const SENSITIVE_KEY =
+  /^(?:.*[_-])?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret|authorization|auth)$/i;
 
 export function activityDetailsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.RAKAZO_ACTIVITY_DETAILS?.trim() === "true";
@@ -93,9 +94,10 @@ export function activityResultDetails(
 }
 
 /** Model calls so far and elapsed minutes (one decimal), from the run budget's counters. */
-export function activityBudgetDetails(
-  budget: NonNullable<AgentToolCompletion["budget"]>,
-): { modelCalls: number; elapsedMinutes: number } {
+export function activityBudgetDetails(budget: NonNullable<AgentToolCompletion["budget"]>): {
+  modelCalls: number;
+  elapsedMinutes: number;
+} {
   return {
     modelCalls: budget.modelCalls,
     elapsedMinutes: Math.round((Math.max(0, budget.usedMs) / 60_000) * 10) / 10,

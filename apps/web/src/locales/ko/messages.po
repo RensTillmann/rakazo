@@ -1732,6 +1732,10 @@ msgstr "로그인 옵션을 불러올 수 없습니다"
 msgid "Could not load skill"
 msgstr "스킬을 불러오지 못했습니다"
 
+#: src/components/LiveActivityModal.tsx
+msgid "Could not load the activity"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr ""
@@ -2912,6 +2916,10 @@ msgstr "마지막 확인 {0}: 변경 없음"
 msgid "Later"
 msgstr ""
 
+#: src/components/LiveActivityModal.tsx
+msgid "Latest run (follow live)"
+msgstr ""
+
 #: src/components/computer/TerminalApp.tsx
 msgid "Launched {app}"
 msgstr ""
@@ -2959,6 +2967,10 @@ msgstr ""
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Listening…"
+
+#: src/components/LiveActivityModal.tsx
+#: src/pages/Shell.tsx
+msgid "Live activity"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -3514,6 +3526,7 @@ msgstr "검색 결과가 없습니다"
 msgid "No runs match these filters."
 msgstr ""
 
+#: src/components/LiveActivityModal.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "아직 실행 기록이 없습니다"
@@ -4313,6 +4326,10 @@ msgstr "자동 실행"
 
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
+msgstr ""
+
+#: src/components/LiveActivityModal.tsx
+msgid "Run"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx

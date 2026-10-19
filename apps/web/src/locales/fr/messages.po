@@ -1733,6 +1733,10 @@ msgstr "Impossible de charger les options de connexion"
 msgid "Could not load skill"
 msgstr "Impossible de charger la compétence"
 
+#: src/components/LiveActivityModal.tsx
+msgid "Could not load the activity"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr "Impossible de charger cet artefact."
@@ -2913,6 +2917,10 @@ msgstr "Dernière vérification {0} : aucun changement"
 msgid "Later"
 msgstr "Plus tard"
 
+#: src/components/LiveActivityModal.tsx
+msgid "Latest run (follow live)"
+msgstr ""
+
 #: src/components/computer/TerminalApp.tsx
 msgid "Launched {app}"
 msgstr ""
@@ -2961,6 +2969,11 @@ msgstr "Écoute"
 #: src/components/composer/HoldToTalk.tsx
 msgid "Listening…"
 msgstr "À l’écoute…"
+
+#: src/components/LiveActivityModal.tsx
+#: src/pages/Shell.tsx
+msgid "Live activity"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Load earlier messages"
@@ -3515,6 +3528,7 @@ msgstr "Aucun résultat"
 msgid "No runs match these filters."
 msgstr ""
 
+#: src/components/LiveActivityModal.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "Aucune exécution pour le moment"
@@ -4315,6 +4329,10 @@ msgstr "Routines"
 
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
+msgstr ""
+
+#: src/components/LiveActivityModal.tsx
+msgid "Run"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx

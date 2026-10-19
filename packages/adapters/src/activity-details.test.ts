@@ -54,7 +54,10 @@ describe("activityResultDetails", () => {
   it("counts the full result against what the model saw when it was cut off", () => {
     const full = `sk-abcdef ${"m".repeat(89_394)}`;
     expect(full).toHaveLength(89_404);
-    const details = activityResultDetails({ text: clipToolResultText(full), resultChars: full.length });
+    const details = activityResultDetails({
+      text: clipToolResultText(full),
+      resultChars: full.length,
+    });
     expect(details).toMatchObject({ resultChars: 89_404, shownChars: 12_000, clipped: true });
     expect(details.resultPreview).toHaveLength(2_000 - "sk-abcdef".length + "[redacted]".length);
     expect(details.resultPreview.startsWith("[redacted] ")).toBe(true);

@@ -116,8 +116,7 @@ export function activityStatus(events: readonly ProductEvent[]): {
   }
   const first = events[0];
   const last = events.at(-1);
-  const elapsedMs =
-    first && last ? Date.parse(last.createdAt) - Date.parse(first.createdAt) : 0;
+  const elapsedMs = first && last ? Date.parse(last.createdAt) - Date.parse(first.createdAt) : 0;
   return { steps, modelCalls, elapsedMs: Number.isFinite(elapsedMs) ? elapsedMs : 0 };
 }
 
@@ -223,7 +222,9 @@ export function renderActivityLines(
     if (event.type === "thread.ask" || event.type === "run.waiting_input") {
       flushText();
       const question = text(payload.text) || text(payload.question) || text(payload.reason);
-      lines.push(`${MAGENTA}? waiting for you${question ? `: ${question.replace(/\s+/g, " ")}` : ""}${RESET}`);
+      lines.push(
+        `${MAGENTA}? waiting for you${question ? `: ${question.replace(/\s+/g, " ")}` : ""}${RESET}`,
+      );
       continue;
     }
     if (

@@ -1733,6 +1733,10 @@ msgstr "Could not load sign-in options"
 msgid "Could not load skill"
 msgstr "Could not load skill"
 
+#: src/components/LiveActivityModal.tsx
+msgid "Could not load the activity"
+msgstr "Could not load the activity"
+
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr "Could not load this artifact."
@@ -2914,6 +2918,10 @@ msgstr "Last check {0}: no changes"
 msgid "Later"
 msgstr "Later"
 
+#: src/components/LiveActivityModal.tsx
+msgid "Latest run (follow live)"
+msgstr "Latest run (follow live)"
+
 #: src/components/computer/TerminalApp.tsx
 msgid "Launched {app}"
 msgstr "Launched {app}"
@@ -2962,6 +2970,11 @@ msgstr "Listening"
 #: src/components/composer/HoldToTalk.tsx
 msgid "Listening…"
 msgstr "Listening…"
+
+#: src/components/LiveActivityModal.tsx
+#: src/pages/Shell.tsx
+msgid "Live activity"
+msgstr "Live activity"
 
 #: src/pages/Shell.tsx
 msgid "Load earlier messages"
@@ -3516,6 +3529,7 @@ msgstr "No results"
 msgid "No runs match these filters."
 msgstr "No runs match these filters."
 
+#: src/components/LiveActivityModal.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "No runs yet"
@@ -4317,6 +4331,10 @@ msgstr "Routines"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr "Routines that run while you're away"
+
+#: src/components/LiveActivityModal.tsx
+msgid "Run"
+msgstr "Run"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Run at"
