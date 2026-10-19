@@ -4769,6 +4769,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   autoReviewEnabled: autoReviewPref,
                   checkerConfigured,
                 });
+          // Fleet: a tool-level or shell require_approval rule is never overridable from the card.
+          const ruleForbidsAlways =
+            approvalResolved.source === "require_approval" &&
+            approvalResolved.matchingRules.some(
+              (rule) =>
+                rule.effect === "require_approval" &&
+                (rule.matchKind === "tool" || rule.matchKind === "shell"),
+            );
           let reviewReason: string | undefined;
           let gateDecision: "ask" | "allow" = plan === "ask" ? "ask" : "allow";
           const needsApprovalEarly = plan === "ask" || plan === "judge";
@@ -5079,6 +5087,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   runSecrets,
                   {
                     reviewReason,
+                    allowAlways: !ruleForbidsAlways,
                   },
                 ),
               ],

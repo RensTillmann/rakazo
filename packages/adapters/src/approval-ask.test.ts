@@ -22,6 +22,18 @@ describe("buildApprovalAskBlock", () => {
     expect(JSON.stringify(block)).not.toContain("token-secret");
   });
 
+  it("leaves out Always allow when a rule forbids it", () => {
+    const block = buildApprovalAskBlock("effect-1", "shell", { command: "git push" }, [], {
+      allowAlways: false,
+    });
+    expect(block).toMatchObject({
+      actions: [
+        { id: "allow", label: "Allow once" },
+        { id: "deny", label: "Deny" },
+      ],
+    });
+  });
+
   it("bounds model-controlled summaries and details", () => {
     const block = buildApprovalAskBlock(
       "effect-1",

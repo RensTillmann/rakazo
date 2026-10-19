@@ -11,7 +11,11 @@ export function buildApprovalAskBlock(
   toolName: string,
   args: Record<string, unknown>,
   secrets: string[],
-  options?: { reviewReason?: string },
+  /**
+   * `allowAlways: false` (fleet): a tool-level or shell `require_approval` rule caused the ask,
+   * so the card offers no "Always allow"; the server then refuses an "always" answer for it.
+   */
+  options?: { reviewReason?: string; allowAlways?: boolean },
 ): MessageBlock {
   if (toolName === "propose_instructions_update") {
     const before = redactSecrets(String(args.previousInstructions ?? ""), secrets);
@@ -68,7 +72,7 @@ export function buildApprovalAskBlock(
           ]
         : [
             { id: "allow", label: "Allow once" },
-            { id: "always", label: alwaysLabel },
+            ...(options?.allowAlways === false ? [] : [{ id: "always", label: alwaysLabel }]),
             { id: "deny", label: "Deny" },
           ],
   };
