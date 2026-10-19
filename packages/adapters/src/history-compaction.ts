@@ -451,7 +451,8 @@ export async function compactHistory(deps: CompactHistoryDeps, threadId: string)
     botId: thread.botId,
     signal: new AbortController().signal,
   };
-  if (semanticMemory) {
+  // Recall-only providers (Hindsight) never receive compacted history.
+  if (semanticMemory?.provider.describe().capabilities.save) {
     externalSaveAttempted = true;
     try {
       const result = await semanticMemory.provider.save(

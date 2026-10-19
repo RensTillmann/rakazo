@@ -1,5 +1,6 @@
 import type { SpaceMemoryConfig } from "@rakazo/contracts";
 import type { ComponentType } from "react";
+import { HindsightSettingsForm } from "./HindsightSettingsForm";
 import { HonchoSettingsForm } from "./HonchoSettingsForm";
 import { SerenitySettingsForm } from "./SerenitySettingsForm";
 import { SupermemorySettingsForm } from "./SupermemorySettingsForm";
@@ -50,6 +51,13 @@ export const MEMORY_PROVIDER_SETTINGS: readonly MemoryProviderSettingsRegistrati
     SettingsForm: HonchoSettingsForm,
     connectedLabel: (config) =>
       config.settings.workspaceId ? `Honcho · ${config.settings.workspaceId}` : "Honcho Cloud",
+  },
+  {
+    id: "hindsight",
+    name: "Hindsight",
+    description: "Self-hosted Hindsight: automatic recall of shared fleet memory (recall only).",
+    SettingsForm: HindsightSettingsForm,
+    connectedLabel: (config) => `Hindsight · ${config.settings.baseUrl} · recall only`,
   },
 ];
 

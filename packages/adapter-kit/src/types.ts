@@ -345,8 +345,9 @@ export type DurableMemoryScope = "isolated" | "shared";
 
 export interface SemanticMemoryCapabilities {
   recall: true;
-  save: true;
-  purgeHistory: true;
+  /** False for recall-only providers: no save tools and no compaction saves. */
+  save: boolean;
+  purgeHistory: boolean;
   sharedScope: true;
 }
 

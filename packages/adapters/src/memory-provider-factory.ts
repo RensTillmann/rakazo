@@ -1,6 +1,12 @@
 import type { DurableMemoryScope, SecretStore, SemanticMemoryProvider } from "@rakazo/adapter-kit";
 import type { PrismaClient } from "@rakazo/db";
 import {
+  createHindsightProvider,
+  HINDSIGHT_PROVIDER_ID,
+  hindsightRequiresDeploymentOwner,
+  prepareHindsightConnection,
+} from "./hindsight-memory-provider.js";
+import {
   createHonchoProvider,
   HONCHO_PROVIDER_ID,
   honchoRequiresDeploymentOwner,
@@ -96,6 +102,14 @@ const MEMORY_PROVIDER_ADAPTERS: ReadonlyMap<string, MemoryProviderAdapter> = new
       create: createHonchoProvider,
     },
   ],
+  [
+    HINDSIGHT_PROVIDER_ID,
+    {
+      requiresDeploymentOwner: hindsightRequiresDeploymentOwner,
+      prepare: prepareHindsightConnection,
+      create: createHindsightProvider,
+    },
+  ],
 ]);
 
 function memoryProviderAdapter(provider: string): MemoryProviderAdapter {
@@ -185,12 +199,14 @@ export class SpaceMemoryProviderResolver implements MemoryProviderResolver {
       // Also disable pre-existing local configurations authored outside the deployment boundary.
       if (!deployment?.ownerUserId || deployment.ownerUserId !== config.userId) return null;
     }
-    if (
-      config.provider === SUPERMEMORY_PROVIDER_ID &&
-      settings.mode === "local" &&
-      settings.baseUrl
-    ) {
-      await assertSupermemoryLocalBaseUrl(settings.baseUrl, { allowPrivateEndpoint: true });
+    // Hindsight always sits on a private address, like Supermemory local mode.
+    const privateBaseUrl =
+      config.provider === HINDSIGHT_PROVIDER_ID ||
+      (config.provider === SUPERMEMORY_PROVIDER_ID && settings.mode === "local")
+        ? settings.baseUrl
+        : undefined;
+    if (privateBaseUrl) {
+      await assertSupermemoryLocalBaseUrl(privateBaseUrl, { allowPrivateEndpoint: true });
     }
     const credentials = decodeCredentials(
       config.provider,
