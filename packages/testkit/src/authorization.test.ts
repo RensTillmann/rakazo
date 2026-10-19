@@ -716,6 +716,29 @@ describeWithDatabase("API authorization and resource isolation", () => {
     ).not.toBeNull();
   });
 
+  it("stores a shell rule and refuses one whose regex does not compile", async () => {
+    const cookie = await signup(app, `shell-rule-${stamp}@rakazo.test`, "Shell Rule Owner");
+    const rule = await rpc<{ id: string; matchKind: string }>(app, cookie, "approvalRules/set", {
+      effect: "require_approval",
+      matchKind: "shell",
+      matchValue: "^git push",
+    });
+    expect(rule.matchKind).toBe("shell");
+    expect(await rpc<Array<{ id: string }>>(app, cookie, "approvalRules/list")).toEqual([
+      expect.objectContaining({ id: rule.id, matchKind: "shell", matchValue: "^git push" }),
+    ]);
+    await expect(
+      rpc(app, cookie, "approvalRules/set", {
+        effect: "require_approval",
+        matchKind: "shell",
+        matchValue: "git (push",
+      }),
+    ).rejects.toThrow("valid regular expression");
+    expect(
+      await handles.prisma.actionApprovalRule.count({ where: { matchValue: "git (push" } }),
+    ).toBe(0);
+  });
+
   it("keeps space data and computers behind the selected space boundary", async () => {
     const cookie = await signup(app, `spaces-${stamp}@rakazo.test`, "Space Owner");
     const original = await rpc<Actor>(app, cookie, "me");

@@ -161,6 +161,7 @@ import {
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
+  shellRulePattern,
 } from "@rakazo/core";
 import type { BoardEvents, Board as BoardRow, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
@@ -5824,12 +5825,17 @@ export function createRouter(deps: RouterDeps) {
         return rows.map((row) => ({
           id: row.id,
           effect: row.effect as "always_allow" | "require_approval",
-          matchKind: row.matchKind as "tool" | "connector" | "category",
+          matchKind: row.matchKind as "tool" | "connector" | "category" | "shell",
           matchValue: row.matchValue,
           createdAt: row.createdAt.toISOString(),
         }));
       }),
       set: authed.approvalRules.set.handler(async ({ context, input }) => {
+        if (input.matchKind === "shell" && !shellRulePattern(input.matchValue)) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "A shell rule needs a valid regular expression.",
+          });
+        }
         const row = await deps.prisma.actionApprovalRule.upsert({
           where: {
             spaceId_createdByUserId_effect_matchKind_matchValue: {
@@ -5852,7 +5858,7 @@ export function createRouter(deps: RouterDeps) {
         return {
           id: row.id,
           effect: row.effect as "always_allow" | "require_approval",
-          matchKind: row.matchKind as "tool" | "connector" | "category",
+          matchKind: row.matchKind as "tool" | "connector" | "category" | "shell",
           matchValue: row.matchValue,
           createdAt: row.createdAt.toISOString(),
         };

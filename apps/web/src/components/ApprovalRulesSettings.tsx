@@ -1,12 +1,17 @@
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ActionApprovalRule, ActionAutoReviewSettings } from "@rakazo/contracts";
-import { Button, Label, Switch } from "@rakazo/ui-web";
+import { Button, Input, Label, Switch } from "@rakazo/ui-web";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
 
 function describeRule(rule: ActionApprovalRule): string {
+  if (rule.matchKind === "shell") {
+    return rule.effect === "require_approval"
+      ? t`Ask before shell commands matching ${rule.matchValue}`
+      : t`Allow shell commands matching ${rule.matchValue} without asking`;
+  }
   if (rule.effect === "require_approval") {
     if (rule.matchKind === "category") {
       if (rule.matchValue === "email") return t`Ask before email actions`;
@@ -28,6 +33,9 @@ function describeRule(rule: ActionApprovalRule): string {
 export function ApprovalRulesSettings() {
   const { t } = useLingui();
   const autoReviewId = useId();
+  const shellPatternId = useId();
+  const [shellPattern, setShellPattern] = useState("");
+  const [savingShell, setSavingShell] = useState(false);
   const [rules, setRules] = useState<ActionApprovalRule[]>([]);
   const [autoReview, setAutoReview] = useState<ActionAutoReviewSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +102,30 @@ export function ApprovalRulesSettings() {
     }
   }
 
+  async function addShellRule(effect: "require_approval" | "always_allow") {
+    const matchValue = shellPattern.trim();
+    if (loading || savingShell || !matchValue) return;
+    try {
+      new RegExp(matchValue);
+    } catch {
+      setError(t`Enter a valid regular expression`);
+      return;
+    }
+    setSavingShell(true);
+    setError(null);
+    try {
+      const saved = await rpc.approvalRules.set({ effect, matchKind: "shell", matchValue });
+      setRules((current) =>
+        current.some((rule) => rule.id === saved.id) ? current : [...current, saved],
+      );
+      setShellPattern("");
+    } catch (err) {
+      setError(errorText(err, t`Could not save rule`));
+    } finally {
+      setSavingShell(false);
+    }
+  }
+
   async function toggleAutoReview(enabled: boolean) {
     if (loading || savingAutoReview) return;
     setSavingAutoReview(true);
@@ -127,6 +159,35 @@ export function ApprovalRulesSettings() {
         >
           <Trans>Ask before purchases</Trans>
         </Button>
+      </div>
+      <div className="mt-5" data-testid="shell-rule-form">
+        <Label htmlFor={shellPatternId} className="text-[14px] font-normal text-foreground/75">
+          <Trans>Shell command rule (regular expression)</Trans>
+        </Label>
+        <Input
+          id={shellPatternId}
+          className="mt-2"
+          value={shellPattern}
+          placeholder="^git push"
+          disabled={loading || savingShell}
+          onChange={(event) => setShellPattern(event.target.value)}
+        />
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            disabled={loading || savingShell || !shellPattern.trim()}
+            onClick={() => void addShellRule("require_approval")}
+          >
+            <Trans>Ask before matching commands</Trans>
+          </Button>
+          <Button
+            variant="outline"
+            disabled={loading || savingShell || !shellPattern.trim()}
+            onClick={() => void addShellRule("always_allow")}
+          >
+            <Trans>Always allow matching commands</Trans>
+          </Button>
+        </div>
       </div>
       <div className="mt-5 flex items-start gap-3">
         <Switch

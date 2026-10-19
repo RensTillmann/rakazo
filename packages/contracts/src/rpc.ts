@@ -864,7 +864,7 @@ export const appContract = {
       .input(
         z.object({
           effect: z.enum(["always_allow", "require_approval"]),
-          matchKind: z.enum(["tool", "connector", "category"]),
+          matchKind: z.enum(["tool", "connector", "category", "shell"]),
           matchValue: z.string().min(1),
         }),
       )

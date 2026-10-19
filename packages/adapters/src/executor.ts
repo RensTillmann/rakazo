@@ -4734,6 +4734,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   toolName: name,
                   connectorKind,
                   readOnly: declaredReadOnly,
+                  // Fleet `shell` rules: a regex on the command decides even this exempt tool.
+                  shellCommand:
+                    name === "shell" ? String(args.command ?? args.cmd ?? "") : undefined,
                   rules: approvalRules,
                 });
           // Auto Review never decides a rules-only side effect: only a card or the owner's rule.
