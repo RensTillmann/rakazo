@@ -6420,6 +6420,7 @@ async function spaceNavigationDto(
           status: bot.status,
           runErrorId: bot.runErrorId,
           updatedAt: bot.updatedAt,
+          lastMessageAt: bot.lastMessageAt,
         })),
         groups: spaceGroups.map((group) => ({
           id: group.id,

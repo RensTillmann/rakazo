@@ -366,13 +366,16 @@ describe("createRepos.listBots", () => {
     };
 
     await expect(createRepos(prisma as unknown as PrismaClient).listBots(actor)).resolves.toEqual([
-      expect.objectContaining({ updatedAt: "2026-08-20T10:30:00.000Z" }),
+      expect.objectContaining({
+        updatedAt: "2026-08-20T10:30:00.000Z",
+        lastMessageAt: "2026-08-20T10:30:00.000Z",
+      }),
     ]);
   });
 
   it("keeps the bot's own updatedAt for a chat with no messages", async () => {
     await expect(reposFor(null).listBots(actor)).resolves.toEqual([
-      expect.objectContaining({ updatedAt: "2026-08-19T00:00:00.000Z" }),
+      expect.objectContaining({ updatedAt: "2026-08-19T00:00:00.000Z", lastMessageAt: null }),
     ]);
   });
 });
@@ -422,6 +425,7 @@ describe("createRepos.listSpaceBotsForSpaces", () => {
         status: "running",
         runErrorId: "run-failed",
         updatedAt: "2026-08-19T12:00:00.000Z",
+        lastMessageAt: "2026-08-19T12:00:00.000Z",
       },
     ]);
     const query = findMany.mock.calls[0]![0];

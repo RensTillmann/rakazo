@@ -21,125 +21,143 @@ function roster(): Group[] {
   ];
 }
 
-const idle = (id: string): RosterActivityBot => ({
+/** A bot that never had a message: no activity. */
+const fresh = (id: string): RosterActivityBot => ({
   id,
   status: "idle",
   unread: false,
-  updatedAt: "2026-10-19T08:00:00.000Z",
+  updatedAt: "2026-10-19T07:00:00.000Z",
+  lastMessageAt: null,
 });
 const ids = ["josy", "riona", "sage", "quinn", "nova"];
+const freshRoster = () => ids.map(fresh);
+const T0 = Date.parse("2026-10-19T08:00:00.000Z");
 
 function ordered(activity: RosterActivityState) {
   const { active, groups } = orderRosterWithActiveFirst(roster(), activity, botId);
   return { active: active.map((item) => item.id), groups };
 }
 
-describe("orderRosterWithActiveFirst", () => {
-  it("leaves an inactive list unchanged", () => {
-    const activity = trackRosterActivity(null, ids.map(idle), 1000);
+function withBot(bots: RosterActivityBot[], next: RosterActivityBot) {
+  return bots.map((entry) => (entry.id === next.id ? next : entry));
+}
+
+describe("roster recency block", () => {
+  it("leaves a roster without activity unchanged", () => {
+    const activity = trackRosterActivity(null, freshRoster(), T0);
     const result = ordered(activity);
     expect(result.active).toEqual([]);
     expect(result.groups).toEqual(roster());
   });
 
-  it("moves one active non-pinned bot above pinned Josy", () => {
-    const start = trackRosterActivity(null, ids.map(idle), 1000);
-    const activity = trackRosterActivity(
-      start,
-      ids.map((id) => (id === "nova" ? { ...idle(id), status: "running" } : idle(id))),
-      2000,
-    );
+  it("keeps a bot in the top block after it becomes idle", () => {
+    let bots = freshRoster();
+    let activity = trackRosterActivity(null, bots, T0);
+    bots = withBot(bots, { ...fresh("sage"), status: "running" });
+    activity = trackRosterActivity(activity, bots, T0 + 1_000);
+    bots = withBot(bots, {
+      ...fresh("sage"),
+      lastMessageAt: new Date(T0 + 5_000).toISOString(),
+    });
+    activity = trackRosterActivity(activity, bots, T0 + 6_000);
     const result = ordered(activity);
-    expect(result.active).toEqual(["nova"]);
-    expect(result.groups[0]?.bots.map((item) => item.id)).toEqual(["josy", "riona", "standup"]);
-    // Shown once: removed from its folder.
-    expect(result.groups[2]?.bots.map((item) => item.id)).toEqual(["ops"]);
+    expect(result.active).toEqual(["sage"]);
+    expect(result.groups[1]).toEqual({ key: "section:fleet", title: "Fleet", bots: [bot("quinn")] });
   });
 
-  it("puts two active bots newest first", () => {
-    let activity = trackRosterActivity(null, ids.map(idle), 1000);
-    activity = trackRosterActivity(
-      activity,
-      ids.map((id) => (id === "quinn" ? { ...idle(id), status: "running" } : idle(id))),
-      2000,
-    );
-    activity = trackRosterActivity(
-      activity,
-      ids.map((id) =>
-        id === "quinn" || id === "riona" ? { ...idle(id), status: "running" } : idle(id),
-      ),
-      3000,
-    );
-    expect(ordered(activity).active).toEqual(["riona", "quinn"]);
+  it("puts a newer active bot above the previous one", () => {
+    let bots = freshRoster();
+    let activity = trackRosterActivity(null, bots, T0);
+    bots = withBot(bots, { ...fresh("nova"), status: "running" });
+    activity = trackRosterActivity(activity, bots, T0 + 1_000);
+    bots = withBot(bots, { ...fresh("nova"), lastMessageAt: new Date(T0 + 2_000).toISOString() });
+    bots = withBot(bots, { ...fresh("quinn"), status: "queued" });
+    activity = trackRosterActivity(activity, bots, T0 + 3_000);
+    expect(ordered(activity).active).toEqual(["quinn", "nova"]);
   });
 
-  it("puts Josy first when she asks a question after Sage went active", () => {
-    let activity = trackRosterActivity(null, ids.map(idle), 1000);
-    activity = trackRosterActivity(
-      activity,
-      ids.map((id) => (id === "sage" ? { ...idle(id), status: "running" } : idle(id))),
-      2000,
-    );
-    expect(ordered(activity).active).toEqual(["sage"]);
-    activity = trackRosterActivity(
-      activity,
-      ids.map((id) =>
-        id === "josy"
-          ? { ...idle(id), status: "waiting_input" }
-          : id === "sage"
-            ? { ...idle(id), status: "running" }
-            : idle(id),
-      ),
-      3000,
-    );
-    expect(ordered(activity).active).toEqual(["josy", "sage"]);
-  });
-
-  it("returns a bot that becomes inactive to its exact former position", () => {
-    let activity = trackRosterActivity(null, ids.map(idle), 1000);
-    activity = trackRosterActivity(
-      activity,
-      ids.map((id) => (id === "riona" ? { ...idle(id), status: "running" } : idle(id))),
-      2000,
-    );
-    expect(ordered(activity).groups[0]?.bots.map((item) => item.id)).toEqual(["josy", "standup"]);
-    activity = trackRosterActivity(activity, ids.map(idle), 3000);
+  it("puts Josy first and Sage second when Josy asks after Sage", () => {
+    let bots = freshRoster();
+    let activity = trackRosterActivity(null, bots, T0);
+    bots = withBot(bots, { ...fresh("sage"), status: "running" });
+    activity = trackRosterActivity(activity, bots, T0 + 1_000);
+    bots = withBot(bots, { ...fresh("josy"), status: "waiting_input" });
+    activity = trackRosterActivity(activity, bots, T0 + 2_000);
     const result = ordered(activity);
-    expect(result.active).toEqual([]);
-    expect(result.groups).toEqual(roster());
+    expect(result.active).toEqual(["josy", "sage"]);
+    expect(result.groups[0]).toEqual({
+      key: "pinned",
+      title: "Pinned",
+      bots: [bot("riona"), room("standup")],
+    });
+  });
+
+  it("takes the page-load order from the server message times", () => {
+    const bots = withBot(
+      withBot(freshRoster(), { ...fresh("quinn"), lastMessageAt: "2026-10-19T06:00:00.000Z" }),
+      { ...fresh("riona"), lastMessageAt: "2026-10-19T07:30:00.000Z" },
+    );
+    const first = trackRosterActivity(null, bots, T0);
+    const reloaded = trackRosterActivity(null, bots, T0 + 60_000);
+    expect(ordered(first).active).toEqual(["riona", "quinn"]);
+    expect(ordered(reloaded).active).toEqual(["riona", "quinn"]);
+  });
+
+  it("keeps a bot without any activity in its folder", () => {
+    const bots = withBot(freshRoster(), {
+      ...fresh("sage"),
+      lastMessageAt: "2026-10-19T07:30:00.000Z",
+    });
+    const result = ordered(trackRosterActivity(null, bots, T0));
+    expect(result.active).toEqual(["sage"]);
+    expect(result.groups[1]).toEqual({ key: "section:fleet", title: "Fleet", bots: [bot("quinn")] });
+    expect(result.groups[2]).toEqual(roster()[2]);
   });
 
   it("never moves rooms", () => {
-    const activity: RosterActivityState = new Map([
-      ["standup", { working: true, waiting: false, unreadKey: null, at: 5000 }],
-      ["ops", { working: false, waiting: true, unreadKey: null, at: 6000 }],
+    const bots = ids.map((id) => ({ ...fresh(id), lastMessageAt: "2026-10-19T07:30:00.000Z" }));
+    const result = ordered(trackRosterActivity(null, bots, T0));
+    expect(result.active).toEqual(ids);
+    expect(result.groups).toEqual([
+      { key: "pinned", title: "Pinned", bots: [room("standup")] },
+      { key: "unassigned", title: "Unassigned", bots: [room("ops")] },
     ]);
-    const result = ordered(activity);
-    expect(result.active).toEqual([]);
-    expect(result.groups).toEqual(roster());
   });
 
-  it("counts an unread reply as active, and reading it returns the bot", () => {
-    let activity = trackRosterActivity(null, ids.map(idle), 1000);
-    activity = trackRosterActivity(
-      activity,
-      ids.map((id) =>
-        id === "sage"
-          ? { ...idle(id), unread: true, updatedAt: "2026-10-19T09:00:00.000Z" }
-          : idle(id),
-      ),
-      2000,
+  it("keeps an emptied folder when the surface shows empty folders", () => {
+    const bots = ["sage", "quinn"].map((id) => ({
+      ...fresh(id),
+      lastMessageAt: "2026-10-19T07:30:00.000Z",
+    }));
+    const { groups } = orderRosterWithActiveFirst(
+      roster(),
+      trackRosterActivity(null, bots, T0),
+      botId,
+      (group) => group.key.startsWith("section:"),
     );
-    expect(ordered(activity).active).toEqual(["sage"]);
-    activity = trackRosterActivity(activity, ids.map(idle), 3000);
-    const result = ordered(activity);
-    expect(result.active).toEqual([]);
-    expect(result.groups).toEqual(roster());
+    expect(groups[1]).toEqual({ key: "section:fleet", title: "Fleet", bots: [] });
   });
 
-  it("keeps the same state on a poll with no change, so the order does not flicker", () => {
-    const bots = ids.map((id) => (id === "nova" ? { ...idle(id), status: "running" } : idle(id)));
-    const first = trackRosterActivity(trackRosterActivity(null, ids.map(idle), 1000), bots, 2000);
-    expect(trackRosterActivity(first, bots, 9000)).toBe(first);
+  it("bumps a bot to the top when an unread reply arrives", () => {
+    let bots = withBot(
+      withBot(freshRoster(), { ...fresh("quinn"), lastMessageAt: "2026-10-19T07:00:00.000Z" }),
+      { ...fresh("riona"), lastMessageAt: "2026-10-19T07:30:00.000Z" },
+    );
+    let activity = trackRosterActivity(null, bots, T0);
+    expect(ordered(activity).active).toEqual(["riona", "quinn"]);
+    bots = withBot(bots, { ...fresh("quinn"), unread: true, lastMessageAt: "2026-10-19T07:00:00.000Z" });
+    activity = trackRosterActivity(activity, bots, T0 + 1_000);
+    expect(ordered(activity).active).toEqual(["quinn", "riona"]);
+  });
+
+  it("returns the same state on an unchanged poll, so the order does not reshuffle", () => {
+    const bots = withBot(freshRoster(), {
+      ...fresh("sage"),
+      status: "running",
+      lastMessageAt: "2026-10-19T07:30:00.000Z",
+    });
+    const first = trackRosterActivity(null, bots, T0);
+    const polled = trackRosterActivity(first, bots.map((entry) => ({ ...entry })), T0 + 30_000);
+    expect(polled).toBe(first);
   });
 });

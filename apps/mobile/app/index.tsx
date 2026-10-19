@@ -430,7 +430,7 @@ function Home() {
               },
             ]
           : [];
-    // Fleet patch: active bots lead the inbox; the state starts at the first non-empty list.
+    // Fleet patch: bots with activity lead the inbox; the state starts at the first non-empty list.
     const rosterBots = sidebarSpaces.flatMap((space): RosterActivityBot[] => space.bots);
     const activity =
       rosterBots.length > 0

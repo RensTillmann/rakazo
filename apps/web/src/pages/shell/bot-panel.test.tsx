@@ -94,6 +94,7 @@ function bot(description = "Billing"): Bot {
     runErrorId: null,
     computerMode: "team",
     updatedAt: "2026-09-01T00:00:00.000Z",
+    lastMessageAt: null,
     createdAt: "2026-09-01T00:00:00.000Z",
     voiceId: null,
     autoSpeak: false,
