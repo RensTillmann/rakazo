@@ -4,7 +4,7 @@ import type { ComputerCommand } from "@rakazo/contracts";
 import { encodeTerminalInput, encodeTerminalResize } from "@rakazo/contracts";
 import { Button, cn, Tabs, TabsList, TabsTrigger } from "@rakazo/ui-web";
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
+import { type ITheme, Terminal } from "@xterm/xterm";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import {
   applyComputerCommandHistory,
@@ -283,7 +283,12 @@ function TerminalPane({
   );
 }
 
-function useXterm(host: RefObject<HTMLDivElement | null>, interactive: boolean) {
+/** Fleet: also used by the Live activity window, which passes its own dark theme. */
+export function useXterm(
+  host: RefObject<HTMLDivElement | null>,
+  interactive: boolean,
+  theme?: ITheme,
+) {
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   useEffect(() => {
     if (!host.current) return;
@@ -293,7 +298,7 @@ function useXterm(host: RefObject<HTMLDivElement | null>, interactive: boolean) 
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fontSize: 13,
       scrollback: 5000,
-      theme: terminalTheme(),
+      theme: theme ?? terminalTheme(),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -308,7 +313,7 @@ function useXterm(host: RefObject<HTMLDivElement | null>, interactive: boolean) 
       term.dispose();
       setTerminal(null);
     };
-  }, [host, interactive]);
+  }, [host, interactive, theme]);
   return terminal;
 }
 

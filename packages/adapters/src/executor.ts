@@ -137,6 +137,12 @@ import { getLogger } from "@rakazo/logging";
 import type { ParseEntry } from "shell-quote";
 import { parse as parseShellCommand } from "shell-quote";
 import {
+  activityArgsPreview,
+  activityBudgetDetails,
+  activityDetailsEnabled,
+  activityResultDetails,
+} from "./activity-details.js";
+import {
   connectAgent,
   messageConnectedAgent,
   respondAgentConnection,
@@ -2917,6 +2923,10 @@ export function toolCompletionAuditPayload(
   };
   if (error !== undefined) {
     payload.error = sanitizeConnectorError(error, secrets);
+  }
+  if (activityDetailsEnabled()) {
+    if (completion.shown) Object.assign(payload, activityResultDetails(completion.shown, secrets));
+    if (completion.budget) Object.assign(payload, activityBudgetDetails(completion.budget));
   }
   if (!isAuditableToolResult(completion.result)) return payload;
 
@@ -7238,6 +7248,29 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   parentRunId: runId,
                   operationId: runId,
                 });
+                if (activityDetailsEnabled()) {
+                  await deps.events
+                    .append({
+                      spaceId: run.spaceId,
+                      threadId: thread.id,
+                      botId: bot.id,
+                      runId,
+                      type: "agent.model.completed",
+                      payload: {
+                        provider: event.provider,
+                        model: event.model,
+                        inputTokens: event.inputTokens,
+                        outputTokens: event.outputTokens,
+                        ...(event.costUsd == null ? {} : { costUsd: event.costUsd }),
+                        ...(event.agentId ? { agentId: event.agentId } : {}),
+                      },
+                    })
+                    .catch((error) =>
+                      getLogger().warn("model activity append failed", {
+                        error: sanitizeConnectorError(error, runSecrets),
+                      }),
+                    );
+                }
               },
               ...(subscriptionLimitsEnabled()
                 ? {
@@ -7636,7 +7669,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 botId: bot.id,
                 type: "agent.tool.called",
                 runId,
-                payload: { name: event.name, executionId: event.executionId },
+                payload: {
+                  name: event.name,
+                  executionId: event.executionId,
+                  ...(activityDetailsEnabled()
+                    ? { argsPreview: activityArgsPreview(event.args, runSecrets) }
+                    : {}),
+                },
               });
               pendingToolNames.push(event.name);
               tryFlushPendingTools();

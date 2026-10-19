@@ -131,6 +131,7 @@ import {
   Smile,
   Square,
   SquareKanban,
+  SquareTerminal,
   TextQuote,
   Trash2,
   X,
@@ -230,6 +231,7 @@ import {
 import { publishComputerCommand } from "../lib/computer-workspace";
 import { desktopBridge } from "../lib/desktop";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
+import { publishActivityEvent } from "../lib/live-activity-terminal";
 import { localTimezone } from "../lib/local-timezone";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
@@ -362,6 +364,9 @@ const PluginsOverlay = lazyOverlay(() =>
 );
 const McpServersOverlay = lazyOverlay(() =>
   import("./McpServersOverlay").then((module) => module.McpServersOverlay),
+);
+const LiveActivityModal = lazyOverlay(() =>
+  import("../components/LiveActivityModal").then((module) => module.LiveActivityModal),
 );
 
 type PendingAttachment = {
@@ -512,6 +517,7 @@ export function ShellPage() {
     () => true,
   );
   const showThoughts = useSyncExternalStore(subscribeShowThoughts, readShowThoughts, () => false);
+  const [liveActivityOpen, setLiveActivityOpen] = useState(false);
   const botsSidebarDensity = useSyncExternalStore(
     subscribeBotsSidebarDensity,
     getBotsSidebarDensity,
@@ -4033,6 +4039,25 @@ export function ShellPage() {
                 aria-hidden="true"
               />
             </button>
+            {(inGroup ? groupId : active?.id) ? (
+              <button
+                type="button"
+                data-testid="live-activity-toggle"
+                aria-label={t`Live activity`}
+                aria-pressed={liveActivityOpen}
+                title={t`Live activity`}
+                onClick={() => setLiveActivityOpen(true)}
+                data-active={liveActivityOpen ? "" : undefined}
+                className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
+              >
+                <SquareTerminal
+                  size={18}
+                  strokeWidth={1.6}
+                  className="text-foreground/75"
+                  aria-hidden="true"
+                />
+              </button>
+            ) : null}
             {!inGroup && active ? (
               <button
                 type="button"
@@ -4993,6 +5018,14 @@ export function ShellPage() {
         {mcpOpen ? <McpServersOverlay onClose={() => setMcpOpen(false)} /> : null}
         {messagingSettingsOpen ? (
           <MessagingSettingsOverlay onClose={() => setMessagingSettingsOpen(false)} />
+        ) : null}
+      </Suspense>
+      <Suspense fallback={null}>
+        {liveActivityOpen && (inGroup ? groupId : active?.id) ? (
+          <LiveActivityModal
+            onClose={() => setLiveActivityOpen(false)}
+            target={inGroup && groupId ? { groupId } : { botId: active?.id ?? "" }}
+          />
         ) : null}
       </Suspense>
 
@@ -7184,6 +7217,7 @@ function applyThreadEvent(
   computerRef: MutableRefObject<ComputerStatus | null>,
 ) {
   publishComputerCommand(event);
+  publishActivityEvent(event);
   if (isThreadSnapshotEvent(event)) {
     const next = reduceThreadSnapshot(snapshotRef.current, event);
     commitSnapshot(next);

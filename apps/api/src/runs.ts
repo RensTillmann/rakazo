@@ -1,4 +1,10 @@
-import type { Actor, RunActivityRow } from "@rakazo/contracts";
+import type {
+  Actor,
+  ProductEvent,
+  RunActivityOutput,
+  RunActivityRow,
+  RunActivitySummary,
+} from "@rakazo/contracts";
 import { MessageBlock } from "@rakazo/contracts";
 import {
   ACTIVE_RUN_STATUSES,
@@ -9,6 +15,7 @@ import {
 import type { PrismaClient } from "@rakazo/db";
 
 const RECENT_LIMIT = 20;
+const ACTIVITY_PAGE_DEFAULT = 300;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
 
 function promptSnippet(prompt: string, max = 120): string {
@@ -102,4 +109,77 @@ export async function listSpaceRuns(
       : row.updatedAt
     ).toISOString(),
   }));
+}
+
+/**
+ * Fleet (RAKAZO_ACTIVITY_DETAILS): a page of one run's stored events for the Live activity
+ * window, with the thread's recent runs for its picker. The caller has already resolved the
+ * thread for this actor (space and owner, as `threads.get`); a run from another thread is
+ * treated as missing.
+ */
+export async function loadRunActivity(
+  prisma: PrismaClient,
+  actor: Actor,
+  threadId: string,
+  input: { runId?: string; afterSeq?: number; limit?: number },
+): Promise<RunActivityOutput> {
+  const rows = await prisma.run.findMany({
+    where: { threadId, spaceId: actor.spaceId },
+    include: {
+      bot: { select: { name: true } },
+      task: { select: { prompt: true } },
+      sourceMessage: { select: { blocks: true } },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: RECENT_LIMIT,
+  });
+  const runs: RunActivitySummary[] = rows.map((row) => ({
+    runId: row.id,
+    botId: row.botId,
+    botName: row.bot.name,
+    status: row.status as RunActivitySummary["status"],
+    trigger: row.trigger as RunActivitySummary["trigger"],
+    promptSnippet: activityPromptSnippet({
+      trigger: row.trigger,
+      prompt: row.task.prompt,
+      sourceBlocks: row.sourceMessage?.blocks,
+    }),
+    createdAt: row.createdAt.toISOString(),
+    startedAt: row.startedAt?.toISOString() ?? null,
+    completedAt: row.completedAt?.toISOString() ?? null,
+  }));
+  let runId = input.runId ?? runs[0]?.runId ?? null;
+  if (input.runId) {
+    const owned = await prisma.run.findFirst({
+      where: { id: input.runId, threadId, spaceId: actor.spaceId },
+      select: { id: true },
+    });
+    runId = owned?.id ?? null;
+  }
+  if (!runId) return { threadId, runs, runId: null, events: [], nextAfterSeq: null };
+  const limit = input.limit ?? ACTIVITY_PAGE_DEFAULT;
+  const page = await prisma.event.findMany({
+    where: { threadId, runId, seq: { gt: input.afterSeq ?? -1 } },
+    orderBy: { seq: "asc" },
+    take: limit + 1,
+  });
+  const more = page.length > limit;
+  const events: ProductEvent[] = page.slice(0, limit).map((event) => ({
+    id: event.id,
+    spaceId: event.spaceId,
+    threadId: event.threadId,
+    botId: event.botId,
+    seq: event.seq,
+    type: event.type as ProductEvent["type"],
+    runId: event.runId ?? undefined,
+    createdAt: event.createdAt.toISOString(),
+    payload: (event.payload ?? {}) as ProductEvent["payload"],
+  }));
+  return {
+    threadId,
+    runs,
+    runId,
+    events,
+    nextAfterSeq: more ? (events.at(-1)?.seq ?? null) : null,
+  };
 }

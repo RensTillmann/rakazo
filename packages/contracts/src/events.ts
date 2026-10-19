@@ -40,6 +40,8 @@ export const ProductEventType = z.enum([
   "effect.recorded",
   "agent.tool.called",
   "agent.tool.completed",
+  /** Fleet (RAKAZO_ACTIVITY_DETAILS): one model call's token counts, for the activity window. */
+  "agent.model.completed",
   "effect.reconciled",
   "usage.recorded",
   "bot.spawned",
