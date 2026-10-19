@@ -267,6 +267,10 @@ import {
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
 import {
+  HINDSIGHT_PROVIDER_ID,
+  HINDSIGHT_UNAVAILABLE_NOTICE,
+} from "./hindsight-memory-provider.js";
+import {
   assertConnectorToolArgs,
   CATALOG_EXECUTE,
   uniquifyInstalledToolName,
@@ -3839,6 +3843,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ? effectiveMemoryScope(bot.memoryScope, configuredMemory.defaultScope)
           : null;
         const semanticMemory: SemanticMemoryProvider | null = configuredMemory?.provider ?? null;
+        const recallEveryRun = memoryRecallEveryRun();
 
         await deps.events.append({
           spaceId: run.spaceId,
@@ -3869,6 +3874,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             historyCompactedUpToSeq: thread.historyCompactedUpToSeq,
           },
           messagingChannelRun,
+          recallEveryRun,
         );
         const compactedHistory = selectCompactedHistory({
           messages: threadContext.messages,
@@ -3908,17 +3914,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? `Update from ${peerMessage.fromBotName}: ${peerMessage.text}`
             : DELEGATED_EMPTY_NOTICE
           : undefined;
+        const recallQuery = semanticRecallQuery({
+          includeSemanticRecall: threadContext.includeSemanticRecall,
+          historyCompacted: thread.historyCompactedUpToSeq != null,
+          recallEveryRun,
+          prompt: task.prompt,
+        });
         const recallPromise =
-          threadContext.includeSemanticRecall &&
-          semanticMemory &&
-          memoryScope &&
-          thread.historyCompactedUpToSeq != null
+          recallQuery !== null && semanticMemory && memoryScope
             ? semanticMemory.recall(
                 {
-                  query: task.prompt,
+                  query: recallQuery,
                   scope: memoryScope,
                   botId: bot.id,
-                  historyGeneration: thread.historyCompactionGeneration,
+                  ...(thread.historyCompactedUpToSeq != null
+                    ? { historyGeneration: thread.historyCompactionGeneration }
+                    : {}),
                   limit: MAX_RECALLED_MEMORIES,
                 },
                 context,
@@ -3960,6 +3971,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
             recalledMemory = formatRecalledMemory(recalled.value);
           } else if (!recalled.ok) {
             getLogger().error("semantic memory recall failed", recalled.error);
+            // Hindsight down or slow: the run goes on and the bot knows memory is missing.
+            if (semanticMemory?.describe().id === HINDSIGHT_PROVIDER_ID) {
+              recalledMemory = HINDSIGHT_UNAVAILABLE_NOTICE;
+            }
           }
         }
         if (!compactedHistory.usedLocalSummary) {
@@ -4186,6 +4201,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             groupId: thread.groupId,
             trigger: run.trigger,
             semanticMemoryEnabled,
+            semanticMemoryCanSave: semanticMemory?.describe().capabilities.save ?? true,
             mediaImagesEnabled: Boolean(deps.artifacts && mediaGeneration?.capabilities.images),
             mediaVideoEnabled: Boolean(deps.artifacts && mediaGeneration?.capabilities.video),
             cloudAgentEnabled: cloudAgentsEnabled(cloudAgent, run.spaceId),
@@ -8255,6 +8271,8 @@ export function selectBuiltinToolsForRun(options: {
   groupId: string | null;
   trigger: string;
   semanticMemoryEnabled: boolean;
+  /** False for a recall-only provider: no save_memory / forget_memory. Default true. */
+  semanticMemoryCanSave?: boolean;
   cloudAgentEnabled?: boolean;
   mediaImagesEnabled?: boolean;
   mediaVideoEnabled?: boolean;
@@ -8278,6 +8296,7 @@ export function selectBuiltinToolsForRun(options: {
         options.trigger,
       ),
       options.semanticMemoryEnabled,
+      options.semanticMemoryCanSave ?? true,
     ),
     Boolean(options.cloudAgentEnabled),
   ).filter(
@@ -8648,20 +8667,52 @@ export function threadContextForRun<T>(
     historyCompactedUpToSeq: number | null;
   },
   messagingChannelRun: boolean,
+  recallEveryRun = false,
 ) {
   // Routine runs stay isolated from thread history. The creation intro does
   // too: a message that arrives during it waits and is answered afterward.
+  // RAKAZO_MEMORY_RECALL_EVERY_RUN keeps the history isolation but recalls anyway.
   if (trigger === "created" || trigger === "routine") {
     return {
       messages: [] as T[],
       summary: null,
       historyCompactedUpToSeq: null,
-      includeSemanticRecall: false,
+      includeSemanticRecall: recallEveryRun,
     };
   }
   return messagingChannelRun
-    ? { ...context, summary: null, historyCompactedUpToSeq: null, includeSemanticRecall: false }
+    ? {
+        ...context,
+        summary: null,
+        historyCompactedUpToSeq: null,
+        includeSemanticRecall: recallEveryRun,
+      }
     : { ...context, includeSemanticRecall: true };
+}
+
+/** Fleet: automatic recall on every run (routine, webhook, messaging), not only compacted chats. */
+export function memoryRecallEveryRun(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.RAKAZO_MEMORY_RECALL_EVERY_RUN?.trim().toLowerCase() === "true";
+}
+
+export const RECALL_QUERY_MAX_CHARS = 2000;
+
+/**
+ * Whether this run recalls, and with what query. Without the flag only a compacted chat recalls,
+ * with the raw prompt; with it every run recalls, with the prompt trimmed to 2000 characters.
+ */
+export function semanticRecallQuery(options: {
+  includeSemanticRecall: boolean;
+  historyCompacted: boolean;
+  recallEveryRun: boolean;
+  prompt: string;
+}): string | null {
+  if (!options.includeSemanticRecall) return null;
+  if (options.recallEveryRun) {
+    const query = options.prompt.trim().slice(0, RECALL_QUERY_MAX_CHARS);
+    return query || null;
+  }
+  return options.historyCompacted ? options.prompt : null;
 }
 
 /** Profile fields the creation intro is asked to explain. Other runs keep the prior identity line. */
