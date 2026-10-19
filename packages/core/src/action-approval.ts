@@ -203,7 +203,8 @@ const SHELL_WRAPPER_PATTERNS = [
   /^(?:\S*\/)?timeout(?:\s+(?:-[sk]\s+\S+|-\S+))*\s+\d+(?:\.\d+)?[smhd]?\s+(?=\S)/,
   /^(?:\S*\/)?nohup\s+(?=\S)/,
 ];
-const SHELL_DASH_C_PATTERN = /^(?:\S*\/)?(?:ba|da|z)?sh(?:\s+-[A-Za-z]+)*?\s+-[A-Za-z]*c[A-Za-z]*\s+([\s\S]+)$/;
+const SHELL_DASH_C_PATTERN =
+  /^(?:\S*\/)?(?:ba|da|z)?sh(?:\s+-[A-Za-z]+)*?\s+-[A-Za-z]*c[A-Za-z]*\s+([\s\S]+)$/;
 const MAX_SHELL_UNWRAP = 8;
 
 /**
@@ -261,9 +262,7 @@ function ruleMatches(
     case "shell": {
       if (toolName !== "shell" || shellCommand === undefined) return false;
       const pattern = shellRulePattern(rule.matchValue);
-      return pattern
-        ? shellCommandForms(shellCommand).some((form) => pattern.test(form))
-        : false;
+      return pattern ? shellCommandForms(shellCommand).some((form) => pattern.test(form)) : false;
     }
     default:
       return false;

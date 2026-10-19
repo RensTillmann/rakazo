@@ -43,9 +43,7 @@ export function ApprovalDetail({ detail }: { detail: string }) {
           const code = /^`(.+)`$/.exec(value);
           return (
             <div key={index} className="break-words">
-              <span className="font-medium text-foreground">
-                {approvalDetailLabel(field[1]!)}:
-              </span>{" "}
+              <span className="font-medium text-foreground">{approvalDetailLabel(field[1]!)}:</span>{" "}
               {code ? (
                 <code className="rounded bg-background px-1 py-0.5 font-mono text-[12.5px]">
                   {code[1]}
@@ -59,10 +57,7 @@ export function ApprovalDetail({ detail }: { detail: string }) {
         // A batch card heads each action's lines with "<Action>:".
         const heading = /^(.+):$/.exec(line);
         return (
-          <div
-            key={index}
-            className={heading ? "pt-1 font-medium text-foreground" : "break-words"}
-          >
+          <div key={index} className={heading ? "pt-1 font-medium text-foreground" : "break-words"}>
             {heading ? heading[1] : line}
           </div>
         );

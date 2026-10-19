@@ -92,6 +92,7 @@ import {
   redactSecrets,
   renderBotDirectory,
   resolveActionApprovalDetail,
+  runPushEnabled,
   sandboxCommandTimeoutMs,
   TAKEOVER_COMPUTER_PENDING_STATE,
   toolRequiresApproval,
@@ -100,7 +101,6 @@ import {
   unattendedTriggerToolRequiresApproval,
   userTurnMessageForRun,
   withoutThinking,
-  runPushEnabled,
 } from "@rakazo/core";
 import {
   approvalEffectKey,
@@ -123,8 +123,8 @@ import {
   Prisma,
   parseComputerMode,
   readHistory,
-  recordUsage,
   recordSubscriptionLimitReading,
+  recordUsage,
   reserveInstructionProposal,
   retireModelCredential,
   SpaceLimitError,
@@ -274,18 +274,12 @@ import {
   updateChildBot,
   updateFleetGroup,
 } from "./fleet-tools.js";
-import { groupHistoryTurn, groupMessageBotIds, loadGroupAuthorNames } from "./group-history.js";
 import { handoffToGroupBot, loadGroupContext, wakeMentionedGroupMembers } from "./group-handoff.js";
+import { groupHistoryTurn, groupMessageBotIds, loadGroupAuthorNames } from "./group-history.js";
 import {
-  isRoomToolName,
-  roomArchive,
-  roomCreate,
-  roomList,
-  roomPost,
-  roomResume,
-  roomToolsAllowedForBot,
-  roomUpdate,
-} from "./room-tools.js";
+  HINDSIGHT_PROVIDER_ID,
+  HINDSIGHT_UNAVAILABLE_NOTICE,
+} from "./hindsight-memory-provider.js";
 import {
   COMPACTION_BATCH_SIZE,
   formatCompactedSummary,
@@ -297,10 +291,6 @@ import {
   selectCompactedHistory,
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
-import {
-  HINDSIGHT_PROVIDER_ID,
-  HINDSIGHT_UNAVAILABLE_NOTICE,
-} from "./hindsight-memory-provider.js";
 import {
   assertConnectorToolArgs,
   CATALOG_EXECUTE,
@@ -365,6 +355,16 @@ import { assertSafeRemoteUrl } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import { tickRoutineWatch } from "./routine-watch.js";
 import { lazyRunComputer } from "./run-computer.js";
+import {
+  isRoomToolName,
+  roomArchive,
+  roomCreate,
+  roomList,
+  roomPost,
+  roomResume,
+  roomToolsAllowedForBot,
+  roomUpdate,
+} from "./room-tools.js";
 import {
   commitConsumedRunSecret,
   normalizeSecretAskPurpose,
@@ -4900,7 +4900,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           // Declared effect of the operation this call dispatches (installed API method and
           // flag). Install config is immutable per route resource, so it cannot drift before
           // execute; a catalog call uses the tool it was just resolved to.
-          const declaredTool = viaConnector ? (resolvedTool ?? connectorTools.get(name)) : undefined;
+          const declaredTool = viaConnector
+            ? (resolvedTool ?? connectorTools.get(name))
+            : undefined;
           const declaredReadOnly = declaredTool?.readOnly;
           // Fleet: an MCP server's readOnlyHint (tools/list annotations) is honoured as a read.
           const trustDeclaredRead = declaredTool?.route?.connectorId === "mcp";
