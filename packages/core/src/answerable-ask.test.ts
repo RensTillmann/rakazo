@@ -3,6 +3,7 @@ import {
   latestAnswerableAskMessageId,
   resolveAskChoice,
   selectedAskActionLabel,
+  summarizeOpenAsk,
 } from "./answerable-ask.js";
 
 describe("latestAnswerableAskMessageId", () => {
@@ -69,5 +70,45 @@ describe("resolveAskChoice", () => {
 
   it("leaves unmatched free-text as a custom answer", () => {
     expect(resolveAskChoice("Toronto", actions)).toBeUndefined();
+  });
+});
+
+describe("summarizeOpenAsk", () => {
+  it("summarises a pending question card that composer text would answer", () => {
+    const long = `Reply to Andreas Balodimos (#3536)?\n${"x".repeat(200)}`;
+    const summary = summarizeOpenAsk({
+      id: "m1",
+      botId: "josy",
+      blocks: [{ kind: "ask", text: long, status: "pending" }],
+    });
+    expect(summary).toMatchObject({ messageId: "m1", botId: "josy", answersWithText: true });
+    expect(summary?.question.startsWith("Reply to Andreas Balodimos (#3536)? x")).toBe(true);
+    expect(summary?.question.length).toBe(100);
+  });
+
+  it("marks approval cards as not answered by composer text", () => {
+    expect(
+      summarizeOpenAsk({
+        id: "m2",
+        blocks: [
+          {
+            kind: "ask",
+            text: "Run the deploy?",
+            approvalEffectId: "e1",
+            actions: [
+              { id: "allow", label: "Allow" },
+              { id: "deny", label: "Deny" },
+            ],
+          },
+        ],
+      })?.answersWithText,
+    ).toBe(false);
+  });
+
+  it("returns null without a pending ask", () => {
+    expect(summarizeOpenAsk(null)).toBeNull();
+    expect(
+      summarizeOpenAsk({ id: "m3", blocks: [{ kind: "ask", text: "Q", status: "answered" }] }),
+    ).toBeNull();
   });
 });

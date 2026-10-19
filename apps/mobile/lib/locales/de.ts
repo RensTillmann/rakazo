@@ -873,4 +873,11 @@ export const DE_MESSAGES: Record<string, string> = {
   "Try again": "Erneut versuchen",
   "Your session expired": "Deine Sitzung ist abgelaufen",
   "The server had a problem": "Auf dem Server ist ein Problem aufgetreten",
+  "Open question: {question} · your message will answer it":
+    "Offene Frage: {question} · deine Nachricht beantwortet sie",
+  "Open question: {question} · answer it on the card first":
+    "Offene Frage: {question} · beantworte sie zuerst auf der Karte",
+  "This answers {bot}'s open question: '{question}'.":
+    "Das beantwortet die offene Frage von {bot}: „{question}“.",
+  "Send as answer": "Als Antwort senden",
 };

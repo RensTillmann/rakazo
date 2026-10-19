@@ -2,7 +2,7 @@ import { selectedAskActionLabel } from "@rakazo/core";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { AnsweredByLine } from "./AskCard";
+import { AnsweredByLine, type AskBlock, AskCard } from "./AskCard";
 
 // vi.mock factories run before module code, so the shared lingui stub is hoisted with them.
 const { joinTemplate } = vi.hoisted(() => ({
@@ -51,5 +51,40 @@ describe("selectedAskActionLabel", () => {
 
   it("falls back to the answer when an action is unavailable", () => {
     expect(selectedAskActionLabel("custom", undefined)).toBe("custom");
+  });
+});
+
+describe("AskCard free-text option", () => {
+  const block = {
+    kind: "ask",
+    text: "Reply to Andreas Balodimos (#3536)?",
+    status: "pending",
+    actions: [
+      { id: "self", label: "I'll send it myself" },
+      { id: "skip", label: "Don't reply" },
+    ],
+  } as unknown as AskBlock;
+
+  it("offers the composer as the card's free-text answer", () => {
+    const html = renderToStaticMarkup(
+      <AskCard block={block} canAnswer onAnswer={async () => {}} onAnswerInChat={() => {}} />,
+    );
+    expect(html).toContain('data-testid="ask-answer-in-chat"');
+    expect(html).toContain("I&#x27;ll type it");
+  });
+
+  it("hides the option on approval cards", () => {
+    const approval = {
+      ...block,
+      approvalEffectId: "effect-1",
+      actions: [
+        { id: "allow", label: "Allow" },
+        { id: "deny", label: "Deny" },
+      ],
+    } as unknown as AskBlock;
+    const html = renderToStaticMarkup(
+      <AskCard block={approval} canAnswer onAnswer={async () => {}} onAnswerInChat={() => {}} />,
+    );
+    expect(html).not.toContain('data-testid="ask-answer-in-chat"');
   });
 });

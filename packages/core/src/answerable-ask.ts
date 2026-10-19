@@ -1,3 +1,5 @@
+import { isApprovalAskBlock, isSecretAskBlock } from "./action-approval.js";
+
 type AskSnapshot = {
   messages: readonly {
     id: string;
@@ -23,6 +25,51 @@ export function latestAnswerableAskMessageId(snapshot: AskSnapshot | null): stri
     }
   }
   return null;
+}
+
+export type OpenAskSummary = {
+  messageId: string;
+  botId?: string;
+  /** The card's question, on one line and cut to about 100 characters. */
+  question: string;
+  /** Fleet: true when composer text is taken as this card's answer (question cards); approval
+   * and secret cards ignore composer text and must be answered on the card. */
+  answersWithText: boolean;
+};
+
+const OPEN_ASK_QUESTION_MAX = 100;
+
+/** Fleet: summary of the pending ask card that composer text would land on, for the composer guard. */
+export function summarizeOpenAsk(
+  message:
+    | {
+        id: string;
+        botId?: string | null;
+        blocks: readonly {
+          kind: string;
+          text?: string;
+          status?: string;
+          input?: string;
+          approvalEffectId?: string;
+          actions?: Array<{ id: string; label: string }>;
+        }[];
+      }
+    | null
+    | undefined,
+): OpenAskSummary | null {
+  const block = message?.blocks.find((item) => item.kind === "ask" && item.status !== "answered");
+  if (!message || !block) return null;
+  const flat = (block.text ?? "").replace(/\s+/g, " ").trim();
+  const question =
+    flat.length > OPEN_ASK_QUESTION_MAX
+      ? `${flat.slice(0, OPEN_ASK_QUESTION_MAX - 1).trimEnd()}…`
+      : flat;
+  return {
+    messageId: message.id,
+    ...(message.botId ? { botId: message.botId } : {}),
+    question,
+    answersWithText: !isApprovalAskBlock(block) && !isSecretAskBlock(block),
+  };
 }
 
 export function selectedAskActionLabel(
