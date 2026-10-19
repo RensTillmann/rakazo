@@ -239,10 +239,15 @@ describe("deliveries that run one routine", () => {
     expect(completionMarksUnread(gateWake, "Urgent: payment failed")).toBe(true);
   });
 
-  it("leaves a webhook without its routine, and every other trigger, as it was", () => {
-    expect(runAllowsSilentEmpty(runBehaviorTrigger({ trigger: "webhook", routineId: null }))).toBe(
-      false,
-    );
+  it("lets a webhook without its routine finish silently too, and leaves other triggers", () => {
+    // A held delivery whose routine could not be recovered is still a machine wake.
+    const heldWake = runBehaviorTrigger({ trigger: "webhook", routineId: null });
+    expect(heldWake).toBe("webhook");
+    expect(runAllowsSilentEmpty(heldWake)).toBe(true);
+    expect(runReplyGuidance(heldWake)).toBe(ROUTINE_SILENT_REPLY_GUIDANCE);
+    expect(completionMarksUnread(heldWake, "")).toBe(false);
+    expect(completionMarksUnread(heldWake, "Case 12 needs you")).toBe(true);
+    expect(runAllowsSilentEmpty("follow_up")).toBe(false);
     expect(runBehaviorTrigger({ trigger: "user", routineId: "routine-1" })).toBe("user");
     expect(runBehaviorTrigger({ trigger: "routine", routineId: "routine-1" })).toBe("routine");
   });

@@ -175,6 +175,14 @@ function fixture(
           inputSchema: { type: "object" },
           route: { connectorId: "demo", resourceId: "resource-1", toolName: "label_create" },
         },
+        {
+          // A read: webhook runs ask approval for connector writes such as label_create.
+          name: "label_list",
+          description: "List labels",
+          readOnly: true,
+          inputSchema: { type: "object" },
+          route: { connectorId: "demo", resourceId: "resource-1", toolName: "label_list" },
+        },
       ],
       resolveCall: async () => undefined,
       execute: vi.fn(async function* () {
@@ -448,6 +456,35 @@ describe("model thinking in a run's chat", () => {
     const input = JSON.stringify(f.runtimeRun.mock.calls[0]![0]);
     expect(input).toContain("Urgent and later.");
     expect(input).not.toContain("PRIVATE-REASONING-MARKER");
+  });
+});
+
+describe("NO_RESPONSE in a held webhook delivery's run (no routine on the run)", () => {
+  const wake: MessageBlock[] = [
+    { kind: "text", text: 'Run routine "Fleet events":\nAct on the event; else stay silent.' },
+  ];
+
+  it.each([
+    ["once", ["NO_RESPONSE"]],
+    ["repeated around a tool call", ["NO_RESPONSE", "NO_RESPONSE"]],
+  ])("persists nothing (%s) and gets no nudge", async (_case, texts) => {
+    const script: AgentRuntimeEvent[] = [{ type: "text", text: texts[0]! }];
+    if (texts[1]) {
+      script.push(
+        { type: "tool", name: "label_list", args: {}, executionId: "call-1" },
+        { type: "text", text: texts[1] },
+      );
+    }
+    script.push({ type: "done", text: texts.join("") });
+    const f = fixture(script, { trigger: "webhook", source: wake });
+    await f.run();
+
+    const request = f.runtimeRun.mock.calls[0]![0];
+    expect(request.allowSilentEmpty).toBe(true);
+    expect(request.silentReplyNudge).toBeUndefined();
+    expect(published).toEqual([]);
+    expect(f.finalBlocks()).toEqual([]);
+    expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ markUnread: false }));
   });
 });
 

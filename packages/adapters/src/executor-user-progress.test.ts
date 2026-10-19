@@ -293,12 +293,13 @@ describe.each(["reaction", "bot_message", "messaging"])(
   },
 );
 
-// Fleet: routine runs, including a webhook delivery that runs one routine (the gate), finish
-// silently when the model ends empty; held-back narration is not posted as their reply.
+// Fleet: routine and webhook runs (with or without a recorded routine: the gate, GitHub, a held
+// delivery batch) finish silently when the model ends empty; held-back narration is not posted.
 describe.each([
   { trigger: "routine", routineId: undefined },
   { trigger: "webhook", routineId: "routine-1" },
-])("held-back narration on $trigger routine runs", ({ trigger, routineId }) => {
+  { trigger: "webhook", routineId: undefined },
+])("held-back narration on $trigger runs (routine $routineId)", ({ trigger, routineId }) => {
   it("posts nothing when the model ends empty after a tool call", async () => {
     const { finalizeRun } = await runTurn(
       "",

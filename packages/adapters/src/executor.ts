@@ -4547,8 +4547,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const publishMidTurnNarration = async () => {
           const extracted = extractNarrationText(messageSegments, currentTextSegment);
           const clamped = clampUserProgressMessage(redactSecrets(extracted.text, runSecrets));
-          // The silent marker never reaches a person, not even as narration before a tool call.
-          const narration = personReplyRun && isExactNoResponse(clamped) ? "" : clamped;
+          // The silent marker is never posted as narration before a tool call: it is not an answer
+          // for a person, and in a run that may finish silently it means "nothing to say".
+          const narration =
+            (personReplyRun || allowSilentEmptyRun) && isExactNoResponse(clamped) ? "" : clamped;
           if (narration) lastStatedIntention = narration;
           const canPublish = canPublishDurableNarration();
           if (
@@ -8195,12 +8197,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           // Preserve the last held-back preview as a normal final reply when the
           // model supplies none, unless it chose silence or already delivered that text.
           // Persisting peer results here also lets outcome delivery retry after completion.
-          // Fleet: routine runs (incl. a webhook delivery running one routine, the gate) stay
+          // Fleet: routine and webhook runs (the gate, GitHub, a held delivery batch) stay
           // silent instead: an empty finish there means nothing to report.
           recordExplicitNoResponse(lastDiscardedMidTurnNarration);
           if (
             !isBackgroundRunTrigger(run.trigger) &&
             behaviorTrigger !== "routine" &&
+            run.trigger !== "webhook" &&
             !handedOff &&
             !explicitNoResponse &&
             !assembled.trim() &&
@@ -9399,8 +9402,18 @@ export function runBehaviorTrigger(run: { trigger: string; routineId: string | n
   return run.trigger === "webhook" && run.routineId ? "routine" : run.trigger;
 }
 
+/**
+ * Runs that may finish with no reply: routines, reaction wakes, background ticket work, and every
+ * webhook run. A webhook (GitHub, messaging-routine) delivery is a machine wake, never a person,
+ * whether or not its run knows the routine it runs.
+ */
 export function runAllowsSilentEmpty(trigger: string): boolean {
-  return trigger === "reaction" || trigger === "routine" || isBackgroundRunTrigger(trigger);
+  return (
+    trigger === "reaction" ||
+    trigger === "routine" ||
+    trigger === "webhook" ||
+    isBackgroundRunTrigger(trigger)
+  );
 }
 
 /**
@@ -9534,7 +9547,9 @@ export function completionMarksUnread(
 ): boolean {
   if (trigger === "bot_message") return userFacingPeerReply;
   if (isBackgroundRunTrigger(trigger)) return false;
-  return (trigger !== "routine" && trigger !== "reaction") || Boolean(text);
+  return (
+    (trigger !== "routine" && trigger !== "reaction" && trigger !== "webhook") || Boolean(text)
+  );
 }
 
 export function missingTurnImagesInstruction(

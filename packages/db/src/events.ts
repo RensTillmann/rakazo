@@ -10,6 +10,7 @@ import {
   batchedConnectorActions,
   blocksToAgentHistoryText,
   callIdFromClientNonce,
+  inboundDeliverySummary,
   inboundSourceFromClientNonce,
   instructionUpdateDiff,
   isApprovalAskBlock,
@@ -1663,6 +1664,8 @@ export async function createPendingSteeringRun(
   const batch = pending.filter((item) => steeringOrigin(item) === origin);
   const source = batch.at(-1)!;
   const modelPin = continuationModelPin(batch);
+  const routineId =
+    origin === "webhook" ? await heldDeliveryRoutineId(tx, input.botId, batch) : null;
   const task = await tx.task.create({
     data: {
       spaceId: input.spaceId,
@@ -1700,6 +1703,7 @@ export async function createPendingSteeringRun(
             : "messaging",
       sourceMessageId: source.message.id,
       ...(modelPin ?? {}),
+      ...(routineId ? { routineId } : {}),
     },
   });
   await tx.steeringMessage.updateMany({
@@ -1707,6 +1711,36 @@ export async function createPendingSteeringRun(
     data: { runId: run.id, claimedAt: null },
   });
   return run.id;
+}
+
+/**
+ * The routine a held delivery runs. A delivery that runs one routine records it on its run when it
+ * starts at once; a held one keeps only its message, whose server-written head names the routine
+ * (`Run routine "<name>":`). Every delivery in the batch must name the same single routine, and
+ * exactly one of the bot's routines must have that name; otherwise the run gets none, as before.
+ */
+async function heldDeliveryRoutineId(
+  tx: Prisma.TransactionClient,
+  botId: string,
+  batch: ReadonlyArray<{ message: { blocks: unknown } }>,
+): Promise<string | null> {
+  const names = new Set<string>();
+  for (const item of batch) {
+    const blocks = Array.isArray(item.message.blocks)
+      ? (item.message.blocks as MessageBlock[])
+      : [];
+    const text = blocks.find((block) => block.kind === "text");
+    const routines = text?.kind === "text" ? inboundDeliverySummary(text.text).routines : [];
+    if (routines.length !== 1) return null;
+    names.add(routines[0]!);
+  }
+  if (names.size !== 1) return null;
+  const matches = await tx.routine.findMany({
+    where: { botId, name: [...names][0]! },
+    select: { id: true },
+    take: 2,
+  });
+  return matches.length === 1 ? matches[0]!.id : null;
 }
 
 function continuationModelPin(
