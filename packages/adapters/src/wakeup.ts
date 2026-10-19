@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import type {
   BackgroundJob,
   BackgroundJobHandlers,
@@ -7,7 +8,6 @@ import type {
 import { dispatchBackgroundJob } from "@rakazo/adapter-kit";
 import { isTooManyDatabaseConnections } from "@rakazo/db";
 import { getLogger, runCorrelatedJob, unwrapJobPayload, wrapJobPayload } from "@rakazo/logging";
-import { EventEmitter } from "node:events";
 import type { Runner, WorkerEvents, WorkerUtils } from "graphile-worker";
 import { makeWorkerUtils, run } from "graphile-worker";
 import type { Pool } from "pg";

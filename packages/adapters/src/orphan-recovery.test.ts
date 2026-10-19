@@ -37,7 +37,8 @@ function fakeDb(jobs: FakeJob[], runs: FakeRun[]) {
       if (sql.includes("force_unlock_workers")) {
         const ids = params[0] as string[];
         unlocked.push(ids);
-        for (const job of jobs) if (job.locked_by && ids.includes(job.locked_by)) job.locked_by = null;
+        for (const job of jobs)
+          if (job.locked_by && ids.includes(job.locked_by)) job.locked_by = null;
         return { rows: [] };
       }
       throw new Error(`unexpected query: ${sql}`);
@@ -140,7 +141,12 @@ describe("recoverOrphanedJobs", () => {
   });
 
   it("does not expire a run that is no longer leased or running", async () => {
-    const run: FakeRun = { id: "run-1", botId: "bot-1", status: "completed", leaseExpiresAt: future };
+    const run: FakeRun = {
+      id: "run-1",
+      botId: "bot-1",
+      status: "completed",
+      leaseExpiresAt: future,
+    };
     const fake = fakeDb(
       [{ key: "run:run-1", locked_by: "pool-dead", identifier: "run.continue", payload: {} }],
       [run],
