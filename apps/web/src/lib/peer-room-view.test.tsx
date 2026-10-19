@@ -57,14 +57,21 @@ describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
   it("keeps mentions coloured in the body through the chat Markdown renderer", () => {
     const view = peerRoomView(
       message("user", [
-        { kind: "bot_message_received", fromBotId: "lily", fromBotName: "Lily", text: "@Quinn done" },
+        {
+          kind: "bot_message_received",
+          fromBotId: "lily",
+          fromBotName: "Lily",
+          text: "@Quinn done",
+        },
       ]),
       quinn,
     );
     const block = view?.message.blocks[0];
     const html = renderToStaticMarkup(
       <MentionBotsContext.Provider
-        value={[{ id: "quinn", names: ["Quinn"], color: { onLight: "#5B21B6", onDark: "#A97EFE" } }]}
+        value={[
+          { id: "quinn", names: ["Quinn"], color: { onLight: "#5B21B6", onDark: "#A97EFE" } },
+        ]}
       >
         <ChatMarkdown>{block?.kind === "text" ? block.text : ""}</ChatMarkdown>
       </MentionBotsContext.Provider>,

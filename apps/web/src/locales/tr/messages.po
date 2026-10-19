@@ -2612,6 +2612,10 @@ msgstr ""
 msgid "Fullscreen"
 msgstr "Tam ekran"
 
+#: src/pages/Shell.tsx
+msgid "fyi"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Gateway ID"
@@ -3649,6 +3653,10 @@ msgstr ""
 msgid "Open computer settings"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Open conversation"
+msgstr ""
+
 #: src/components/markdown-link-prompt.tsx
 msgid "Open external link?"
 msgstr "Harici bağlantı açılsın mı?"
@@ -3878,6 +3886,10 @@ msgstr "Sağlayıcılar"
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "Çekme isteği"
+
+#: src/pages/Shell.tsx
+msgid "question"
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Questions and takeovers always notify you"
@@ -4135,6 +4147,10 @@ msgstr ""
 msgid "Replying to {0}"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "request"
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr ""
@@ -4203,6 +4219,10 @@ msgstr "Geri yüklendi"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "result"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
@@ -4761,6 +4781,10 @@ msgstr "Başlıyor"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "Başlatılıyor…"
+
+#: src/pages/Shell.tsx
+msgid "status"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
