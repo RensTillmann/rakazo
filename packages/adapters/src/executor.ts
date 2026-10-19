@@ -26,6 +26,7 @@ import type {
   SandboxProvider,
   SecretStore,
   SemanticMemoryProvider,
+  DurableMemoryScope,
   SubscriptionLimitReading,
   WebProvider,
 } from "@rakazo/adapter-kit";
@@ -65,6 +66,7 @@ import {
   batchedConnectorActions,
   blocksToAgentHistoryText,
   botMessageAllowsSilence,
+  botMessageContext,
   CALL_CLIENT_NONCE_PREFIX,
   callIdFromClientNonce,
   combineActionApprovals,
@@ -260,6 +262,7 @@ import { handoffToGroupBot, loadGroupContext, wakeMentionedGroupMembers } from "
 import { groupHistoryTurn, groupMessageBotIds, loadGroupAuthorNames } from "./group-history.js";
 import {
   HINDSIGHT_PROVIDER_ID,
+  HINDSIGHT_RECALL_TIMEOUT_MS,
   HINDSIGHT_UNAVAILABLE_NOTICE,
 } from "./hindsight-memory-provider.js";
 import {
@@ -7371,7 +7374,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       leaseFence: fence,
                       seenIds,
                     });
-                    return Promise.all(
+                    const claimed = await Promise.all(
                       steering.map(async (item) => {
                         const { images, files, unavailableInstruction } =
                           await settleSteeringAttachmentLoads(
@@ -7414,6 +7417,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         };
                       }),
                     );
+                    // Fleet: a message steered into a busy run gets the same recall as a run start.
+                    const steeringRecall = await recallForSteeringMessages({
+                      items: steering,
+                      includeSemanticRecall: threadContext.includeSemanticRecall,
+                      historyCompacted: thread.historyCompactedUpToSeq != null,
+                      recallEveryRun,
+                      provider: semanticMemory,
+                      scope: memoryScope,
+                      botId: bot.id,
+                      ...(thread.historyCompactedUpToSeq != null
+                        ? { historyGeneration: thread.historyCompactionGeneration }
+                        : {}),
+                      context,
+                    });
+                    return attachSteeringRecall(claimed, steering, steeringRecall);
                   },
             },
             context,
@@ -8800,6 +8818,99 @@ export function semanticRecallQuery(options: {
     return query || null;
   }
   return options.historyCompacted ? options.prompt : null;
+}
+
+type SteeringRecallItem = { text: string; blocks: readonly MessageBlock[] };
+
+/** User text of steered messages; bot-to-bot and textless items do not recall. */
+function steeringRecallText(items: readonly SteeringRecallItem[]): string {
+  return items
+    .filter((item) => !botMessageContext(item.blocks))
+    .map((item) => item.text.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/**
+ * One recall per steering claim, under the run-start rules and limit. Returns the formatted
+ * "Shared memory recalled" block, or "" when disabled, empty, failed or timed out.
+ */
+export async function recallForSteeringMessages(options: {
+  items: readonly SteeringRecallItem[];
+  includeSemanticRecall: boolean;
+  historyCompacted: boolean;
+  recallEveryRun: boolean;
+  provider: SemanticMemoryProvider | null;
+  scope: DurableMemoryScope | null;
+  botId: string;
+  historyGeneration?: number;
+  context: AdapterContext;
+  timeoutMs?: number;
+}): Promise<string> {
+  if (!options.provider || !options.scope) return "";
+  const text = steeringRecallText(options.items);
+  if (!text) return "";
+  const query = semanticRecallQuery({
+    includeSemanticRecall: options.includeSemanticRecall,
+    historyCompacted: options.historyCompacted,
+    recallEveryRun: options.recallEveryRun,
+    prompt: text,
+  });
+  if (query === null) return "";
+  const timeoutMs = Math.min(
+    options.timeoutMs ?? HINDSIGHT_RECALL_TIMEOUT_MS,
+    HINDSIGHT_RECALL_TIMEOUT_MS,
+  );
+  const timeout = new AbortController();
+  const timedOut = Promise.withResolvers<never>();
+  const timer = setTimeout(() => {
+    timeout.abort();
+    timedOut.reject(new Error(`steering recall timed out after ${timeoutMs} ms`));
+  }, timeoutMs);
+  try {
+    const recalled = await Promise.race([
+      options.provider.recall(
+        {
+          query,
+          scope: options.scope,
+          botId: options.botId,
+          ...(options.historyGeneration != null
+            ? { historyGeneration: options.historyGeneration }
+            : {}),
+          limit: MAX_RECALLED_MEMORIES,
+        },
+        { ...options.context, signal: AbortSignal.any([options.context.signal, timeout.signal]) },
+      ),
+      timedOut.promise,
+    ]);
+    if (!recalled.ok) {
+      getLogger().error("steering memory recall failed", recalled.error);
+      return "";
+    }
+    return recalled.value.length > 0 ? formatRecalledMemory(recalled.value) : "";
+  } catch (error) {
+    getLogger().error("steering memory recall failed", error);
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Appends the recall block to the last user-steered message only; earlier context is untouched. */
+export function attachSteeringRecall<T extends { text: string }>(
+  claimed: T[],
+  steering: readonly SteeringRecallItem[],
+  recalled: string,
+): T[] {
+  if (!recalled) return claimed;
+  for (let index = claimed.length - 1; index >= 0; index -= 1) {
+    const source = steering[index];
+    if (!source || botMessageContext(source.blocks) || !source.text.trim()) continue;
+    const target = claimed[index]!;
+    claimed[index] = { ...target, text: [target.text, recalled].filter(Boolean).join("\n\n") };
+    break;
+  }
+  return claimed;
 }
 
 /** Profile fields the creation intro is asked to explain. Other runs keep the prior identity line. */
