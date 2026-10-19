@@ -112,6 +112,7 @@ import { MessageReactionSchema } from "./reactions.js";
 import { RoutineWatchSchema } from "./routine-watch.js";
 import { RoutineHistorySchema, RoutineRunCursorSchema, RunsListOutputSchema } from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
+import { ThreadUsageSchema, UsageLimitsSchema } from "./usage-limits.js";
 
 const botId = z.object({ botId: Id });
 const groupId = z.object({ groupId: Id });
@@ -977,6 +978,12 @@ export const appContract = {
         runs: z.number(),
       }),
     ),
+    /** Fleet (RAKAZO_SUBSCRIPTION_LIMITS): subscription windows plus `fleet.usage_bars`. */
+    limits: oc.output(UsageLimitsSchema),
+    /** Fleet: context fill and today's totals for one chat. */
+    thread: oc
+      .input(threadTarget.and(z.object({ dayStart: z.iso.datetime().optional() })))
+      .output(ThreadUsageSchema),
   },
   export: {
     bot: oc.input(botId).output(ExportManifestSchema),

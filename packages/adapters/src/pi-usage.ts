@@ -303,20 +303,12 @@ export function observedPiStream(
           ...(observer ? { maxRetries: 0 } : {}),
           ...(onRateLimit
             ? {
-                onResponse: async (
-                  response: Parameters<NonNullable<SimpleStreamOptions["onResponse"]>>[0],
-                  requestModel: Parameters<NonNullable<SimpleStreamOptions["onResponse"]>>[1],
-                ) => {
+                onResponse: ((response, requestModel) => {
                   const reading = parseRateLimitHeaders(response.headers, model.provider);
-                  if (reading) {
-                    try {
-                      await onRateLimit(reading);
-                    } catch {
-                      /* A lost reading never fails the model call. */
-                    }
-                  }
+                  // Saved off the request path: a lost reading never delays or fails the call.
+                  if (reading) void Promise.resolve(reading).then(onRateLimit).catch(() => {});
                   return callerOnResponse?.(response, requestModel);
-                },
+                }) satisfies SimpleStreamOptions["onResponse"],
               }
             : {}),
         };

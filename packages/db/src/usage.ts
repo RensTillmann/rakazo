@@ -106,7 +106,7 @@ export async function latestSubscriptionLimitReading(
   };
 }
 
-export interface ExtraUsageBar {
+export interface FleetUsageBarRow {
   name: string;
   usedPct: number | null;
   label: string | null;
@@ -120,7 +120,7 @@ export interface ExtraUsageBar {
  */
 export async function listFleetUsageBars(
   prisma: Pick<PrismaClient, "$queryRawUnsafe">,
-): Promise<ExtraUsageBar[]> {
+): Promise<FleetUsageBarRow[]> {
   try {
     const rows = await prisma.$queryRawUnsafe<
       {

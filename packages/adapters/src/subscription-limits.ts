@@ -1,3 +1,5 @@
+import type { Models } from "@earendil-works/pi-ai";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { SecretStore, SubscriptionLimitReading } from "@rakazo/adapter-kit";
 import type { PrismaClient } from "@rakazo/db";
 import {
@@ -184,15 +186,13 @@ export class SubscriptionUsageRefresher {
   private readonly backoffUntil = new Map<string, number>();
   private readonly inFlight = new Map<string, Promise<SubscriptionLimitReading | null>>();
 
-  constructor(
-    private readonly options: {
-      loadToken: (key: string) => Promise<string | undefined>;
-      fetch?: typeof fetch;
-      now?: () => number;
-    },
-  ) {}
+  constructor(private readonly options: { fetch?: typeof fetch; now?: () => number } = {}) {}
 
-  refresh(key: string): Promise<SubscriptionLimitReading | null> {
+  /** `key` scopes cache and backoff (one per user); `loadToken` runs only when a call is due. */
+  refresh(
+    key: string,
+    loadToken: () => Promise<string | undefined>,
+  ): Promise<SubscriptionLimitReading | null> {
     const now = (this.options.now ?? Date.now)();
     const existing = this.inFlight.get(key);
     if (existing) return existing;
@@ -201,7 +201,7 @@ export class SubscriptionUsageRefresher {
     if (last !== undefined && now - last < OAUTH_USAGE_CACHE_MS) return Promise.resolve(null);
     this.lastAttempt.set(key, now);
     const run = (async () => {
-      const token = await this.options.loadToken(key);
+      const token = await loadToken();
       if (!token) return null;
       const result = await fetchAnthropicOAuthUsage(token, {
         ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
@@ -218,4 +218,99 @@ export class SubscriptionUsageRefresher {
     this.inFlight.set(key, run);
     return run;
   }
+}
+
+/** A reading older than this triggers the idle `/api/oauth/usage` refresh. */
+export const SUBSCRIPTION_READING_STALE_MS = 10 * 60_000;
+
+/** One bar: 0..100 used. Once the window's reset passed, it reads 0% (reset). */
+export function subscriptionWindow(
+  util: number | null,
+  resetAt: Date | null,
+  now: Date,
+): { usedPct: number | null; resetsAt: string | null; reset: boolean } {
+  if (resetAt && resetAt.getTime() <= now.getTime()) {
+    return { usedPct: 0, resetsAt: resetAt.toISOString(), reset: true };
+  }
+  return {
+    usedPct: util === null ? null : Math.round(util * 1000) / 10,
+    resetsAt: resetAt?.toISOString() ?? null,
+    reset: false,
+  };
+}
+
+export interface ThreadUsageRow {
+  provider: string;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  totalTokens: number | null;
+  costUsd: number | null;
+  runId: string | null;
+  parentRunId: string | null;
+  operationKind: string;
+}
+
+let cachedModels: Models | undefined;
+
+/** Context window from Pi's model catalog; null for an unknown model. */
+export function modelContextWindow(provider: string, modelId: string): number | null {
+  cachedModels ??= builtinModels();
+  const model = cachedModels
+    .getProviders()
+    .find((candidate) => candidate.id === provider)
+    ?.getModels()
+    .find((candidate) => candidate.id === modelId);
+  return model?.contextWindow ?? null;
+}
+
+/**
+ * The chat line. Context = the latest main call's input + cache read + cache write; cache % =
+ * cache reads over all input today; cost is the API-price equivalent of today's calls.
+ */
+export function summarizeThreadUsage(
+  today: ThreadUsageRow[],
+  latest: ThreadUsageRow | null,
+  contextWindowOf: (provider: string, modelId: string) => number | null = modelContextWindow,
+) {
+  const contextTokens = latest
+    ? (latest.inputTokens ?? 0) + (latest.cacheReadTokens ?? 0) + (latest.cacheWriteTokens ?? 0)
+    : null;
+  const contextWindow = latest ? contextWindowOf(latest.provider, latest.model) : null;
+  let input = 0;
+  let cacheRead = 0;
+  let tokens = 0;
+  let cost = 0;
+  let costKnown = false;
+  const runs = new Set<string>();
+  for (const row of today) {
+    input += (row.inputTokens ?? 0) + (row.cacheReadTokens ?? 0) + (row.cacheWriteTokens ?? 0);
+    cacheRead += row.cacheReadTokens ?? 0;
+    tokens +=
+      row.totalTokens ??
+      (row.inputTokens ?? 0) +
+        (row.outputTokens ?? 0) +
+        (row.cacheReadTokens ?? 0) +
+        (row.cacheWriteTokens ?? 0);
+    if (row.costUsd !== null) {
+      cost += row.costUsd;
+      costKnown = true;
+    }
+    const run = row.parentRunId ?? row.runId;
+    if (run) runs.add(run);
+  }
+  return {
+    contextTokens,
+    contextWindow,
+    contextPct:
+      contextTokens !== null && contextWindow
+        ? Math.round((contextTokens / contextWindow) * 1000) / 10
+        : null,
+    cachePctToday: input > 0 ? Math.round((cacheRead / input) * 1000) / 10 : null,
+    tokensToday: tokens,
+    runsToday: runs.size,
+    apiEquivalentCostUsdToday: costKnown ? Math.round(cost * 10_000) / 10_000 : null,
+  };
 }
