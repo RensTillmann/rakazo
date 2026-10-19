@@ -4,10 +4,11 @@ import type { StuckWorkStatus } from "@rakazo/core";
 import {
   isStuckWorkStatus,
   STUCK_WORK_NOTICE,
-  STUCK_WORK_NOTIFY_AFTER_MS,
   STUCK_WORK_STATUSES,
   stuckWorkAction,
   stuckWorkAgeMs,
+  stuckWorkExpireAfterMs,
+  stuckWorkNotifyAfterMs,
   stuckWorkReminder,
   stuckWorkStoppedNotification,
 } from "@rakazo/core";
@@ -56,7 +57,10 @@ export async function reconcileStuckWork(deps: {
   batchSize: number;
   cursor?: StuckCursor;
 }): Promise<StuckCursor | undefined> {
-  const cutoff = new Date(deps.now.getTime() - STUCK_WORK_NOTIFY_AFTER_MS);
+  // RAKAZO_STUCK_*_HOURS may set expiry below the reminder, so scan from the earlier of the two.
+  const cutoff = new Date(
+    deps.now.getTime() - Math.min(stuckWorkNotifyAfterMs(), stuckWorkExpireAfterMs()),
+  );
   const cursorFilter = deps.cursor
     ? {
         OR: [
@@ -128,7 +132,7 @@ function readyStuckRun(
 ): StuckCandidate | null {
   if (!run.status || !isStuckWorkStatus(run.status)) return null;
   if (!(run.updatedAt instanceof Date)) return null;
-  if (stuckWorkAgeMs(run.updatedAt, now) < STUCK_WORK_NOTIFY_AFTER_MS) return null;
+  if (stuckWorkAgeMs(run.updatedAt, now) < stuckWorkNotifyAfterMs()) return null;
   if (!run.spaceId || !run.threadId || !run.botId || !run.userId || !run.taskId) return null;
   if (!run.bot || !run.thread) return null;
   return {
