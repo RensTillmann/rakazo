@@ -5,15 +5,17 @@ This is Rens's fork of [elie222/rakazo](https://github.com/elie222/rakazo):
 
 - `main` follows upstream `main`. We never commit to it.
 - `fleet-next` (this branch) is a newer upstream plus our patches, one commit per patch. It is
-  **running** since 19 Oct 2026: image `rakazo-fleet/app:bcdacb3` (the fleet build: approvals in
-  every run and shell rules, rooms, usage bars, Hindsight provider, and the web catalogs; base upstream
-  `76f4259`), computers pinned to `rakazo-fleet/computer:7d5e64c`. `tsc` for 8 packages, 5243 core/
-  adapters/api/worker tests, 769 web tests and 358 Postgres tests (with `NODE_ENV=test`, which turns
-  off sign-up rate limits) passed in that image. Settings: `RAKAZO_WEBHOOK_HONORS_RULES`,
+  **running** since 19 Oct 2026, 23:28 Amsterdam: image `rakazo-fleet/app:trial-a136e65` (`a136e65a`),
+  our patches replayed onto upstream `aa386688` (71 upstream commits incl. pi packages 1.3.0), computers
+  pinned to `rakazo-fleet/computer:7d5e64c`. Checked first on a restored copy of live (`rt-dress`):
+  all 5 upstream migrations applied (`20261017120000_computer_running_since` …
+  `20261019010000_call_recovery_index`), UI walk-through; in the image `pnpm check` 22/22, root vitest
+  with no new failures against `74a1b5c`, web 117 files and Postgres 30 files passed. Rollback: restore
+  `D:/rakazo/backups/pre-upstream-switch-*.dump` and run `rakazo-fleet/app:74a1b5c` (the old line is
+  tag `fleet-next-pre-upstream-20261019`). Settings: `RAKAZO_WEBHOOK_HONORS_RULES`,
   `RAKAZO_APPROVAL_EVERY_RUN`, `RAKAZO_STUCK_*_HOURS`, `RAKAZO_ROOM_*`, `RAKAZO_MEMORY_RECALL_EVERY_RUN`,
-  `RAKAZO_SUBSCRIPTION_LIMITS` (see `D:/rakazo/.env`). Two migrations ran
-  (`20261019120000_subscription_limit_readings`, `20261019121000_chat_group_room_brake_notify`), so
-  rollback to `49fa329` needs the `D:/rakazo/backups/pre-fleet-build-20261019-0848.dump` restore.
+  `RAKAZO_SUBSCRIPTION_LIMITS`, `RAKAZO_RUN_BUDGET_*`, `RAKAZO_ACTIVITY_DETAILS*`, `RAKAZO_CASE_LINK_URL`
+  (see `D:/rakazo/.env`).
 - `fleet` (`8896cd15`, image `rakazo-fleet/app:d93d461`) is the previous build. Adopt `fleet-next`
   as `fleet` once it has run well for a few days (see "Adopt `fleet-next`").
 
