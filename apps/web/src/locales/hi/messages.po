@@ -970,6 +970,10 @@ msgstr ""
 msgid "Built-in"
 msgstr "अंतर्निहित"
 
+#: src/components/UsageBars.tsx
+msgid "cache {cache}% today"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Call"
 msgstr "कॉल करें"
@@ -990,10 +994,6 @@ msgstr "आपको कॉल कर रहा है…"
 #: src/components/call/CallCard.tsx
 msgid "Calling…"
 msgstr "कॉल हो रही है…"
-
-#: src/components/UsageBars.tsx
-msgid "cache {cache}% today"
-msgstr ""
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1142,10 +1142,6 @@ msgstr "नया पासवर्ड चुनें"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "फ़ाइल चुनें"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Rakazo uses."
-msgstr "चुनें कि Rakazo किस कनेक्टेड मॉडल का उपयोग करे।"
 
 #: src/components/UsageBars.tsx
 msgid "Claude · 5 hours"
@@ -1377,8 +1373,8 @@ msgid "Confirmations"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1429,8 +1425,8 @@ msgstr "कनेक्टेड। इसके टूल आपके अग�
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/message-cards.tsx
@@ -2592,6 +2588,7 @@ msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Fleet management"
+msgstr ""
 
 #: src/lib/answered-by-label.ts
 msgid "fleet service"
@@ -3663,6 +3660,7 @@ msgstr "कॉल खोलें"
 msgid "Open chat with {0}"
 msgstr "{0} के साथ चैट खोलें"
 
+#: src/pages/Shell.tsx
 msgid "Open chat with {name}"
 msgstr ""
 
@@ -4635,11 +4633,12 @@ msgstr "साझा स्किल्स"
 msgid "Shell"
 msgstr "शेल"
 
-#: src/pages/GroupPanel.tsx
-msgid "Show all"
-
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Shell command rule (regular expression)"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Show all"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -4667,11 +4666,12 @@ msgstr "और दिखाएँ"
 msgid "Show password"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
-msgid "Show selected"
-
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Show routine output"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Show selected"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -5124,7 +5124,6 @@ msgid "Timezone"
 msgstr ""
 
 #: src/components/ApprovalDetail.tsx
-
 #: src/pages/Board.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
@@ -5482,13 +5481,13 @@ msgstr "यह बॉट किस लिए है"
 msgid "What to return"
 msgstr "क्या लौटाना है"
 
-#: src/components/FlagMessageDialog.tsx
-msgid "What went wrong, or what should be different?"
-msgstr ""
-
 #: src/pages/RoutineEditor.tsx
 msgid "What to watch"
 msgstr "किसकी निगरानी करें"
+
+#: src/components/FlagMessageDialog.tsx
+msgid "What went wrong, or what should be different?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"

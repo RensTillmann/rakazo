@@ -970,6 +970,10 @@ msgstr ""
 msgid "Built-in"
 msgstr "内置"
 
+#: src/components/UsageBars.tsx
+msgid "cache {cache}% today"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Call"
 msgstr ""
@@ -989,9 +993,6 @@ msgstr ""
 
 #: src/components/call/CallCard.tsx
 msgid "Calling…"
-
-#: src/components/UsageBars.tsx
-msgid "cache {cache}% today"
 msgstr ""
 
 #: src/App.tsx
@@ -1141,10 +1142,6 @@ msgstr "设置新密码"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "选择文件"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Rakazo uses."
-msgstr "选择 Rakazo 使用的已连接模型。"
 
 #: src/components/UsageBars.tsx
 msgid "Claude · 5 hours"
@@ -1376,8 +1373,8 @@ msgid "Confirmations"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1428,8 +1425,8 @@ msgstr "已连接，下一条消息起即可使用其工具。"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/message-cards.tsx
@@ -2591,6 +2588,7 @@ msgstr "标记异常操作"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Fleet management"
+msgstr ""
 
 #: src/lib/answered-by-label.ts
 msgid "fleet service"
@@ -2967,6 +2965,7 @@ msgstr ""
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Listening…"
+msgstr ""
 
 #: src/components/LiveActivityModal.tsx
 #: src/pages/Shell.tsx
@@ -3659,7 +3658,9 @@ msgstr ""
 #. placeholder {0}: call.botName
 #: src/components/call/CallCard.tsx
 msgid "Open chat with {0}"
+msgstr ""
 
+#: src/pages/Shell.tsx
 msgid "Open chat with {name}"
 msgstr ""
 
@@ -4632,11 +4633,12 @@ msgstr "共享技能"
 msgid "Shell"
 msgstr "Shell"
 
-#: src/pages/GroupPanel.tsx
-msgid "Show all"
-
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Shell command rule (regular expression)"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Show all"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -4664,11 +4666,12 @@ msgstr "显示更多"
 msgid "Show password"
 msgstr "显示密码"
 
-#: src/pages/GroupPanel.tsx
-msgid "Show selected"
-
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Show routine output"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Show selected"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -5121,7 +5124,6 @@ msgid "Timezone"
 msgstr ""
 
 #: src/components/ApprovalDetail.tsx
-
 #: src/pages/Board.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
@@ -5479,13 +5481,13 @@ msgstr "这个 Bot 是做什么的"
 msgid "What to return"
 msgstr "返回什么"
 
-#: src/components/FlagMessageDialog.tsx
-msgid "What went wrong, or what should be different?"
-msgstr ""
-
 #: src/pages/RoutineEditor.tsx
 msgid "What to watch"
 msgstr "监视内容"
+
+#: src/components/FlagMessageDialog.tsx
+msgid "What went wrong, or what should be different?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"

@@ -970,6 +970,10 @@ msgstr ""
 msgid "Built-in"
 msgstr "Встроенный"
 
+#: src/components/UsageBars.tsx
+msgid "cache {cache}% today"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Call"
 msgstr "Позвонить"
@@ -990,10 +994,6 @@ msgstr "Звонит вам…"
 #: src/components/call/CallCard.tsx
 msgid "Calling…"
 msgstr "Вызов…"
-
-#: src/components/UsageBars.tsx
-msgid "cache {cache}% today"
-msgstr ""
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1142,10 +1142,6 @@ msgstr "Выберите новый пароль"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "Выбрать файл"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Rakazo uses."
-msgstr "Выберите, какую подключенную модель использует Rakazo."
 
 #: src/components/UsageBars.tsx
 msgid "Claude · 5 hours"
@@ -1377,8 +1373,8 @@ msgid "Confirmations"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1429,8 +1425,8 @@ msgstr "Подключено. Его инструменты доступны и�
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/message-cards.tsx
@@ -2592,6 +2588,7 @@ msgstr "Пометить неожиданные действия"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Fleet management"
+msgstr ""
 
 #: src/lib/answered-by-label.ts
 msgid "fleet service"
@@ -3663,6 +3660,7 @@ msgstr "Открыть звонок"
 msgid "Open chat with {0}"
 msgstr "Открыть чат с {0}"
 
+#: src/pages/Shell.tsx
 msgid "Open chat with {name}"
 msgstr ""
 
@@ -4635,11 +4633,12 @@ msgstr "Общие навыки"
 msgid "Shell"
 msgstr "Оболочка"
 
-#: src/pages/GroupPanel.tsx
-msgid "Show all"
-
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Shell command rule (regular expression)"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Show all"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -4667,11 +4666,12 @@ msgstr "Показать ещё"
 msgid "Show password"
 msgstr "Показать пароль"
 
-#: src/pages/GroupPanel.tsx
-msgid "Show selected"
-
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Show routine output"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Show selected"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -5124,7 +5124,6 @@ msgid "Timezone"
 msgstr ""
 
 #: src/components/ApprovalDetail.tsx
-
 #: src/pages/Board.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
@@ -5482,13 +5481,13 @@ msgstr "Для чего нужен этот бот"
 msgid "What to return"
 msgstr "Что вернуть"
 
-#: src/components/FlagMessageDialog.tsx
-msgid "What went wrong, or what should be different?"
-msgstr ""
-
 #: src/pages/RoutineEditor.tsx
 msgid "What to watch"
 msgstr "Что отслеживать"
+
+#: src/components/FlagMessageDialog.tsx
+msgid "What went wrong, or what should be different?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"
