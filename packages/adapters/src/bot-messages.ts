@@ -22,10 +22,13 @@ import type { ExecutorDeps } from "./executor.js";
 /**
  * The hop the current run sits at, read back from the message that woke this
  * bot. A run a person started carries no bot message, so it starts at 0.
+ * Fleet: a run that has since taken a person's input (an answered card or a steered
+ * message) also sits at 0, so its next bot message starts a fresh chain.
  */
 export async function currentBotMessageHop(
   prisma: PrismaClient,
   sourceMessageId: string | null | undefined,
+  run?: { id: string; threadId: string },
 ): Promise<number> {
   if (!sourceMessageId) return 0;
   const source = await prisma.message.findUnique({
@@ -33,7 +36,50 @@ export async function currentBotMessageHop(
     select: { blocks: true },
   });
   const blocks = Array.isArray(source?.blocks) ? (source.blocks as MessageBlock[]) : [];
-  return botMessageContext(blocks)?.hop ?? 0;
+  const hop = botMessageContext(blocks)?.hop ?? 0;
+  if (hop > 0 && run && (await runHadPersonInput(prisma, run))) return 0;
+  return hop;
+}
+
+/** Fleet: the fleet card watcher answers through the API with this user agent; it is not a person. */
+const FLEET_SERVICE_USER_AGENT = "fleet-service";
+
+function isPersonAnswer(block: MessageBlock): boolean {
+  if (block.kind !== "ask" || block.status !== "answered") return false;
+  // A duplicate-card sync copies another card's answer; that card's own run is the one reset.
+  if (block.syncedFrom) return false;
+  // A composer answer carries no `answeredBy`; only a person types in the composer.
+  return !block.answeredBy?.userAgent?.trim().startsWith(FLEET_SERVICE_USER_AGENT);
+}
+
+/**
+ * Fleet: whether a person gave this run input after it started: answered one of its cards
+ * (not a synced copy, not the fleet service) or had a message of theirs steered into it.
+ * One query: the run's own bot messages plus the user messages it claimed as steering.
+ */
+export async function runHadPersonInput(
+  prisma: PrismaClient,
+  run: { id: string; threadId: string },
+): Promise<boolean> {
+  const messages = await prisma.message.findMany({
+    where: {
+      threadId: run.threadId,
+      OR: [
+        { runId: run.id, role: "bot" },
+        {
+          role: "user",
+          steeringMessages: { some: { runId: run.id, claimedAt: { not: null } } },
+        },
+      ],
+    },
+    select: { role: true, blocks: true },
+  });
+  return messages.some((message) => {
+    const blocks = Array.isArray(message.blocks) ? (message.blocks as MessageBlock[]) : [];
+    // A delivered bot message is stored as a user message; it is not a person.
+    if (message.role === "user") return !botMessageContext(blocks);
+    return blocks.some(isPersonAnswer);
+  });
 }
 
 export async function loadBotMessageContext(
@@ -92,7 +138,12 @@ export async function messageBot(
     };
   }
 
-  const sourceContext = await loadBotMessageContext(deps.prisma, run.sourceMessageId);
+  const loadedContext = await loadBotMessageContext(deps.prisma, run.sourceMessageId);
+  // Fleet: a person's input during the run starts a fresh chain; the sender match stays.
+  const sourceContext =
+    loadedContext && loadedContext.hop > 0 && (await runHadPersonInput(deps.prisma, run))
+      ? { ...loadedContext, hop: 0 }
+      : loadedContext;
   const intent = input.intent ?? DEFAULT_BOT_MESSAGE_INTENT;
   const hop = nextBotMessageHop(sourceContext?.hop);
 

@@ -460,6 +460,115 @@ describe("messaging another bot", () => {
   });
 });
 
+describe("a person's input during the run", () => {
+  beforeEach(() => vi.stubEnv("BOT_MESSAGE_MAX_HOPS", undefined));
+  afterEach(() => vi.unstubAllEnvs());
+
+  const wokenAtSix = [
+    { kind: "bot_message_received", fromBotId: "b", fromBotName: "B", text: "hi", hop: 6 },
+  ];
+  const answeredCard = (extra: Record<string, unknown>) => ({
+    role: "bot",
+    blocks: [{ kind: "ask", text: "Go ahead?", status: "answered", answer: "yes", ...extra }],
+  });
+
+  async function sendAfter(runMessages: unknown[]) {
+    const harness = deps({ hopBlocks: wokenAtSix });
+    vi.mocked(harness.deps.prisma.message.findMany).mockResolvedValue(runMessages as never);
+    const sent = await messageBot(
+      harness.deps,
+      { ...run, sourceMessageId: "message-source" },
+      sender,
+      { bot_id: "bot-target", message: "next step" },
+    );
+    return { harness, sent };
+  }
+
+  function deliveredHop(harness: { tx: { message: { create: unknown } } }) {
+    const created = JSON.stringify(vi.mocked(harness.tx.message.create as () => unknown).mock.calls);
+    return /"hop":(\d+)/.exec(created)?.[1];
+  }
+
+  it("still refuses a bot-woken run at the limit when no person gave input", async () => {
+    const { harness, sent } = await sendAfter([
+      { role: "bot", blocks: [{ kind: "text", text: "working" }] },
+    ]);
+    expect(sent.ok).toBe(false);
+    expect(harness.tx.run.create).not.toHaveBeenCalled();
+  });
+
+  it("starts a fresh chain after a person answers a card", async () => {
+    const { harness, sent } = await sendAfter([
+      answeredCard({
+        answeredBy: {
+          userId: "user-1",
+          sessionId: "session-1",
+          userAgent: "Mozilla/5.0 (Linux; Android 14) Mobile",
+          at: "2026-10-19T08:00:00.000Z",
+        },
+      }),
+    ]);
+    expect(sent.ok).toBe(true);
+    expect(deliveredHop(harness)).toBe("1");
+    expect(harness.deps.prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ threadId: "thread-sender" }),
+      }),
+    );
+  });
+
+  it("starts a fresh chain after a person answers in the composer", async () => {
+    const { harness, sent } = await sendAfter([answeredCard({})]);
+    expect(sent.ok).toBe(true);
+    expect(deliveredHop(harness)).toBe("1");
+  });
+
+  it("does not reset when the fleet service answered the card", async () => {
+    const { sent } = await sendAfter([
+      answeredCard({
+        answeredBy: {
+          userId: "user-1",
+          sessionId: "session-1",
+          userAgent: "fleet-service (do not delete)",
+          at: "2026-10-19T08:00:00.000Z",
+        },
+      }),
+    ]);
+    expect(sent.ok).toBe(false);
+  });
+
+  it("does not reset for a card answered by the duplicate-card sync", async () => {
+    const { sent } = await sendAfter([answeredCard({ syncedFrom: "message-other" })]);
+    expect(sent.ok).toBe(false);
+  });
+
+  it("starts a fresh chain after a person's message is steered into the run", async () => {
+    const { harness, sent } = await sendAfter([
+      { role: "user", blocks: [{ kind: "text", text: "Also check the invoice" }] },
+    ]);
+    expect(sent.ok).toBe(true);
+    expect(deliveredHop(harness)).toBe("1");
+  });
+
+  it("does not reset for another bot's message steered into the run", async () => {
+    const { sent } = await sendAfter([{ role: "user", blocks: wokenAtSix }]);
+    expect(sent.ok).toBe(false);
+  });
+
+  it("resets the agent-connection hop lookup too", async () => {
+    const prisma = {
+      message: {
+        findUnique: vi.fn().mockResolvedValue({ blocks: wokenAtSix }),
+        findMany: vi.fn().mockResolvedValue([answeredCard({})]),
+      },
+    } as unknown as PrismaClient;
+    expect(await currentBotMessageHop(prisma, "message-source")).toBe(6);
+    expect(
+      await currentBotMessageHop(prisma, "message-source", { id: "run-1", threadId: "thread-1" }),
+    ).toBe(0);
+  });
+});
+
 describe("hop lookup", () => {
   it("treats a run a person started as the start of a chain", async () => {
     const prisma = { message: { findUnique: vi.fn() } } as unknown as PrismaClient;
