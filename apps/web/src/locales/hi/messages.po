@@ -14,6 +14,10 @@ msgstr ""
 "Plural-Forms: \n"
 
 #: src/pages/Shell.tsx
+msgid " (needs your answer)"
+msgstr ""
+
+#: src/pages/Shell.tsx
 msgid " (unread)"
 msgstr " (अपठित)"
 
@@ -618,14 +622,14 @@ msgstr "उत्तर दिया गया"
 msgid "Answered: {0}"
 msgstr "उत्तर दिया: {0}"
 
-#: src/components/AskCard.tsx
-msgid "Answered: {answer}"
-msgstr "उत्तर: {answer}"
-
 #. placeholder {0}: selectedAskActionLabel(answer, actions)
 #: src/components/AskCard.tsx
 msgid "Answered: {0} (same question)"
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Answered: {answer}"
+msgstr "उत्तर: {answer}"
 
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
@@ -3088,6 +3092,10 @@ msgstr ""
 msgid "Members ({0})"
 msgstr ""
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Memories recalled per message"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -3296,10 +3304,6 @@ msgstr "इस समूह को नाम दें"
 msgid "Name this routine"
 msgstr ""
 
-#: src/lib/roster-status.ts
-msgid "Needs an answer"
-msgstr ""
-
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "इनपुट चाहिए"
@@ -3308,9 +3312,12 @@ msgstr "इनपुट चाहिए"
 msgid "Needs takeover"
 msgstr "नियंत्रण लेना ज़रूरी"
 
-#: src/lib/roster-status.ts
 #: src/pages/Shell.tsx
 msgid "Needs you"
+msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Needs your answer"
 msgstr ""
 
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
