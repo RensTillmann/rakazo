@@ -15,7 +15,5 @@ export function selectMemoryTools(
   if (!semanticMemoryConfigured) {
     return tools.filter((tool) => !SEMANTIC_MEMORY_TOOL_NAMES.has(tool.name));
   }
-  return canSave
-    ? tools
-    : tools.filter((tool) => !SEMANTIC_MEMORY_WRITE_TOOL_NAMES.has(tool.name));
+  return canSave ? tools : tools.filter((tool) => !SEMANTIC_MEMORY_WRITE_TOOL_NAMES.has(tool.name));
 }

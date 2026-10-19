@@ -219,7 +219,11 @@ describe("threads.flag", () => {
     // The flag is still delivered, as Rens's own message with the quoted excerpt.
     expect(tx.message.create).toHaveBeenCalledTimes(1);
     const data = tx.message.create.mock.calls[0]![0].data;
-    expect(data).toMatchObject({ threadId: "thread-bot-elena", role: "user", clientNonce: "flag-2" });
+    expect(data).toMatchObject({
+      threadId: "thread-bot-elena",
+      role: "user",
+      clientNonce: "flag-2",
+    });
     expect(data.runId).toBeUndefined();
     const text = (data.blocks as Array<{ text: string }>)[0]!.text;
     expect(text).toContain("My note: Also check the mobile layout.");

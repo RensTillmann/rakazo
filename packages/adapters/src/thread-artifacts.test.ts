@@ -187,7 +187,10 @@ describe("current-turn thread files", () => {
   it("attaches a webm screen recording as a video file block", async () => {
     const artifact = {
       findFirst: vi.fn().mockResolvedValue(null),
-      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: "rec-1", ...data })),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "rec-1",
+        ...data,
+      })),
     };
     const tx = { artifact, $queryRaw: vi.fn().mockResolvedValue([{ lock: "1" }]) };
     const put = vi.fn().mockResolvedValue({ id: "stored-1", hash: "hash" });

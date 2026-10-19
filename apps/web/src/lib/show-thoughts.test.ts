@@ -32,9 +32,7 @@ describe("withThoughtsVisibility", () => {
       { id: "narration", blocks: [thinking, thought] },
       { id: "final", blocks: [thinking, reply] },
     ];
-    expect(withThoughtsVisibility(withThinking, false)).toEqual([
-      { id: "final", blocks: [reply] },
-    ]);
+    expect(withThoughtsVisibility(withThinking, false)).toEqual([{ id: "final", blocks: [reply] }]);
   });
 
   it("joins the tool steps a hidden thinking block separated", () => {
@@ -43,7 +41,13 @@ describe("withThoughtsVisibility", () => {
       blocks: [
         { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
         thinking,
-        { kind: "steps", steps: [{ label: "Shell", count: 2 }, { label: "Read file", count: 1 }] },
+        {
+          kind: "steps",
+          steps: [
+            { label: "Shell", count: 2 },
+            { label: "Read file", count: 1 },
+          ],
+        },
         reply,
       ] satisfies MessageBlock[],
     };

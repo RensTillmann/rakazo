@@ -12,7 +12,11 @@ const published: Published[] = [];
 vi.mock("@rakazo/db", async (importOriginal) => ({
   ...(await importOriginal<typeof DbModule>()),
   createThreadMessageInTransaction: vi.fn(async (_tx: unknown, message: Published) => {
-    published.push({ role: message.role, blocks: message.blocks, clientNonce: message.clientNonce });
+    published.push({
+      role: message.role,
+      blocks: message.blocks,
+      clientNonce: message.clientNonce,
+    });
     return { id: `message-${published.length}` };
   }),
   appendEventInTransaction: vi.fn(async () => ({ seq: published.length })),
@@ -256,9 +260,7 @@ describe("mid-turn narration in a user-triggered run", () => {
     ]);
     await f.run();
     const pause = (f.pauseRunForInput.mock.calls as unknown as [{ blocks: Block[] }][])[0]![0];
-    expect(pause.blocks).toEqual([
-      expect.objectContaining({ kind: "ask", text: "Which colour?" }),
-    ]);
+    expect(pause.blocks).toEqual([expect.objectContaining({ kind: "ask", text: "Which colour?" })]);
     expect(pause.blocks[0]!.narration).toBeUndefined();
   });
 });

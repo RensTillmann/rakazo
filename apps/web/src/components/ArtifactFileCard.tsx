@@ -80,6 +80,7 @@ function ArtifactVideo(props: ArtifactFileCardProps) {
   return (
     <div ref={container} className="w-[480px] max-w-full">
       {src ? (
+        // biome-ignore lint/a11y/useMediaCaption: chat recordings are user screen captures with no caption file.
         <video
           src={src}
           controls

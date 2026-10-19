@@ -8,7 +8,12 @@ function brakeTx(group: { pausedAt: Date | null; budgetResetAt: Date | null }, s
   const runCreate = vi.fn(async () => ({ id: "run-new" }));
   const tx = {
     chatGroup: { findUnique: vi.fn(async () => group), update },
-    run: { count, findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null), create: runCreate },
+    run: {
+      count,
+      findMany: vi.fn(async () => []),
+      findUnique: vi.fn(async () => null),
+      create: runCreate,
+    },
     task: { create: vi.fn(async () => ({ id: "task-new" })) },
     steeringMessage: { findFirst: vi.fn(async () => null), create: vi.fn() },
   };

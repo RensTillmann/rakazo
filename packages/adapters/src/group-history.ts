@@ -4,7 +4,9 @@ import type { PrismaClient } from "@rakazo/db";
 export type GroupAuthorNames = { userName: string; botNames: ReadonlyMap<string, string> };
 
 /** Bot ids a message names: its author and both ends of any handoff block. */
-export function groupMessageBotIds(messages: ReadonlyArray<{ botId?: string | null; blocks: unknown }>) {
+export function groupMessageBotIds(
+  messages: ReadonlyArray<{ botId?: string | null; blocks: unknown }>,
+) {
   const ids = new Set<string>();
   for (const message of messages) {
     if (message.botId) ids.add(message.botId);

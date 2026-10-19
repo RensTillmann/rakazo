@@ -164,11 +164,11 @@ import {
   ToolOnlyNarration,
   ToolSteps,
 } from "../components/ToolActivityDisclosure";
-import { ThreadUsageLine, UsageTopBar } from "../components/UsageBars";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
 import { TeachRecordingChrome, TeachStopButton } from "../components/teach/TeachRecordingChrome";
+import { ThreadUsageLine, UsageTopBar } from "../components/UsageBars";
 import { readActivityMode, writeActivityMode } from "../lib/activity-mode";
 import type { ArtifactTarget } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
@@ -237,8 +237,8 @@ import {
 } from "../lib/right-panel-state";
 import {
   compactRosterStatusLabel,
-  rosterHasUndismissedRunError,
   groupRosterStatus,
+  rosterHasUndismissedRunError,
   rosterNeedsAnswer,
   rosterNeedsAnswerLabel,
   rosterWorkStatusLabel,

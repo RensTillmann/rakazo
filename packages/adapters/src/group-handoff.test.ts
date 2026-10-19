@@ -237,7 +237,9 @@ function mentionHarness(
 describe("group reply mentions", () => {
   it("wakes nobody when the reply names nobody, and never the author", async () => {
     const { deps, runCreate } = mentionHarness();
-    await expect(wakeMentionedGroupMembers(deps as never, run, "group-1", "All done.")).resolves.toEqual([]);
+    await expect(
+      wakeMentionedGroupMembers(deps as never, run, "group-1", "All done."),
+    ).resolves.toEqual([]);
     await expect(
       wakeMentionedGroupMembers(deps as never, run, "group-1", "@BOT-A noted"),
     ).resolves.toEqual([]);

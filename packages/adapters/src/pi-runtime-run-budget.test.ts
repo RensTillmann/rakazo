@@ -272,9 +272,7 @@ describe("run budget", () => {
   it("ends with the fixed line, still completed, when the final turn fails", async () => {
     process.env.RAKAZO_RUN_MAX_MODEL_CALLS = "1";
     providerState.stream.mockImplementation((_model, context) =>
-      stream(
-        isFinalTurn(context) ? message([], "error", "invalid api key") : toolTurn("Trying."),
-      ),
+      stream(isFinalTurn(context) ? message([], "error", "invalid api key") : toolTurn("Trying.")),
     );
     const executeTool = vi.fn(async () => ({ ok: true }));
 
@@ -311,9 +309,7 @@ describe("run budget", () => {
 
     expect(providerState.stream).toHaveBeenCalledTimes(61);
     expect(executeTool).toHaveBeenCalledTimes(60);
-    expect(providerState.stream.mock.calls.some(([, context]) => isFinalTurn(context))).toBe(
-      false,
-    );
+    expect(providerState.stream.mock.calls.some(([, context]) => isFinalTurn(context))).toBe(false);
     expect(events.at(-1)).toEqual({ type: "done", text: "Done after sixty tool calls." });
   });
 });

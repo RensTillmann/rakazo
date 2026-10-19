@@ -304,7 +304,10 @@ export function observedPiStream(
                 onResponse: ((response, requestModel) => {
                   const reading = parseRateLimitHeaders(response.headers, model.provider);
                   // Saved off the request path: a lost reading never delays or fails the call.
-                  if (reading) void Promise.resolve(reading).then(onRateLimit).catch(() => {});
+                  if (reading)
+                    void Promise.resolve(reading)
+                      .then(onRateLimit)
+                      .catch(() => {});
                   return callerOnResponse?.(response, requestModel);
                 }) satisfies SimpleStreamOptions["onResponse"],
               }
