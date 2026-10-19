@@ -284,7 +284,14 @@ import {
   updateFleetGroup,
 } from "./fleet-tools.js";
 import { handoffToGroupBot, loadGroupContext, wakeMentionedGroupMembers } from "./group-handoff.js";
-import { groupHistoryTurn, groupMessageBotIds, loadGroupAuthorNames } from "./group-history.js";
+import {
+  directHistoryTurn,
+  groupHistoryTurn,
+  groupMessageBotIds,
+  isPersonMessage,
+  loadGroupAuthorNames,
+  PERSON_MESSAGE_MARK,
+} from "./group-history.js";
 import {
   HINDSIGHT_PROVIDER_ID,
   HINDSIGHT_RECALL_TIMEOUT_MS,
@@ -3969,14 +3976,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               const content = messageToAgentHistoryText(m, groupAuthors?.botNames);
               const turn = groupAuthors
                 ? groupHistoryTurn(m, content, bot.id, groupAuthors)
-                : {
-                    role: (m.role === "user"
-                      ? "user"
-                      : m.role === "system"
-                        ? "system"
-                        : "assistant") as "user" | "assistant" | "system",
-                    content,
-                  };
+                : directHistoryTurn(m, content);
               return {
                 id: m.id,
                 createdAt: m.createdAt?.toISOString(),
@@ -4022,6 +4022,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
         );
         const allowSilentEmptyRun =
           allowSilentPeerMessage || messagingChannelRun || runAllowsSilentEmpty(behaviorTrigger);
+        // A person's own message always gets a real answer, never the silent marker.
+        const personReplyRun = !allowSilentEmptyRun && runAnswersPerson(run, messagingChannelRun);
+        const sourceMessage = messages.find((message) => message.id === run.sourceMessageId);
+        // The current turn carries the same mark its message gets in a later run's 1:1 history.
+        const markPersonPrompt =
+          personReplyRun &&
+          !thread.groupId &&
+          sourceMessage !== undefined &&
+          isPersonMessage(sourceMessage);
         const emptyResponseText = peerMessage
           ? peerMessage.intent === "result" ||
             peerMessage.intent === "status" ||
@@ -4536,7 +4545,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         const publishMidTurnNarration = async () => {
           const extracted = extractNarrationText(messageSegments, currentTextSegment);
-          const narration = clampUserProgressMessage(redactSecrets(extracted.text, runSecrets));
+          const clamped = clampUserProgressMessage(redactSecrets(extracted.text, runSecrets));
+          // The silent marker never reaches a person, not even as narration before a tool call.
+          const narration = personReplyRun && isExactNoResponse(clamped) ? "" : clamped;
           if (narration) lastStatedIntention = narration;
           const canPublish = canPublishDurableNarration();
           if (
@@ -7377,7 +7388,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         } catch {
           // Timezone is optional context; a lookup failure must not prevent a run.
         }
-        const prompt = [
+        const turnText = [
           replyContext,
           run.trigger === "reaction" && replyContext ? undefined : basePrompt,
           takeoverResume?.promptNote,
@@ -7389,6 +7400,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         ]
           .filter(Boolean)
           .join("\n\n");
+        const prompt = markPersonPrompt ? `${PERSON_MESSAGE_MARK} ${turnText}` : turnText;
         const historicalContext: AgentRunRequest["history"] = [];
         if (compactedHistory.usedLocalSummary && compactedHistory.summary) {
           historicalContext.push({
@@ -7659,6 +7671,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               script,
               allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
+              silentReplyNudge: personReplyRun ? PERSON_SILENT_REPLY_NUDGE : undefined,
               executeTool: scripted ? undefined : applyTool,
               resolveModel: scripted
                 ? undefined
@@ -8194,11 +8207,26 @@ export function createRunExecutor(deps: ExecutorDeps) {
             currentTextSegment = assembled;
           }
           flushPendingTools();
-          // Silent-allowed runs can choose an explicit NO_RESPONSE or finish empty.
-          const silentReply = allowSilentEmptyRun
-            ? stripNoResponseReply(assembled, messageSegments)
-            : { assembled, blocks: messageSegments };
-          let completionBlocks = silentReply.blocks;
+          // An exact NO_RESPONSE (once or repeated) is a silent finish in every run that may
+          // finish empty: routines, fyi wakes from another bot, and messaging channels. A run
+          // answering a person drops it too, but never finishes silently by choice: the runtime
+          // already gave the model one more turn (`silentReplyNudge`).
+          const silentReply =
+            allowSilentEmptyRun || personReplyRun
+              ? stripNoResponseReply(assembled, messageSegments)
+              : { assembled, blocks: messageSegments };
+          const silentPersonReply =
+            personReplyRun &&
+            !silentReply.assembled.trim() &&
+            isExactNoResponse(completionNotificationBody(assembled, messageSegments));
+          if (silentPersonReply) {
+            getLogger().warn("Run answering a person ended with only NO_RESPONSE; nothing posted", {
+              runId,
+              botId: bot.id,
+              trigger: run.trigger,
+            });
+          }
+          let completionBlocks = silentPersonReply ? [] : silentReply.blocks;
           if (!silentReply.assembled || isBackgroundRunTrigger(run.trigger)) {
             // Mid-turn progress already posted durable chat messages; skip the empty
             // "…" fallback so we do not add a junk final bubble. Delegated bot_message
@@ -8206,7 +8234,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             // only progress was posted, result when a final reply exists). Exact
             // NO_RESPONSE finals are treated as empty before this fallback runs.
             completionBlocks = completionMessageSegments(completionBlocks, {
-              allowSilentEmpty: allowSilentEmptyRun || publishedMidTurnUserMessage,
+              allowSilentEmpty:
+                allowSilentEmptyRun || publishedMidTurnUserMessage || silentPersonReply,
               emptyResponseText,
               suppressOutput: handedOff || isBackgroundRunTrigger(run.trigger),
               skipEmptyFallback: publishedTerminalSubagent || publishedMidTurnUserMessage,
@@ -9369,6 +9398,23 @@ export function runBehaviorTrigger(run: { trigger: string; routineId: string | n
 export function runAllowsSilentEmpty(trigger: string): boolean {
   return trigger === "reaction" || trigger === "routine" || isBackgroundRunTrigger(trigger);
 }
+
+/**
+ * A run started by a person's own message: typed in the app (or steered and continued as a
+ * `follow_up`), or a direct message on a linked messaging line. Never a routine's run, a
+ * messaging channel, another bot or an integration wake.
+ */
+export function runAnswersPerson(
+  run: { trigger: string; routineId: string | null },
+  messagingChannelRun: boolean,
+): boolean {
+  if (run.routineId) return false;
+  if (run.trigger === "user" || run.trigger === "follow_up") return true;
+  return run.trigger === "messaging" && !messagingChannelRun;
+}
+
+/** The one extra turn a run answering a person gets when its reply is only the silent marker. */
+export const PERSON_SILENT_REPLY_NUDGE = `The user wrote to you directly in your chat. ${NO_RESPONSE} is not allowed here: answer them in one to three plain sentences.`;
 
 /**
  * Whether text written before a tool call may become a durable mid-turn chat bubble.

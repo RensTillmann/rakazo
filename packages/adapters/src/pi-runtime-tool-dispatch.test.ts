@@ -1,3 +1,4 @@
+import { setImmediate as nextMacrotask } from "node:timers/promises";
 import type { AgentToolCompletion, ConnectorTool } from "@rakazo/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { builtinAgentTools } from "./builtin-tools.js";
@@ -14,7 +15,8 @@ const fakeAgentState = vi.hoisted(() => ({
     | "ask-pause"
     | "nested-ask-pause"
     | "tools-then-empty-failure"
-    | "tools-then-final-text",
+    | "tools-then-final-text"
+    | "silent-reply",
   terminalMessage: undefined as
     | {
         role: "assistant";
@@ -30,6 +32,8 @@ const fakeAgentState = vi.hoisted(() => ({
   emitFinalDeltaOnly: false,
   narration: "I will check the destination first.",
   finalDelta: undefined as string | undefined,
+  /** "silent-reply": one text-only reply per model turn; a turn after the first needs a follow-up. */
+  replies: [] as string[],
   abortCount: 0,
   tools: [] as Array<{
     name: string;
@@ -164,6 +168,24 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
             message: { role: "assistant", content },
             toolResults: [],
           });
+        }
+        return;
+      }
+
+      if (fakeAgentState.mode === "silent-reply") {
+        for (const [index, text] of fakeAgentState.replies.entries()) {
+          if (fakeAgentState.followUpMessages.length < index) break;
+          const message = { role: "assistant", content: [{ type: "text", text }] };
+          this.state.messages.push(message);
+          this.emit({ type: "message_start", message });
+          this.emit({
+            type: "message_update",
+            assistantMessageEvent: { type: "text_delta", delta: text },
+          });
+          this.emit({ type: "message_end", message });
+          this.emit({ type: "turn_end", message, toolResults: [] });
+          // Let the runtime's async listeners settle, as between real model turns.
+          await nextMacrotask();
         }
         return;
       }
@@ -462,6 +484,7 @@ describe("Pi connector tool dispatch", () => {
     fakeAgentState.emitFinalDeltaOnly = false;
     fakeAgentState.narration = "I will check the destination first.";
     fakeAgentState.finalDelta = undefined;
+    fakeAgentState.replies = [];
     fakeAgentState.initialMessages = [];
     fakeAgentState.promptInputs = [];
     fakeAgentState.promptImages = [];
@@ -1538,6 +1561,77 @@ describe("Pi connector tool dispatch", () => {
       text: MISSING_TOOL_FINAL_RESPONSE_ERROR,
     });
     expect(events.at(-1)).toEqual({ type: "done" });
+  });
+
+  describe("a final reply that is only NO_RESPONSE", () => {
+    const NUDGE = "The user wrote to you directly. Answer them.";
+    const runSilent = async (options: {
+      silentReplyNudge?: string;
+      allowSilentEmpty?: boolean;
+    }) => {
+      fakeAgentState.mode = "silent-reply";
+      const events: unknown[] = [];
+      for await (const event of new PiAgentRuntime().run(
+        {
+          botId: "b",
+          threadId: "t",
+          runId: "silent-reply",
+          prompt: "[from the user] polisje.nl is a client site.",
+          instructions: "Be brief.",
+          history: [],
+          tools: [],
+          model: { provider: "test", id: "dispatch-test-model" },
+          ...options,
+        },
+        { signal: new AbortController().signal },
+      )) {
+        events.push(event);
+      }
+      return events;
+    };
+
+    it("gets one nudged turn when the run answers a person", async () => {
+      fakeAgentState.replies = ["NO_RESPONSE", "Got it: client mail."];
+      const events = await runSilent({ silentReplyNudge: NUDGE });
+
+      expect(fakeAgentState.followUpMessages).toEqual([
+        expect.objectContaining({ role: "user", content: NUDGE }),
+      ]);
+      expect(events.at(-1)).toEqual({
+        type: "done",
+        text: "NO_RESPONSE\n\nGot it: client mail.",
+      });
+    });
+
+    it("nudges only once, even when the nudged turn is silent again", async () => {
+      fakeAgentState.replies = ["NO_RESPONSE", "NO_RESPONSENO_RESPONSE", "Too late."];
+      const events = await runSilent({ silentReplyNudge: NUDGE });
+
+      expect(fakeAgentState.followUpMessages).toHaveLength(1);
+      expect(events.at(-1)).toEqual({
+        type: "done",
+        text: "NO_RESPONSE\n\nNO_RESPONSENO_RESPONSE",
+      });
+    });
+
+    it("does not nudge a real answer", async () => {
+      fakeAgentState.replies = ["Got it.", "Unused."];
+      const events = await runSilent({ silentReplyNudge: NUDGE });
+
+      expect(fakeAgentState.followUpMessages).toEqual([]);
+      expect(events.at(-1)).toEqual({ type: "done", text: "Got it." });
+    });
+
+    it.each([
+      ["a routine or fyi run", { allowSilentEmpty: true }],
+      ["a run without the nudge", {}],
+    ])("leaves %s as it was", async (_case, options) => {
+      fakeAgentState.replies = ["NO_RESPONSE", "Unused."];
+      const events = await runSilent(options);
+
+      expect(fakeAgentState.followUpMessages).toEqual([]);
+      expect(events.at(-1)).toEqual({ type: "done", text: "NO_RESPONSE" });
+    });
   });
 
   it("keeps FYI bot-message wakes silent when the model produces nothing", async () => {

@@ -34,6 +34,8 @@ export function loadRunHistoryMessages(
       botId: true,
       runId: true,
       blocks: true,
+      // Tells a person's own words from an integration-delivered wake stored with the user role.
+      clientNonce: true,
       createdAt: true,
       replyToMessageId: true,
       replyQuote: true,
