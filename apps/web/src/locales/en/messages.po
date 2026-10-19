@@ -14,6 +14,10 @@ msgstr ""
 "Plural-Forms: \n"
 
 #: src/pages/Shell.tsx
+msgid " (needs your answer)"
+msgstr " (needs your answer)"
+
+#: src/pages/Shell.tsx
 msgid " (unread)"
 msgstr " (unread)"
 
@@ -602,14 +606,14 @@ msgstr "Answered"
 msgid "Answered: {0}"
 msgstr "Answered: {0}"
 
-#: src/components/AskCard.tsx
-msgid "Answered: {answer}"
-msgstr "Answered: {answer}"
-
 #. placeholder {0}: selectedAskActionLabel(answer, actions)
 #: src/components/AskCard.tsx
 msgid "Answered: {0} (same question)"
 msgstr "Answered: {0} (same question)"
+
+#: src/components/AskCard.tsx
+msgid "Answered: {answer}"
+msgstr "Answered: {answer}"
 
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
@@ -2967,6 +2971,10 @@ msgstr "Members ({GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgid "Members (pick {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgstr "Members (pick {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Memories recalled per message"
+msgstr "Memories recalled per message"
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -3162,10 +3170,6 @@ msgstr "Name this group"
 msgid "Name this routine"
 msgstr "Name this routine"
 
-#: src/lib/roster-status.ts
-msgid "Needs an answer"
-msgstr "Needs an answer"
-
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "Needs input"
@@ -3174,10 +3178,13 @@ msgstr "Needs input"
 msgid "Needs takeover"
 msgstr "Needs takeover"
 
-#: src/lib/roster-status.ts
 #: src/pages/Shell.tsx
 msgid "Needs you"
 msgstr "Needs you"
+
+#: src/lib/roster-status.ts
+msgid "Needs your answer"
+msgstr "Needs your answer"
 
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
 msgid "Never recall tags (comma-separated)"

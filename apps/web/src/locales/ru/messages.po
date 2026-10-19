@@ -14,6 +14,10 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
 #: src/pages/Shell.tsx
+msgid " (needs your answer)"
+msgstr ""
+
+#: src/pages/Shell.tsx
 msgid " (unread)"
 msgstr " (непрочитано)"
 
@@ -602,14 +606,14 @@ msgstr "Ответил"
 msgid "Answered: {0}"
 msgstr "Ответ: {0}"
 
-#: src/components/AskCard.tsx
-msgid "Answered: {answer}"
-msgstr "Ответ: {answer}"
-
 #. placeholder {0}: selectedAskActionLabel(answer, actions)
 #: src/components/AskCard.tsx
 msgid "Answered: {0} (same question)"
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Answered: {answer}"
+msgstr "Ответ: {answer}"
 
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
@@ -2967,6 +2971,10 @@ msgstr "Участники ({GROUP_MEMBER_MIN} – {GROUP_MEMBER_MAX})"
 msgid "Members (pick {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgstr "Участники (выберите {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Memories recalled per message"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -3162,10 +3170,6 @@ msgstr "Назовите эту группу"
 msgid "Name this routine"
 msgstr "Назовите эту задачу"
 
-#: src/lib/roster-status.ts
-msgid "Needs an answer"
-msgstr ""
-
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "Требуется ввод данных"
@@ -3174,10 +3178,13 @@ msgstr "Требуется ввод данных"
 msgid "Needs takeover"
 msgstr "Требуется передача управления"
 
-#: src/lib/roster-status.ts
 #: src/pages/Shell.tsx
 msgid "Needs you"
 msgstr "Требуется ваше участие"
+
+#: src/lib/roster-status.ts
+msgid "Needs your answer"
+msgstr ""
 
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
 msgid "Never recall tags (comma-separated)"
