@@ -41,7 +41,7 @@ import {
   MESSAGE_REACTIONS,
   normalizeCreateBotProfile,
 } from "@rakazo/contracts";
-import type { ComposerMention, SlashActionId } from "@rakazo/core";
+import type { ComposerMention, OpenAskSummary, SlashActionId } from "@rakazo/core";
 import {
   attachmentsForThread,
   botMentionTextColors,
@@ -72,6 +72,7 @@ import {
   searchHitThreadTarget,
   serializeComposerPrompt,
   speechFromBlocks,
+  summarizeOpenAsk,
   timeSeparatorIds,
   trackRosterActivity,
   truncateSlashDescription,
@@ -1981,6 +1982,25 @@ export function ShellPage() {
     },
     [bots, transcriptMembers],
   );
+  // Fleet: the open card that composer text would answer, and whether the user chose the card's
+  // own "I'll type it" option (which skips the send confirm).
+  const [armedAskMessageId, setArmedAskMessageId] = useState<string | null>(null);
+  const composerOpenAsk = useMemo<ComposerOpenAsk | null>(() => {
+    const summary = summarizeOpenAsk(
+      answerableAskMessageId
+        ? activeSnapshot?.messages.find((message) => message.id === answerableAskMessageId)
+        : null,
+    );
+    if (!summary) return null;
+    return {
+      ...summary,
+      botName: summary.botId ? resolveTranscriptBot(summary.botId)?.name : undefined,
+      armed: armedAskMessageId === summary.messageId,
+    };
+  }, [activeSnapshot?.messages, answerableAskMessageId, armedAskMessageId, resolveTranscriptBot]);
+  const answerAskInChat = useCallback((message: ThreadMessage) => {
+    setArmedAskMessageId(message.id);
+  }, []);
   const workingBots: GroupAvatarMember[] = workingRuns.map((run) => {
     const bot = resolveTranscriptBot(run.botId);
     return {
@@ -4049,6 +4069,7 @@ export function ShellPage() {
             onLoadOlder={loadOlder}
             onOpenBot={openBot}
             onAnswer={answerMessage}
+            onAnswerInChat={answerAskInChat}
             onReply={(message) => {
               setReplyTarget(message);
               setReplyQuote(null);
@@ -4109,6 +4130,8 @@ export function ShellPage() {
             onAttachmentPick={onAttachmentPick}
             onRemoveAttachment={removeAttachment}
             onSend={sendMessage}
+            openAsk={composerOpenAsk}
+            onJumpToAsk={jumpToReplyMessage}
             onStop={stopRun}
             onVoice={
               !inGroup && active
@@ -5235,6 +5258,7 @@ const Transcript = memo(function Transcript({
   onLoadOlder,
   onOpenBot,
   onAnswer,
+  onAnswerInChat,
   onReply,
   onQuote,
   onReact,
@@ -5267,6 +5291,7 @@ const Transcript = memo(function Transcript({
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
   onAnswer: (message: ThreadMessage, text: string, username?: string) => Promise<void>;
+  onAnswerInChat?: (message: ThreadMessage) => void;
   onReply: (message: ThreadMessage) => void;
   onQuote: (message: ThreadMessage, quote: string) => void;
   onReact: (message: ThreadMessage, reaction: MessageReaction) => Promise<void>;
@@ -5626,6 +5651,7 @@ const Transcript = memo(function Transcript({
                       onOpenBot={onOpenBot}
                       onOpenPeerMessages={onOpenPeerMessages}
                       onAnswer={onAnswer}
+                      onAnswerInChat={onAnswerInChat}
                       speakerName={
                         peerRoute
                           ? peerRoute.speakerName
@@ -5850,6 +5876,8 @@ export const Composer = memo(function Composer({
   onSlashAction,
   draftKey,
   enterToSend,
+  openAsk,
+  onJumpToAsk,
 }: {
   activeName?: string;
   running: boolean;
@@ -5879,6 +5907,9 @@ export const Composer = memo(function Composer({
   onSlashAction?: (action: SlashActionId) => void;
   draftKey: string;
   enterToSend: boolean;
+  /** Fleet: the pending ask card in this thread; composer text may answer it. */
+  openAsk?: ComposerOpenAsk | null;
+  onJumpToAsk?: (messageId: string) => void;
 }) {
   const { t } = useLingui();
   const [draft, setDraft] = useState(() => readComposerDraft(draftKey));
@@ -5893,6 +5924,10 @@ export const Composer = memo(function Composer({
   });
   const [selectedSkill, setSelectedSkill] = useState<AgentSkillCatalogEntry | null>(null);
   const [selectedMentions, setSelectedMentions] = useState<ComposerMention[]>([]);
+  const answerGuard = openAsk?.answersWithText && !openAsk.armed ? openAsk : null;
+  // Keyed to one card, so the confirm drops itself when that card is answered or replaced.
+  const [confirmingAskId, setConfirmingAskId] = useState<string | null>(null);
+  const confirmingAnswer = answerGuard !== null && confirmingAskId === answerGuard.messageId;
   const editRevision = useRef(0);
   useEffect(
     () =>
@@ -5915,6 +5950,11 @@ export const Composer = memo(function Composer({
     }
   }, [replyId, quote]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const askArmed = Boolean(openAsk?.armed);
+  useEffect(() => {
+    // Fleet: the card's "I'll type it" option arms the composer and hands it focus.
+    if (askArmed) textareaRef.current?.focus();
+  }, [askArmed]);
   const [composerExpanded, setComposerExpanded] = useState(false);
   const attachButtonRef = useRef<HTMLButtonElement>(null);
   const composerActionsRef = useRef<HTMLDivElement>(null);
@@ -6139,8 +6179,19 @@ export const Composer = memo(function Composer({
     mentionQuery === null &&
     (slashSkillOptions.length > 0 || slashActionOptions.length > 0);
 
+  function requestSend() {
+    if (!canSend || sending || disabled) return;
+    // Only typed text answers the card; an attachment-only send is unaffected.
+    if (answerGuard && serializeComposerPrompt(draft, selectedSkill, selectedMentions).trim()) {
+      setConfirmingAskId(answerGuard.messageId);
+      return;
+    }
+    void send();
+  }
+
   async function send() {
     if (!canSend || sending || disabled) return;
+    setConfirmingAskId(null);
     const revision = editRevision.current;
     const clientNonce = retryNonce.current ?? newClientNonce();
     retryNonce.current = null;
@@ -6399,6 +6450,29 @@ export const Composer = memo(function Composer({
           {attachmentNotice}
         </div>
       ) : null}
+      {openAsk ? (
+        <button
+          type="button"
+          data-testid="composer-open-ask"
+          onClick={() => onJumpToAsk?.(openAsk.messageId)}
+          className="mb-2 block w-full truncate rounded-[12px] border border-warning/40 bg-warning/10 px-3 py-1.5 text-start text-[13px] text-warning hover:bg-warning/15"
+        >
+          {openAsk.answersWithText
+            ? t`Open question: ${openAsk.question} · your message will answer it`
+            : t`Open question: ${openAsk.question} · answer it on the card first`}
+        </button>
+      ) : null}
+      {confirmingAnswer && answerGuard ? (
+        <AnswerConfirm
+          botName={answerGuard.botName ?? activeName}
+          question={answerGuard.question}
+          onConfirm={() => void send()}
+          onCancel={() => {
+            setConfirmingAskId(null);
+            textareaRef.current?.focus();
+          }}
+        />
+      ) : null}
       {pendingAttachments.length ? (
         <div className="mb-3 flex flex-wrap gap-2">
           {pendingAttachments.map((attachment) => (
@@ -6608,6 +6682,11 @@ export const Composer = memo(function Composer({
             onChange={(event) => updateDraft(event.target.value)}
             onPaste={handlePaste}
             onKeyDown={(event) => {
+              if (confirmingAnswer && event.key === "Escape") {
+                event.preventDefault();
+                setConfirmingAskId(null);
+                return;
+              }
               if (
                 event.key === "Backspace" &&
                 draft.length === 0 &&
@@ -6647,7 +6726,7 @@ export const Composer = memo(function Composer({
               }
               if (action.type === "send") {
                 event.preventDefault();
-                void send();
+                requestSend();
               }
             }}
             disabled={disabled}
@@ -6697,7 +6776,7 @@ export const Composer = memo(function Composer({
                 size="icon"
                 aria-label={t`Send`}
                 disabled={sending || !canSend || disabled}
-                onClick={send}
+                onClick={requestSend}
                 className="size-8 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95"
               >
                 <ArrowUp size={16} strokeWidth={2.2} />
@@ -6718,7 +6797,7 @@ export const Composer = memo(function Composer({
               size="icon"
               aria-label={t`Send`}
               disabled={sending || !canSend || disabled}
-              onClick={send}
+              onClick={requestSend}
               className="size-8 shrink-0 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95 disabled:bg-white/10 disabled:text-muted-foreground/30 disabled:shadow-none"
             >
               <ArrowUp size={16} strokeWidth={2.2} />
@@ -6729,6 +6808,63 @@ export const Composer = memo(function Composer({
     </fieldset>
   );
 });
+
+/** Fleet: the pending ask card shown above the composer. `armed` means the user chose the card's
+ * own "type it" option, so the next send answers it without a confirm. */
+export type ComposerOpenAsk = OpenAskSummary & { botName?: string; armed: boolean };
+
+/** Fleet: inline confirm before composer text is taken as an open card's answer. */
+function AnswerConfirm({
+  botName,
+  question,
+  onConfirm,
+  onCancel,
+}: {
+  botName?: string;
+  question: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useLingui();
+  const confirmRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    confirmRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  }, []);
+  const bot = botName ?? t`the bot`;
+  return (
+    <div
+      ref={confirmRef}
+      role="alertdialog"
+      aria-label={t`Send as answer?`}
+      data-testid="composer-answer-confirm"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onCancel();
+        } else if (
+          event.key === "Enter" &&
+          !event.shiftKey &&
+          // A focused button handles its own Enter, so Enter on Cancel cancels.
+          !(event.target instanceof HTMLButtonElement)
+        ) {
+          event.preventDefault();
+          onConfirm();
+        }
+      }}
+      className="mb-2 rounded-[14px] border border-warning/40 bg-warning/10 px-4 py-3 text-[13.5px] text-foreground"
+    >
+      <p>{t`This answers ${bot}'s open question: '${question}'.`}</p>
+      <div className="mt-2 flex gap-2">
+        <Button size="sm" onClick={onConfirm}>
+          <Trans>Send as answer</Trans>
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel}>
+          <Trans>Cancel</Trans>
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 type ComposerLayout = { barHeight: number; fieldX: number; fieldY: number };
 
@@ -7042,6 +7178,7 @@ const MessageView = memo(function MessageView({
   canAnswer,
   message,
   onAnswer,
+  onAnswerInChat,
   onOpenBot,
   onOpenPeerMessages,
   speakerName,
@@ -7063,6 +7200,7 @@ const MessageView = memo(function MessageView({
   canAnswer: boolean;
   message: ThreadMessage;
   onAnswer: (message: ThreadMessage, text: string, username?: string) => Promise<void>;
+  onAnswerInChat?: (message: ThreadMessage) => void;
   onOpenBot: (botId: string) => void;
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   speakerName?: string;
@@ -7553,6 +7691,7 @@ const MessageView = memo(function MessageView({
               block={block}
               canAnswer={canAnswer}
               onAnswer={(text, username) => onAnswer(message, text, username)}
+              onAnswerInChat={onAnswerInChat ? () => onAnswerInChat(message) : undefined}
             />
           );
         }

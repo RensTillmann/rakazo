@@ -42,6 +42,7 @@ import {
   resolveComposerSendPlan,
   resolvePersonaColorDef,
   selectedAskActionLabel,
+  summarizeOpenAsk,
   threadWindowMessages,
   timeSeparatorIds,
   userVisibleMessages,
@@ -1933,6 +1934,25 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   }
 
   const answerableAskMessageId = latestAnswerableAskMessageId(snap);
+  // Fleet: composer text sent while a question card waits is taken as that card's answer, so
+  // show the open question above the composer and confirm before such a send.
+  const openAsk = summarizeOpenAsk(
+    answerableAskMessageId
+      ? snap?.messages.find((message) => message.id === answerableAskMessageId)
+      : null,
+  );
+  const answerGuard = !readOnly && openAsk?.answersWithText ? openAsk : null;
+  // Keyed to one card, so the confirm drops itself when that card is answered or replaced.
+  const [confirmingAskId, setConfirmingAskId] = useState<string | null>(null);
+  const confirmingAnswer = answerGuard !== null && confirmingAskId === answerGuard.messageId;
+  function requestSend(): Promise<void> {
+    // Only typed text answers the card; an attachment-only send is unaffected.
+    if (answerGuard && composerRef.current?.snapshot().promptText.trim()) {
+      setConfirmingAskId(answerGuard.messageId);
+      return Promise.resolve();
+    }
+    return send();
+  }
   const runError = snap?.run?.status === "failed" ? (snap.run.error ?? null) : null;
   const separatorIds = useMemo(() => timeSeparatorIds(visibleMessages), [visibleMessages]);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -2614,6 +2634,89 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
                 ))}
               </View>
             ) : null}
+            {openAsk && !readOnly ? (
+              <Pressable
+                testID="composer-open-ask"
+                accessibilityRole="button"
+                onPress={() => {
+                  void applyMessageJump({ botId, groupId, messageId: openAsk.messageId }).catch(
+                    () => undefined,
+                  );
+                }}
+                style={{
+                  marginTop: 12,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: tokens.warning,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                }}
+              >
+                <Text style={{ color: tokens.warning, fontSize: 13 }} numberOfLines={1}>
+                  {openAsk.answersWithText
+                    ? t("Open question: {question} · your message will answer it", {
+                        question: openAsk.question,
+                      })
+                    : t("Open question: {question} · answer it on the card first", {
+                        question: openAsk.question,
+                      })}
+                </Text>
+              </Pressable>
+            ) : null}
+            {confirmingAnswer && answerGuard ? (
+              <View
+                testID="composer-answer-confirm"
+                accessibilityRole="alert"
+                style={{
+                  marginTop: 8,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: tokens.warning,
+                  backgroundColor: tokens.card,
+                  padding: 12,
+                  gap: 10,
+                }}
+              >
+                <Text style={{ color: tokens.foreground, fontSize: 14 }}>
+                  {t("This answers {bot}'s open question: '{question}'.", {
+                    bot: memberName(snap?.members, answerGuard.botId) ?? displayName ?? t("Bot"),
+                    question: answerGuard.question,
+                  })}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setConfirmingAskId(null);
+                      void send();
+                    }}
+                    style={{
+                      borderRadius: 999,
+                      backgroundColor: tokens.primary,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                    }}
+                  >
+                    <Text style={{ color: tokens.background, fontWeight: "600" }}>
+                      {t("Send as answer")}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setConfirmingAskId(null)}
+                    style={{
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: tokens.border,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                    }}
+                  >
+                    <Text style={{ color: tokens.foreground }}>{t("Cancel")}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
             <ThreadComposer
               key={threadKey}
               ref={composerRef}
@@ -2630,7 +2733,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
               styles={styles}
               attachActions={attachActions}
               attachFrom={attachFrom}
-              send={send}
+              send={requestSend}
               stop={stop}
               startVoiceCall={startVoiceCall}
               onSlashAction={runSlashAction}

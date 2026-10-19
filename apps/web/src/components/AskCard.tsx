@@ -76,10 +76,13 @@ export function AskCard({
   block,
   canAnswer,
   onAnswer,
+  onAnswerInChat,
 }: {
   block: AskBlock;
   canAnswer: boolean;
   onAnswer: (text: string, username?: string) => Promise<void>;
+  /** Fleet: the card's own free-text option; arms the composer so the next send answers this card. */
+  onAnswerInChat?: () => void;
 }) {
   const { t } = useLingui();
   const [editing, setEditing] = useState(false);
@@ -270,6 +273,17 @@ export function AskCard({
               )}
             </Button>
           ))}
+          {onAnswerInChat && !approvalActions && !block.instructionUpdate ? (
+            <Button
+              variant="link"
+              data-testid="ask-answer-in-chat"
+              className="h-auto px-0 text-[13.5px]"
+              disabled={submitting}
+              onClick={onAnswerInChat}
+            >
+              <Trans>I'll type it</Trans>
+            </Button>
+          ) : null}
         </div>
       ) : secretInput ? (
         <form

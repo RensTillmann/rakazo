@@ -838,4 +838,11 @@ export const RU_MESSAGES: Record<string, string> = {
   Undo: "Отменить",
   "Update instructions?": "Обновить инструкции?",
   "Could not restore instructions": "Не удалось восстановить инструкции",
+  "Open question: {question} · your message will answer it":
+    "Открытый вопрос: {question} · ваше сообщение станет ответом",
+  "Open question: {question} · answer it on the card first":
+    "Открытый вопрос: {question} · сначала ответьте на карточке",
+  "This answers {bot}'s open question: '{question}'.":
+    "Это ответ на открытый вопрос {bot}: «{question}».",
+  "Send as answer": "Отправить как ответ",
 };
