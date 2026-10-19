@@ -142,7 +142,8 @@ export function renderGroupMembersContext(
     "<group_members>",
     ...formatBotRosterLines(members),
     "</group_members>",
-    "Post in this shared thread. When another teammate is genuinely needed for a distinct next stage, use handoff_to_bot instead of telling the user to switch chats.",
+    "Post in this shared thread. Writing @Name in your reply wakes that member when your turn ends (a member already working here gets it as steering); a reply without an @Name wakes nobody, so only mention a member you need to act. Never mention yourself.",
+    "When another teammate is genuinely needed for a distinct next stage, use handoff_to_bot instead of telling the user to switch chats.",
     "A handoff transfers ownership. Complete a stage handed to you yourself, then post its result here. Do not hand it back merely to report or ask the previous bot to do the same work. Never bounce a stage between members. One bot owns each stage.",
   ].join("\n");
 }

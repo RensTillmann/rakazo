@@ -1,6 +1,11 @@
 import { runContinueJob } from "@rakazo/adapter-kit";
 import { MessageBlock } from "@rakazo/contracts";
-import { botMessageHopExhausted, nextBotMessageHop, renderGroupMembersContext } from "@rakazo/core";
+import {
+  botMessageHopExhausted,
+  nextBotMessageHop,
+  renderGroupMembersContext,
+  resolveBotMentionedGroupBotIds,
+} from "@rakazo/core";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
@@ -8,6 +13,7 @@ import {
   lockOwnedGroup,
   type PrismaClient,
   touchGroupUpdatedAt,
+  wakeGroupMembersInTransaction,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import type { ExecutorDeps } from "./executor.js";
@@ -185,6 +191,70 @@ export async function handoffToGroupBot(
     runId: committed.runId,
     note: "Handoff recorded. End this turn without narrating it; the next bot owns the next stage.",
   };
+}
+
+/**
+ * A bot's final group reply wakes the members it @-mentions. Nobody named wakes nobody (no
+ * first-member fallback), the author never wakes itself, and a member already busy in this
+ * thread is steered. The run nonce `group-mention:<runId>:<botId>` makes a replay a no-op.
+ */
+export async function wakeMentionedGroupMembers(
+  deps: Pick<ExecutorDeps, "prisma" | "jobs">,
+  run: { id: string; spaceId: string; threadId: string; botId: string; userId: string },
+  groupId: string,
+  text: string,
+) {
+  if (!text.includes("@")) return [];
+  const wakes = await deps.prisma.$transaction(async (tx) => {
+    try {
+      await lockOwnedGroup(tx, run, groupId);
+    } catch (error) {
+      if (error instanceof IsolationError) return [];
+      throw error;
+    }
+    const group = await tx.chatGroup.findFirst({
+      where: { id: groupId, archivedAt: null, thread: { id: run.threadId } },
+      select: {
+        members: {
+          where: { bot: { archivedAt: null } },
+          orderBy: [{ createdAt: "asc" }, { botId: "asc" }],
+          select: { bot: { select: { id: true, name: true } } },
+        },
+      },
+    });
+    if (!group) return [];
+    const targets = resolveBotMentionedGroupBotIds({
+      text,
+      members: group.members.map((member) => member.bot),
+      authorBotId: run.botId,
+    });
+    if (targets.length === 0) return [];
+    const reply = await tx.message.findFirst({
+      where: { threadId: run.threadId, runId: run.id, role: "bot", botId: run.botId },
+      orderBy: { seq: "desc" },
+      select: { id: true },
+    });
+    if (!reply) return [];
+    const woken = await wakeGroupMembersInTransaction(tx, {
+      spaceId: run.spaceId,
+      userId: run.userId,
+      threadId: run.threadId,
+      messageId: reply.id,
+      botIds: targets,
+      prompt: text,
+      runNonce: (botId) => `group-mention:${run.id}:${botId}`,
+    });
+    await touchGroupUpdatedAt(tx, groupId);
+    return woken;
+  });
+  for (const wake of wakes) {
+    if (!wake.runId || wake.steered) continue;
+    await deps.jobs.enqueue(runContinueJob(wake.runId)).catch((error) => {
+      // The queued run is durable and the job reconciler will repair a missed immediate wake.
+      getLogger().error("group mention enqueue", error);
+    });
+  }
+  return wakes;
 }
 
 export async function loadGroupContext(

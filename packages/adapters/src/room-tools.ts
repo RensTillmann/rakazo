@@ -243,7 +243,7 @@ export async function roomPost(
     });
   }
   for (const wake of committed.wakes) {
-    if (!wake.runId) continue;
+    if (!wake.runId || wake.steered) continue;
     await deps.jobs.enqueue(runContinueJob(wake.runId)).catch((error) => {
       // Queued runs are durable; the job reconciler repairs a missed immediate wake.
       getLogger().error("room post enqueue", error);
