@@ -5204,7 +5204,9 @@ export function ShellPage() {
   return (
     <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "organic"}>
       <MentionBotsContext.Provider value={mentionBots}>
-        <MentionOpenBotContext.Provider value={mentionOpenBot}>{shell}</MentionOpenBotContext.Provider>
+        <MentionOpenBotContext.Provider value={mentionOpenBot}>
+          {shell}
+        </MentionOpenBotContext.Provider>
       </MentionBotsContext.Provider>
     </AvatarStyleProvider>
   );

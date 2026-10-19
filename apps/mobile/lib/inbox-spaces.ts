@@ -85,7 +85,8 @@ export function spaceInboxItems(
   );
   const items: InboxSpaceItem[] = [];
   for (const item of ordered.active) {
-    if (item.type === "bot") items.push({ type: "bot", bot: item.bot, depth: 0, hasChildren: false });
+    if (item.type === "bot")
+      items.push({ type: "bot", bot: item.bot, depth: 0, hasChildren: false });
   }
   for (const { space, empty } of perSpace) {
     if (spaces.length > 1 || !space.isDefault || empty) {

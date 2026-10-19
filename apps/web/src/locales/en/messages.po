@@ -3474,6 +3474,14 @@ msgstr "Open <0>{0}</0> and enter this code:"
 msgid "Open <0>{0}</0> to finish signing in."
 msgstr "Open <0>{0}</0> to finish signing in."
 
+#: src/pages/Shell.tsx
+msgid "Open chat with {name}"
+msgstr "Open chat with {name}"
+
+#: src/pages/Shell.tsx
+msgid "Open chat with {speakerName}"
+msgstr "Open chat with {speakerName}"
+
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Open computer settings"
 msgstr "Open computer settings"

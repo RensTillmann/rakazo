@@ -31,7 +31,9 @@ export type RosterActivityState = ReadonlyMap<string, TrackedActivity>;
 
 export function rosterBotIsActive(bot: RosterActivityBot): boolean {
   const status = bot.status ?? "idle";
-  return WORKING_STATUSES[status] === true || WAITING_STATUSES[status] === true || bot.unread === true;
+  return (
+    WORKING_STATUSES[status] === true || WAITING_STATUSES[status] === true || bot.unread === true
+  );
 }
 
 function parsedTime(value: string | null | undefined): number | null {
