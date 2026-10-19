@@ -1,21 +1,8 @@
 import { useLingui } from "@lingui/react/macro";
 import { LinkifiedText } from "@rakazo/chat-ui/web";
 import type { InboundDeliverySource } from "@rakazo/contracts";
+import { inboundDeliverySummary } from "@rakazo/core";
 import { ChevronRight } from "lucide-react";
-
-/**
- * What the server wrote above the delivered data: one `Run routine "<name>":` line per routine and
- * the event header. Only that head is read, so text inside the payload cannot rename the card.
- */
-export function inboundDeliverySummary(text: string): { routines: string[]; event?: string } {
-  const head = text.split(/<(?:untrusted_delivery_payload|github_event_metadata)>/, 1)[0] ?? "";
-  return {
-    routines: [...head.matchAll(/^Run routine "(.+)":$/gm)].flatMap((match) =>
-      match[1] ? [match[1]] : [],
-    ),
-    event: /^\[(?:Inbound|GitHub) Event: (.+)\]$/m.exec(head)?.[1],
-  };
-}
 
 /** A wake an integration delivered: labelled automatic and folded, never shown as the owner's words. */
 export function InboundDeliveryCard({

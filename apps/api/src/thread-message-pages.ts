@@ -1,5 +1,5 @@
 import type { MessageBlock, ThreadMessage, ThreadMessagePage } from "@rakazo/contracts";
-import { MessageBlock as MessageBlockSchema } from "@rakazo/contracts";
+import { InboundDeliverySource, MessageBlock as MessageBlockSchema } from "@rakazo/contracts";
 import {
   BACKGROUND_RUN_TRIGGERS,
   callIdFromClientNonce,
@@ -8,9 +8,11 @@ import {
   isBackgroundRunTrigger,
   isPeerReceiptBlocks,
   isPeerRunReplyBlock,
+  routineLogName,
 } from "@rakazo/core";
 import { messageReplyPreview } from "@rakazo/core/message-quote";
 import type { Prisma, PrismaClient } from "@rakazo/db";
+import { routineLogRunNames } from "@rakazo/db";
 
 type MessageDb = PrismaClient | Prisma.TransactionClient;
 
@@ -61,7 +63,7 @@ export async function loadMessagePage(
       const messages = includePeerRuns ? rows : await withoutPeerRunMessages(prisma, rows);
       return {
         threadId,
-        messages: messages.map(toThreadMessage),
+        messages: await toThreadMessages(prisma, messages),
         olderCursor: hasOlder ? (first?.seq ?? null) : null,
         coveredThroughSeq,
       };
@@ -90,7 +92,7 @@ export async function loadMessagePage(
     if (hasSubstantive || includePeerReceipts || !hasOlder || includePeerRuns) {
       return {
         threadId,
-        messages: visibleRows.map(toThreadMessage),
+        messages: await toThreadMessages(prisma, visibleRows),
         olderCursor: hasOlder ? (pageRows[0]?.seq ?? null) : null,
       };
     }
@@ -241,6 +243,56 @@ export function shouldForwardBackgroundThreadEvent(event: {
   return Array.isArray(blocks) && blocks.some(isBackgroundInputBlock);
 }
 
+async function toThreadMessages(
+  prisma: MessageDb,
+  rows: Parameters<typeof toThreadMessage>[0][],
+): Promise<ThreadMessage[]> {
+  const routineNames = await routineLogRunNames(prisma, [
+    ...new Set(rows.flatMap((row) => (row.runId ? [row.runId] : []))),
+  ]);
+  return rows.map((row) => toThreadMessage(row, routineNames));
+}
+
+/**
+ * Fleet patch: the routine name for a live `thread.message.created` event of routine output, so
+ * an open chat folds it like a loaded page. Reads the message row for the nonce and reply target
+ * the event payload does not carry.
+ */
+export async function liveRoutineLogName(
+  prisma: MessageDb,
+  event: { type: string; runId?: string; payload: Record<string, unknown> },
+  cache: Map<string, Promise<string | undefined>>,
+): Promise<string | undefined> {
+  if (event.type !== "thread.message.created") return undefined;
+  const blocks = MessageBlockSchema.array().safeParse(event.payload.blocks);
+  if (!blocks.success) return undefined;
+  const role = String(event.payload.role ?? "");
+  const inbound = InboundDeliverySource.safeParse(event.payload.inbound);
+  if (role === "user") {
+    return routineLogName(
+      { role, blocks: blocks.data, inbound: inbound.success ? inbound.data : undefined },
+      undefined,
+    );
+  }
+  if (role !== "bot" || !event.runId || typeof event.payload.messageId !== "string") {
+    return undefined;
+  }
+  let routineName = cache.get(event.runId);
+  if (!routineName) {
+    routineName = routineLogRunNames(prisma, [event.runId]).then((names) =>
+      names.get(event.runId ?? ""),
+    );
+    cache.set(event.runId, routineName);
+  }
+  const name = await routineName;
+  if (!name) return undefined;
+  const row = await prisma.message.findUnique({
+    where: { id: event.payload.messageId },
+    select: { clientNonce: true, replyToMessageId: true },
+  });
+  return row ? routineLogName({ role, blocks: blocks.data, ...row }, name) : undefined;
+}
+
 function toThreadMessage(row: {
   id: string;
   threadId: string;
@@ -259,8 +311,9 @@ function toThreadMessage(row: {
   runId: string | null;
   clientNonce?: string | null;
   createdAt: Date;
-}): ThreadMessage {
+}, routineNames: ReadonlyMap<string, string>): ThreadMessage {
   const parent = row.replyTo?.threadId === row.threadId ? row.replyTo : null;
+  const inbound = inboundSourceFromClientNonce(row.clientNonce);
   const parsed = parent ? MessageBlockSchema.array().safeParse(parent.blocks) : undefined;
   const replyPreview =
     parent && parsed?.success
@@ -284,7 +337,11 @@ function toThreadMessage(row: {
     replyPreview,
     runId: row.runId ?? undefined,
     callId: callIdFromClientNonce(row.clientNonce),
-    inbound: inboundSourceFromClientNonce(row.clientNonce),
+    inbound,
+    routineLog: routineLogName(
+      { ...row, blocks: row.blocks as MessageBlock[], inbound },
+      row.runId ? routineNames.get(row.runId) : undefined,
+    ),
     createdAt: row.createdAt.toISOString(),
   };
 }

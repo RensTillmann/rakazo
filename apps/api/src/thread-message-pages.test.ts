@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   isBackgroundRun,
   isPeerRun,
+  liveRoutineLogName,
   loadAllMessages,
   loadMessagePage,
   shouldForwardBackgroundThreadEvent,
@@ -935,4 +936,76 @@ it("derives attachment metadata from a validated parent outside the loaded page"
   } as unknown as PrismaClient;
   const page = await loadMessagePage(prisma, "thread", undefined, 1);
   expect(page.messages[0]?.replyPreview).toEqual({ role: "user", text: "", attachment: image });
+});
+
+describe("routine log marking", () => {
+  const routineRun = {
+    id: "run-routine",
+    trigger: "routine",
+    routineId: "routine-1",
+    routine: { name: "Tracker status" },
+  };
+
+  it("marks a routine run's final reply, but not its asks, message_user posts or user replies", async () => {
+    const rows = [
+      { id: "final", runId: "run-routine", clientNonce: null, blocks: [{ kind: "text", text: "Run budget: 3/20" }] },
+      { id: "ask", runId: "run-routine", clientNonce: null, blocks: [{ kind: "ask", text: "Send it?" }] },
+      {
+        id: "message-user",
+        runId: "run-routine",
+        clientNonce: "user-progress:run-routine:0:a:b",
+        blocks: [{ kind: "text", text: "Rens, the invoice bounced." }],
+      },
+      { id: "user-reply", runId: "run-user", clientNonce: null, blocks: [{ kind: "text", text: "Hi" }] },
+    ].map((row, index) => ({
+      ...row,
+      threadId: "thread-1",
+      seq: 4 - index,
+      role: "bot",
+      botId: "bot-1",
+      replyToMessageId: null,
+      replyQuote: null,
+      createdAt: new Date("2026-10-19T08:00:00.000Z"),
+    }));
+    const prisma = {
+      message: { findMany: vi.fn(async () => rows) },
+      run: { findMany: vi.fn(async () => [routineRun]) },
+    } as unknown as PrismaClient;
+
+    const page = await loadMessagePage(prisma, "thread-1", undefined, 10);
+
+    expect(Object.fromEntries(page.messages.map((message) => [message.id, message.routineLog]))).toEqual({
+      "user-reply": undefined,
+      "message-user": undefined,
+      ask: undefined,
+      final: "Tracker status",
+    });
+  });
+
+  it("marks a live final reply of a routine run and caches the run lookup", async () => {
+    const findMany = vi.fn(async () => [routineRun]);
+    const prisma = {
+      run: { findMany },
+      message: {
+        findUnique: vi.fn(async () => ({ clientNonce: null, replyToMessageId: null })),
+      },
+    } as unknown as PrismaClient;
+    const cache = new Map<string, Promise<string | undefined>>();
+    const event = {
+      type: "thread.message.created",
+      runId: "run-routine",
+      payload: { messageId: "m-1", role: "bot", blocks: [{ kind: "text", text: "Status: fine" }] },
+    };
+
+    await expect(liveRoutineLogName(prisma, event, cache)).resolves.toBe("Tracker status");
+    await expect(liveRoutineLogName(prisma, event, cache)).resolves.toBe("Tracker status");
+    expect(findMany).toHaveBeenCalledTimes(1);
+    await expect(
+      liveRoutineLogName(
+        prisma,
+        { ...event, payload: { ...event.payload, blocks: [{ kind: "ask", text: "Send?" }] } },
+        cache,
+      ),
+    ).resolves.toBeUndefined();
+  });
 });
