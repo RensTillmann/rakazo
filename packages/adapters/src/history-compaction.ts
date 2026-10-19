@@ -41,8 +41,10 @@ export const COMPACTION_BATCH_SIZE = 50;
 export const HISTORY_WINDOW_SIZE = 50;
 export const LEGACY_HISTORY_WINDOW_SIZE = 200;
 export const MAX_COMPACTED_SUMMARY_CHARS = 20_000;
-/** How many semantic memories can be injected into one run. */
+/** How many semantic memories a run asks its provider for (a provider may return more). */
 export const MAX_RECALLED_MEMORIES = 5;
+/** Upper bound on memories injected into one run; Hindsight's recallLimit tops out here too. */
+export const MAX_INJECTED_RECALLED_MEMORIES = 50;
 
 export type CompactedHistoryMessage = {
   id?: string;
@@ -111,7 +113,7 @@ export function formatRecalledMemory(
 ): string {
   if (results.length === 0) return "";
   const items = results
-    .slice(0, MAX_RECALLED_MEMORIES)
+    .slice(0, MAX_INJECTED_RECALLED_MEMORIES)
     .map((result) => {
       const citation = [
         result.provenance ? `provenance: ${escapePromptData(result.provenance)}` : null,
