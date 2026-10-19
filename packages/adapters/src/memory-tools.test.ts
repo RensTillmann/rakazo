@@ -20,9 +20,14 @@ describe("selectMemoryTools", () => {
     expect(names).toEqual(["remember", "shell"]);
   });
 
-  it("keeps semantic memory tools and drops native remember when configured", () => {
+  it("keeps native remember next to the semantic memory tools when configured", () => {
     const names = selectMemoryTools(allThree, true).map((t) => t.name);
-    expect(names).toEqual(["recall_memory", "save_memory", "forget_memory", "shell"]);
+    expect(names).toEqual(["remember", "recall_memory", "save_memory", "forget_memory", "shell"]);
+  });
+
+  it("offers only recall_memory and remember for a recall-only provider (Hindsight)", () => {
+    const names = selectMemoryTools(allThree, true, false).map((t) => t.name);
+    expect(names).toEqual(["remember", "recall_memory", "shell"]);
   });
 
   it("is a no-op for tool lists with no memory tools at all", () => {

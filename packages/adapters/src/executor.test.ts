@@ -10,12 +10,15 @@ import {
   dockerComputerToolInstruction,
   isTerminalModelSetupError,
   loadCurrentTurnImages,
+  memoryRecallEveryRun,
   missingTurnImagesInstruction,
   offeredFleetTools,
   persistentComputerInstruction,
   REACTION_SILENT_REPLY_GUIDANCE,
+  RECALL_QUERY_MAX_CHARS,
   runNotificationsEnabled,
   selectBuiltinToolsForRun,
+  semanticRecallQuery,
   settleSteeringAttachmentLoads,
   threadContextForRun,
   toolCompletionAuditPayload,
@@ -1768,6 +1771,81 @@ describe("createRunExecutor", () => {
       ...threadContext,
       includeSemanticRecall: true,
     });
+  });
+
+  it("recalls on routine, created and messaging runs only with RAKAZO_MEMORY_RECALL_EVERY_RUN", () => {
+    const threadContext = {
+      messages: [{ role: "user", content: "Check the gate" }],
+      summary: "Earlier summary",
+      historyCompactedUpToSeq: 4,
+    };
+    for (const trigger of ["routine", "created"]) {
+      expect(threadContextForRun(trigger, threadContext, false, null, true)).toEqual({
+        messages: [],
+        summary: null,
+        historyCompactedUpToSeq: null,
+        includeSemanticRecall: true,
+      });
+    }
+    expect(threadContextForRun("messaging", threadContext, true, null, true)).toEqual({
+      ...threadContext,
+      summary: null,
+      historyCompactedUpToSeq: null,
+      includeSemanticRecall: true,
+    });
+    expect(threadContextForRun("messaging", threadContext, true).includeSemanticRecall).toBe(
+      false,
+    );
+
+    expect(memoryRecallEveryRun({})).toBe(false);
+    expect(memoryRecallEveryRun({ RAKAZO_MEMORY_RECALL_EVERY_RUN: "false" })).toBe(false);
+    expect(memoryRecallEveryRun({ RAKAZO_MEMORY_RECALL_EVERY_RUN: " TRUE " })).toBe(true);
+  });
+
+  it("picks the recall query by the every-run flag", () => {
+    const base = { includeSemanticRecall: true, prompt: "  webhook payload  " };
+    // Without the flag only a compacted chat recalls, with the raw prompt.
+    expect(semanticRecallQuery({ ...base, historyCompacted: false, recallEveryRun: false })).toBe(
+      null,
+    );
+    expect(semanticRecallQuery({ ...base, historyCompacted: true, recallEveryRun: false })).toBe(
+      "  webhook payload  ",
+    );
+    // With the flag every run recalls, with the prompt trimmed to 2000 characters.
+    expect(semanticRecallQuery({ ...base, historyCompacted: false, recallEveryRun: true })).toBe(
+      "webhook payload",
+    );
+    expect(
+      semanticRecallQuery({
+        includeSemanticRecall: true,
+        historyCompacted: false,
+        recallEveryRun: true,
+        prompt: "x".repeat(5000),
+      }),
+    ).toHaveLength(RECALL_QUERY_MAX_CHARS);
+    expect(
+      semanticRecallQuery({
+        includeSemanticRecall: false,
+        historyCompacted: true,
+        recallEveryRun: true,
+        prompt: "q",
+      }),
+    ).toBe(null);
+  });
+
+  it("keeps remember and recall_memory but no save/forget with a recall-only provider", () => {
+    const tools = selectBuiltinToolsForRun({
+      graphicalToolsAllowed: false,
+      groupId: null,
+      trigger: "user",
+      semanticMemoryEnabled: true,
+      semanticMemoryCanSave: false,
+      messagingChannelRun: false,
+    }).map((tool) => tool.name);
+    expect(tools).toContain("remember");
+    expect(tools).toContain("recall_memory");
+    expect(tools).not.toContain("save_memory");
+    expect(tools).not.toContain("forget_memory");
   });
 
   it("deactivates one-shot routines after wake without scheduling another wakeup", async () => {
