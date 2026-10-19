@@ -242,6 +242,10 @@ msgstr "{provider} ने जवाब देने में बहुत स�
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} शेष · बॉट देख रहा है, कार्रवाई नहीं कर रहा"
 
+#: src/components/UsageBars.tsx
+msgid "{runs} runs today"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -267,6 +271,10 @@ msgstr "{summary} {date} को रीसेट होगा।"
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/components/UsageBars.tsx
+msgid "{tokens} tokens today"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
@@ -279,6 +287,10 @@ msgstr "{workingBotName} काम कर रहा है"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/components/UsageBars.tsx
+msgid "≈ ${cost} at API prices"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -540,6 +552,11 @@ msgstr "एक बार अनुमति दें"
 msgid "Allow purchase actions without asking"
 msgstr "खरीद कार्रवाइयों को बिना पूछे अनुमति दें"
 
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Allow shell commands matching {0} without asking"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
 msgstr ""
@@ -554,6 +571,10 @@ msgstr "पहले से खाता है?"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Always allow matching commands"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -652,6 +673,10 @@ msgstr "आर्ग्युमेंट"
 msgid "Artifacts"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "as of {time}"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -672,6 +697,10 @@ msgid "Ask before email actions"
 msgstr "ईमेल कार्रवाइयों से पहले पूछें"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before matching commands"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before purchase actions"
 msgstr "खरीद कार्रवाइयों से पहले पूछें"
 
@@ -682,6 +711,11 @@ msgstr "खरीद से पहले पूछें"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before sending external email"
 msgstr "बाहरी ईमेल भेजने से पहले पूछें"
+
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before shell commands matching {0}"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
@@ -782,6 +816,11 @@ msgstr "बैकअप मॉडल का क्रम"
 msgid "Backup models saved."
 msgstr "बैकअप मॉडल सहेजे गए।"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Banks (comma-separated)"
+msgstr ""
+
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "बेस URL"
@@ -880,6 +919,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Built-in"
 msgstr "अंतर्निहित"
+
+#: src/components/UsageBars.tsx
+msgid "cache {cache}% today"
+msgstr ""
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1022,6 +1065,14 @@ msgstr "फ़ाइल चुनें"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Rakazo uses."
 msgstr "चुनें कि Rakazo किस कनेक्टेड मॉडल का उपयोग करे।"
+
+#: src/components/UsageBars.tsx
+msgid "Claude · 5 hours"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Claude · this week"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -1235,6 +1286,7 @@ msgid "Confirm the URL is reachable from this browser session, then test again."
 msgstr "पुष्टि करें कि यह URL इस ब्राउज़र सत्र से पहुँच योग्य है, फिर फिर से परीक्षण करें।"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1304,6 +1356,7 @@ msgstr "कनेक्टेड। इसके टूल आपके अग�
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/message-cards.tsx
@@ -1319,6 +1372,14 @@ msgstr "कनेक्शन परीक्षण विफल रहा।"
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} से कनेक्शन अभी लंबित है। आप इसे बंद करके बाद में जांच सकते हैं।"
+
+#: src/components/UsageBars.tsx
+msgid "context {size}"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "context {size} of {limit} ({pct}%)"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1681,6 +1742,10 @@ msgstr "चार्ट रेंडर नहीं हो सका"
 #: src/pages/Auth.tsx
 msgid "Could not reset password"
 msgstr "पासवर्ड रीसेट नहीं किया जा सका"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not resume room"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
@@ -2219,6 +2284,10 @@ msgstr ""
 msgid "Enter a valid email"
 msgstr "मान्य ईमेल दर्ज करें"
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Enter a valid regular expression"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -2577,6 +2646,7 @@ msgstr "डिफ़ॉल्ट का पालन करें"
 msgid "Inputs"
 msgstr "इनपुट"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
 msgstr "इंस्टेंस API कुंजी"
@@ -3104,6 +3174,10 @@ msgstr "नियंत्रण लेना ज़रूरी"
 msgid "Needs you"
 msgstr ""
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Never recall tags (comma-separated)"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "नया बॉट"
@@ -3294,6 +3368,10 @@ msgstr "अभी तक कुछ याद नहीं किया गया
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "सूचनाएं"
+
+#: src/pages/GroupPanel.tsx
+msgid "Notifications for this room"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Now"
@@ -3571,6 +3649,10 @@ msgstr "प्रोवाइडर्स"
 msgid "Pull request"
 msgstr "पुल अनुरोध"
 
+#: src/pages/GroupPanel.tsx
+msgid "Questions and takeovers always notify you"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "कतार में"
@@ -3814,6 +3896,10 @@ msgstr ""
 msgid "Research & writing"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "reset"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
@@ -3838,6 +3924,10 @@ msgstr "पासवर्ड रीसेट करें"
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "अपना पासवर्ड रीसेट करें"
+
+#: src/components/UsageBars.tsx
+msgid "resets in {until}"
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
@@ -3870,6 +3960,10 @@ msgstr "बहाल किया गया"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume room"
 msgstr ""
 
 #: src/components/AccountAccess.tsx
@@ -4211,6 +4305,10 @@ msgstr "साझा स्किल्स"
 #: src/components/computer/TerminalApp.tsx
 msgid "Shell"
 msgstr "शेल"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Shell command rule (regular expression)"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
@@ -4616,6 +4714,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "यह रीसेट लिंक अमान्य है या इसकी समय-सीमा समाप्त हो गई है"
+
+#: src/pages/GroupPanel.tsx
+msgid "This room reached its daily run budget. Bots cannot start new runs here."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."

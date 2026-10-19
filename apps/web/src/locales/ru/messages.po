@@ -242,6 +242,10 @@ msgstr "{provider} не ответил вовремя. Повторите поп
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "Осталось: {remaining} · бот наблюдает, но не действует"
 
+#: src/components/UsageBars.tsx
+msgid "{runs} runs today"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -267,6 +271,10 @@ msgstr "{summary} Сброс: {date}."
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/components/UsageBars.tsx
+msgid "{tokens} tokens today"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr "{toolCount, plural, one {# инструмент} few {# инструмента} many {# инструментов} other {# инструмента}}"
@@ -279,6 +287,10 @@ msgstr "{workingBotName} работает"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/components/UsageBars.tsx
+msgid "≈ ${cost} at API prices"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -540,6 +552,11 @@ msgstr "Разрешить один раз"
 msgid "Allow purchase actions without asking"
 msgstr "Разрешить действия по покупке без запроса"
 
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Allow shell commands matching {0} without asking"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
 msgstr ""
@@ -555,6 +572,10 @@ msgstr "У вас уже есть аккаунт?"
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
 msgstr "Всегда выполнять"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Always allow matching commands"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Always allow this tool"
@@ -652,6 +673,10 @@ msgstr "Аргументы"
 msgid "Artifacts"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "as of {time}"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -672,6 +697,10 @@ msgid "Ask before email actions"
 msgstr "Спросите перед действиями по электронной почте"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before matching commands"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before purchase actions"
 msgstr "Спросите перед действиями по покупке"
 
@@ -682,6 +711,11 @@ msgstr "Спрашивайте перед покупкой"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before sending external email"
 msgstr "Спросите перед отправкой внешнего электронного письма"
+
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before shell commands matching {0}"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
@@ -782,6 +816,11 @@ msgstr "Порядок резервных моделей"
 msgid "Backup models saved."
 msgstr "Резервные модели сохранены."
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Banks (comma-separated)"
+msgstr ""
+
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "Базовый URL"
@@ -880,6 +919,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Built-in"
 msgstr "Встроенный"
+
+#: src/components/UsageBars.tsx
+msgid "cache {cache}% today"
+msgstr ""
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1022,6 +1065,14 @@ msgstr "Выбрать файл"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Rakazo uses."
 msgstr "Выберите, какую подключенную модель использует Rakazo."
+
+#: src/components/UsageBars.tsx
+msgid "Claude · 5 hours"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Claude · this week"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -1235,6 +1286,7 @@ msgid "Confirm the URL is reachable from this browser session, then test again."
 msgstr "Убедитесь, что URL доступен из этого сеанса браузера, и повторите тест."
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1304,6 +1356,7 @@ msgstr "Подключено. Его инструменты доступны и�
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/message-cards.tsx
@@ -1319,6 +1372,14 @@ msgstr "Тест соединения не удался."
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Соединение с {0} все еще не завершено. Вы можете закрыть это и проверить еще раз."
+
+#: src/components/UsageBars.tsx
+msgid "context {size}"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "context {size} of {limit} ({pct}%)"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1681,6 +1742,10 @@ msgstr "Не удалось отобразить диаграмму"
 #: src/pages/Auth.tsx
 msgid "Could not reset password"
 msgstr "Не удалось сбросить пароль"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not resume room"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
@@ -2219,6 +2284,10 @@ msgstr ""
 msgid "Enter a valid email"
 msgstr "Введите действительный адрес электронной почты"
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Enter a valid regular expression"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -2577,6 +2646,7 @@ msgstr "Наследовать значение по умолчанию"
 msgid "Inputs"
 msgstr "Входы"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
 msgstr "Ключ API экземпляра"
@@ -3104,6 +3174,10 @@ msgstr "Требуется передача управления"
 msgid "Needs you"
 msgstr "Требуется ваше участие"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Never recall tags (comma-separated)"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Новый бот"
@@ -3294,6 +3368,10 @@ msgstr "Пока ничего не запомнено"
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "Уведомления"
+
+#: src/pages/GroupPanel.tsx
+msgid "Notifications for this room"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Now"
@@ -3571,6 +3649,10 @@ msgstr "Провайдеры"
 msgid "Pull request"
 msgstr "Запрос на слияние"
 
+#: src/pages/GroupPanel.tsx
+msgid "Questions and takeovers always notify you"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "В очереди"
@@ -3814,6 +3896,10 @@ msgstr ""
 msgid "Research & writing"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "reset"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
@@ -3838,6 +3924,10 @@ msgstr "Сбросить пароль"
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "Сбросить пароль"
+
+#: src/components/UsageBars.tsx
+msgid "resets in {until}"
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
@@ -3871,6 +3961,10 @@ msgstr "Восстановлено"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
 msgstr "Восстановление вашего рабочего пространства"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume room"
+msgstr ""
 
 #: src/components/AccountAccess.tsx
 #: src/pages/Auth.tsx
@@ -4211,6 +4305,10 @@ msgstr "Общие навыки"
 #: src/components/computer/TerminalApp.tsx
 msgid "Shell"
 msgstr "Оболочка"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Shell command rule (regular expression)"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
@@ -4616,6 +4714,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Эта ссылка для сброса недействительна или срок ее действия истек."
+
+#: src/pages/GroupPanel.tsx
+msgid "This room reached its daily run budget. Bots cannot start new runs here."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."

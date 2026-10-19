@@ -242,6 +242,10 @@ msgstr "{provider} demorou demais para responder. Tente novamente."
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} restantes · o bot está observando, não agindo"
 
+#: src/components/UsageBars.tsx
+msgid "{runs} runs today"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -267,6 +271,10 @@ msgstr "{summary} Será redefinido em {date}."
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/components/UsageBars.tsx
+msgid "{tokens} tokens today"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
@@ -279,6 +287,10 @@ msgstr "{workingBotName} está trabalhando"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/components/UsageBars.tsx
+msgid "≈ ${cost} at API prices"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -540,6 +552,11 @@ msgstr "Permitir uma vez"
 msgid "Allow purchase actions without asking"
 msgstr "Permitir ações de compra sem perguntar"
 
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Allow shell commands matching {0} without asking"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
 msgstr ""
@@ -554,6 +571,10 @@ msgstr "Você já tem cadastro?"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Always allow matching commands"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -652,6 +673,10 @@ msgstr "Argumentos:"
 msgid "Artifacts"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "as of {time}"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -672,6 +697,10 @@ msgid "Ask before email actions"
 msgstr "Perguntar antes das ações de e-mail"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before matching commands"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before purchase actions"
 msgstr "Perguntar antes das ações de compra"
 
@@ -682,6 +711,11 @@ msgstr "Perguntar antes de comprar"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before sending external email"
 msgstr "Perguntar antes de enviar e-mail externo"
+
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before shell commands matching {0}"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
@@ -782,6 +816,11 @@ msgstr "Ordem dos modelos de backup"
 msgid "Backup models saved."
 msgstr "Modelos de backup salvos."
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Banks (comma-separated)"
+msgstr ""
+
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "URL Base"
@@ -880,6 +919,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Built-in"
 msgstr "Integrado"
+
+#: src/components/UsageBars.tsx
+msgid "cache {cache}% today"
+msgstr ""
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1022,6 +1065,14 @@ msgstr "Escolher arquivo"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Rakazo uses."
 msgstr "Escolha qual modelo conectado a Rakazo usa."
+
+#: src/components/UsageBars.tsx
+msgid "Claude · 5 hours"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Claude · this week"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -1235,6 +1286,7 @@ msgid "Confirm the URL is reachable from this browser session, then test again."
 msgstr "Confirme que a URL está acessível nesta sessão do navegador e teste novamente."
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1304,6 +1356,7 @@ msgstr "Conectado. Suas ferramentas estão disponíveis na sua próxima mensagem
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/message-cards.tsx
@@ -1319,6 +1372,14 @@ msgstr "O teste de conexão falhou."
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "A conexão com o {0} ainda está pendente. Você pode fechar isso e verificar novamente."
+
+#: src/components/UsageBars.tsx
+msgid "context {size}"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "context {size} of {limit} ({pct}%)"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1681,6 +1742,10 @@ msgstr "Não foi possível renderizar o gráfico"
 #: src/pages/Auth.tsx
 msgid "Could not reset password"
 msgstr "Não foi possível redefinir a senha"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not resume room"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
@@ -2219,6 +2284,10 @@ msgstr ""
 msgid "Enter a valid email"
 msgstr "Digite um e-mail válido"
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Enter a valid regular expression"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -2577,6 +2646,7 @@ msgstr "Herdar (padrão)"
 msgid "Inputs"
 msgstr "Entradas"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
 msgstr "Chave de API da instância"
@@ -3104,6 +3174,10 @@ msgstr "Requer assumir o controle"
 msgid "Needs you"
 msgstr ""
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Never recall tags (comma-separated)"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Novo bot"
@@ -3294,6 +3368,10 @@ msgstr "Nada memorizado ainda"
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "Notificações"
+
+#: src/pages/GroupPanel.tsx
+msgid "Notifications for this room"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Now"
@@ -3571,6 +3649,10 @@ msgstr "Provedores"
 msgid "Pull request"
 msgstr "Solicitação de pull"
 
+#: src/pages/GroupPanel.tsx
+msgid "Questions and takeovers always notify you"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "Na fila"
@@ -3814,6 +3896,10 @@ msgstr ""
 msgid "Research & writing"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "reset"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
@@ -3838,6 +3924,10 @@ msgstr "Redefinir senha"
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "Redefina sua senha"
+
+#: src/components/UsageBars.tsx
+msgid "resets in {until}"
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
@@ -3870,6 +3960,10 @@ msgstr "Restaurado"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume room"
 msgstr ""
 
 #: src/components/AccountAccess.tsx
@@ -4211,6 +4305,10 @@ msgstr "Habilidades compartilhadas"
 #: src/components/computer/TerminalApp.tsx
 msgid "Shell"
 msgstr "Shell"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Shell command rule (regular expression)"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
@@ -4616,6 +4714,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Este link de redefinição é inválido ou expirou"
+
+#: src/pages/GroupPanel.tsx
+msgid "This room reached its daily run budget. Bots cannot start new runs here."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."

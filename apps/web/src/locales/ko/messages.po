@@ -242,6 +242,10 @@ msgstr "{provider}의 응답 시간이 초과되었습니다. 다시 시도하�
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "남은 시간 {remaining} · Bot은 화면만 보고 직접 조작하지 않습니다"
 
+#: src/components/UsageBars.tsx
+msgid "{runs} runs today"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -267,6 +271,10 @@ msgstr "{summary} {date}에 초기화됩니다."
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/components/UsageBars.tsx
+msgid "{tokens} tokens today"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
@@ -279,6 +287,10 @@ msgstr "{workingBotName} 작업 중"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/components/UsageBars.tsx
+msgid "≈ ${cost} at API prices"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -540,6 +552,11 @@ msgstr "한 번 허용"
 msgid "Allow purchase actions without asking"
 msgstr "확인 없이 결제 동작 허용"
 
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Allow shell commands matching {0} without asking"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
 msgstr ""
@@ -554,6 +571,10 @@ msgstr "이미 계정이 있나요?"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Always allow matching commands"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -652,6 +673,10 @@ msgstr "인자"
 msgid "Artifacts"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "as of {time}"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -672,6 +697,10 @@ msgid "Ask before email actions"
 msgstr "이메일 동작 전에 확인"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before matching commands"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before purchase actions"
 msgstr "결제 동작 전에 확인"
 
@@ -682,6 +711,11 @@ msgstr "결제하기 전에 확인"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before sending external email"
 msgstr "외부 이메일을 보내기 전에 확인"
+
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before shell commands matching {0}"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
@@ -782,6 +816,11 @@ msgstr "백업 모델 순서"
 msgid "Backup models saved."
 msgstr "백업 모델을 저장했습니다."
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Banks (comma-separated)"
+msgstr ""
+
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "서버 주소"
@@ -880,6 +919,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Built-in"
 msgstr "기본 제공"
+
+#: src/components/UsageBars.tsx
+msgid "cache {cache}% today"
+msgstr ""
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1022,6 +1065,14 @@ msgstr "파일 선택"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Rakazo uses."
 msgstr "Rakazo에서 기본으로 사용할 연결된 모델을 선택하세요."
+
+#: src/components/UsageBars.tsx
+msgid "Claude · 5 hours"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Claude · this week"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -1235,6 +1286,7 @@ msgid "Confirm the URL is reachable from this browser session, then test again."
 msgstr "이 브라우저 세션에서 URL에 연결할 수 있는지 확인한 뒤 다시 테스트하세요."
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1304,6 +1356,7 @@ msgstr "연결되었습니다. 다음 메시지부터 이 도구를 사용할 �
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/message-cards.tsx
@@ -1319,6 +1372,14 @@ msgstr "연결 테스트에 실패했습니다."
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} 연결이 아직 진행 중입니다. 이 창을 닫고 나중에 다시 확인할 수 있습니다."
+
+#: src/components/UsageBars.tsx
+msgid "context {size}"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "context {size} of {limit} ({pct}%)"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1681,6 +1742,10 @@ msgstr "차트를 만들지 못했습니다."
 #: src/pages/Auth.tsx
 msgid "Could not reset password"
 msgstr "비밀번호를 재설정할 수 없습니다"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not resume room"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
@@ -2219,6 +2284,10 @@ msgstr ""
 msgid "Enter a valid email"
 msgstr "올바른 이메일을 입력하세요"
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Enter a valid regular expression"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -2577,6 +2646,7 @@ msgstr "기본 설정 사용"
 msgid "Inputs"
 msgstr "입력값"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
 msgstr "인스턴스 API 키"
@@ -3104,6 +3174,10 @@ msgstr "인수 필요"
 msgid "Needs you"
 msgstr ""
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Never recall tags (comma-separated)"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "새 Bot 만들기"
@@ -3294,6 +3368,10 @@ msgstr "아직 기억한 내용이 없습니다"
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "알림"
+
+#: src/pages/GroupPanel.tsx
+msgid "Notifications for this room"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Now"
@@ -3571,6 +3649,10 @@ msgstr "서비스"
 msgid "Pull request"
 msgstr "풀 리퀘스트"
 
+#: src/pages/GroupPanel.tsx
+msgid "Questions and takeovers always notify you"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "대기 중"
@@ -3814,6 +3896,10 @@ msgstr ""
 msgid "Research & writing"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "reset"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
@@ -3838,6 +3924,10 @@ msgstr "비밀번호 재설정"
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "비밀번호를 재설정하세요"
+
+#: src/components/UsageBars.tsx
+msgid "resets in {until}"
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
@@ -3870,6 +3960,10 @@ msgstr "복원됨"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume room"
 msgstr ""
 
 #: src/components/AccountAccess.tsx
@@ -4211,6 +4305,10 @@ msgstr "공유 스킬"
 #: src/components/computer/TerminalApp.tsx
 msgid "Shell"
 msgstr "셸"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Shell command rule (regular expression)"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
@@ -4616,6 +4714,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "이 재설정 링크는 유효하지 않거나 만료되었습니다"
+
+#: src/pages/GroupPanel.tsx
+msgid "This room reached its daily run budget. Bots cannot start new runs here."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."

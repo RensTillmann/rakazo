@@ -242,6 +242,10 @@ msgstr "{provider} tardó demasiado en responder. Vuelve a intentarlo."
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "Quedan {remaining} · el bot observa, no actúa"
 
+#: src/components/UsageBars.tsx
+msgid "{runs} runs today"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -267,6 +271,10 @@ msgstr "{summary} Se restablece el {date}."
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/components/UsageBars.tsx
+msgid "{tokens} tokens today"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
@@ -279,6 +287,10 @@ msgstr "{workingBotName} está trabajando"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/components/UsageBars.tsx
+msgid "≈ ${cost} at API prices"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -540,6 +552,11 @@ msgstr "Permitir una vez"
 msgid "Allow purchase actions without asking"
 msgstr "Permitir acciones de compra sin preguntar"
 
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Allow shell commands matching {0} without asking"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
 msgstr ""
@@ -554,6 +571,10 @@ msgstr "¿Ya tienes una cuenta?"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Always allow matching commands"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -652,6 +673,10 @@ msgstr "Argumentos"
 msgid "Artifacts"
 msgstr "Artefactos"
 
+#: src/components/UsageBars.tsx
+msgid "as of {time}"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -672,6 +697,10 @@ msgid "Ask before email actions"
 msgstr "Preguntar antes de acciones de correo"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before matching commands"
+msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before purchase actions"
 msgstr "Preguntar antes de acciones de compra"
 
@@ -682,6 +711,11 @@ msgstr "Preguntar antes de compras"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before sending external email"
 msgstr "Preguntar antes de enviar correo externo"
+
+#. placeholder {0}: rule.matchValue
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask before shell commands matching {0}"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
@@ -782,6 +816,11 @@ msgstr "Orden de los modelos de respaldo"
 msgid "Backup models saved."
 msgstr "Modelos de respaldo guardados."
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Banks (comma-separated)"
+msgstr ""
+
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "URL base"
@@ -880,6 +919,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Built-in"
 msgstr "Integrado"
+
+#: src/components/UsageBars.tsx
+msgid "cache {cache}% today"
+msgstr ""
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1022,6 +1065,14 @@ msgstr "Elegir archivo"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Rakazo uses."
 msgstr "Elige qué modelo conectado usa Rakazo."
+
+#: src/components/UsageBars.tsx
+msgid "Claude · 5 hours"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Claude · this week"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -1235,6 +1286,7 @@ msgid "Confirm the URL is reachable from this browser session, then test again."
 msgstr "Confirma que la URL es accesible desde esta sesión del navegador y vuelve a probar."
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1304,6 +1356,7 @@ msgstr "Conectado: sus herramientas estarán disponibles desde tu próximo mensa
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/message-cards.tsx
@@ -1319,6 +1372,14 @@ msgstr "La prueba de conexión falló."
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "La conexión con {0} sigue pendiente. Puedes cerrar esto y volver a comprobar."
+
+#: src/components/UsageBars.tsx
+msgid "context {size}"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "context {size} of {limit} ({pct}%)"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1681,6 +1742,10 @@ msgstr "No se pudo renderizar el gráfico"
 #: src/pages/Auth.tsx
 msgid "Could not reset password"
 msgstr "No se pudo restablecer la contraseña"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not resume room"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
@@ -2219,6 +2284,10 @@ msgstr ""
 msgid "Enter a valid email"
 msgstr "Introduce un correo electrónico válido"
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Enter a valid regular expression"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -2577,6 +2646,7 @@ msgstr "Heredar predeterminado"
 msgid "Inputs"
 msgstr "Entradas"
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
 msgstr "Clave de API de instancia"
@@ -3104,6 +3174,10 @@ msgstr "Necesita toma de control"
 msgid "Needs you"
 msgstr ""
 
+#: src/pages/memory-providers/HindsightSettingsForm.tsx
+msgid "Never recall tags (comma-separated)"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Nuevo bot"
@@ -3294,6 +3368,10 @@ msgstr "Aún no hay recuerdos"
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "Notificaciones"
+
+#: src/pages/GroupPanel.tsx
+msgid "Notifications for this room"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Now"
@@ -3571,6 +3649,10 @@ msgstr "Proveedores"
 msgid "Pull request"
 msgstr "Solicitud de incorporación"
 
+#: src/pages/GroupPanel.tsx
+msgid "Questions and takeovers always notify you"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "En cola"
@@ -3814,6 +3896,10 @@ msgstr ""
 msgid "Research & writing"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "reset"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
@@ -3838,6 +3924,10 @@ msgstr "Restablecer contraseña"
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "Restablece tu contraseña"
+
+#: src/components/UsageBars.tsx
+msgid "resets in {until}"
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
@@ -3870,6 +3960,10 @@ msgstr "Restaurado"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume room"
 msgstr ""
 
 #: src/components/AccountAccess.tsx
@@ -4211,6 +4305,10 @@ msgstr "Habilidades compartidas"
 #: src/components/computer/TerminalApp.tsx
 msgid "Shell"
 msgstr "Shell"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Shell command rule (regular expression)"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
@@ -4616,6 +4714,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Este enlace de restablecimiento no es válido o expiró"
+
+#: src/pages/GroupPanel.tsx
+msgid "This room reached its daily run budget. Bots cannot start new runs here."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."
