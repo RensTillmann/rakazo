@@ -100,6 +100,10 @@ msgstr "{0} ימשיך להגיב לאזכורים ישירים."
 msgid "{0}'s screen"
 msgstr "המסך של {0}"
 
+#: src/components/DecisionDock.tsx
+msgid "{addedCount} new decisions waiting"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "{amount} / {period}"
 msgstr "{amount} / {period}"
@@ -115,6 +119,10 @@ msgstr "{commandVariable} שמור ואי אפשר להשתמש בו כמשתנ�
 #: src/lib/billing.ts
 msgid "{count} days"
 msgstr "{count} ימים"
+
+#: src/components/DecisionDock.tsx
+msgid "{count} decisions"
+msgstr ""
 
 #: src/lib/billing.ts
 msgid "{count} months"
@@ -291,6 +299,10 @@ msgstr "@{0}"
 
 #: src/components/UsageBars.tsx
 msgid "≈ ${cost} at API prices"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "1 decision"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -1014,7 +1026,6 @@ msgstr "לא ניתן לקרוא תמונות"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2089,6 +2100,18 @@ msgstr "עבודה יומיומית"
 msgid "days"
 msgstr "ימים"
 
+#: src/pages/Shell.tsx
+msgid "Decision waiting · open"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions {position} of {count}"
+msgstr ""
+
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -2212,6 +2235,10 @@ msgstr "עדכון לאפליקציית הדסקטופ"
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "פרטים"
+
+#: src/components/DecisionDock.tsx
+msgid "Direct chat"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
@@ -3246,6 +3273,10 @@ msgstr "מזעור הבוטים"
 msgid "Minimize call"
 msgstr ""
 
+#: src/components/DecisionDock.tsx
+msgid "Minimize decisions"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "minute"
 msgstr "דקה"
@@ -3393,6 +3424,10 @@ msgstr ""
 msgid "New bot"
 msgstr "בוט חדש"
 
+#: src/components/DecisionDock.tsx
+msgid "New decision from {botName}"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "New group"
 msgstr "קבוצה חדשה"
@@ -3422,6 +3457,10 @@ msgstr "מרחב חדש"
 #: src/pages/Board.tsx
 msgid "New ticket"
 msgstr "כרטיס חדש"
+
+#: src/components/DecisionDock.tsx
+msgid "Next decision"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -3688,16 +3727,6 @@ msgstr "פתיחה בחלון מלא"
 msgid "Open navigation"
 msgstr "פתיחת הניווט"
 
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · answer it on the card first"
-msgstr ""
-
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · your message will answer it"
-msgstr ""
-
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "פתיחת shell"
@@ -3877,6 +3906,10 @@ msgstr "תצוגה מקדימה של {0}"
 #: src/pages/Artifacts.tsx
 msgid "Preview isn't available for this file type — download it to view it."
 msgstr "תצוגה מקדימה אינה זמינה לסוג הקובץ הזה — אפשר להוריד אותו כדי לצפות בו."
+
+#: src/components/DecisionDock.tsx
+msgid "Previous decision"
+msgstr ""
 
 #: src/pages/Board.tsx
 msgid "Priority"
@@ -4519,14 +4552,6 @@ msgstr "יש לשלוח את <0>{linkCode}</0> לקו מאפליקציית הצ�
 msgid "Send answer"
 msgstr "שליחת תשובה"
 
-#: src/pages/Shell.tsx
-msgid "Send as answer"
-msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Send as answer?"
-msgstr ""
-
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "שליחת קוד מחיקה"
@@ -4985,10 +5010,6 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr "ה-API לא חזר לפעול. יש לרענן את הדף."
 
-#: src/pages/Shell.tsx
-msgid "the bot"
-msgstr ""
-
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "תם הזמן הקצוב לחיבור."
@@ -5021,10 +5042,6 @@ msgstr "חשיבה"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
 msgstr "חשיבה: {activeThinkingLabel}"
-
-#: src/pages/Shell.tsx
-msgid "This answers {bot}'s open question: '{question}'."
-msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

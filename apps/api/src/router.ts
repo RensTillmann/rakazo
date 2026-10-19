@@ -218,6 +218,7 @@ import {
   latestSubscriptionLimitReading,
   listBoards,
   listFleetUsageBars,
+  listPendingDecisions,
   listSpaceBackupModels,
   listTicketComments,
   lockOwnedGroup,
@@ -226,6 +227,7 @@ import {
   newestVoiceCredentialOrder,
   Prisma,
   parseComputerMode,
+  pendingDecisionCountsByThread,
   pushSessionExpiresAt,
   recordSubscriptionLimitReading,
   releaseSpaceDeletionClaim,
@@ -6425,6 +6427,11 @@ export function createRouter(deps: RouterDeps) {
     links: {
       favicon: authed.links.favicon.handler(async ({ input }) => favicons.favicon(input.origin)),
     },
+    decisions: {
+      list: authed.decisions.list.handler(async ({ context }) => ({
+        decisions: await listPendingDecisions(deps.prisma, context.actor),
+      })),
+    },
     runs: {
       list: authed.runs.list.handler(async ({ context, input }) => ({
         runs: await listSpaceRuns(deps.prisma, context.actor, input.filter),
@@ -6616,6 +6623,19 @@ async function spaceNavigationDto(
     ...contentBots.map((row) => row.spaceId),
     ...contentGroups.map((row) => row.spaceId),
   ]);
+  // Fleet: the sidebar poll carries each chat's waiting-card count for the decision dock.
+  const decisionCounts = await pendingDecisionCountsByThread(deps.prisma, [
+    ...currentBots.map((bot) => bot.threadId),
+    ...currentGroups.map((group) => group.threadId),
+  ]);
+  const currentBotsWithDecisions = currentBots.map((bot) => ({
+    ...bot,
+    pendingDecisionCount: decisionCounts.get(bot.threadId) ?? 0,
+  }));
+  const currentGroupsWithDecisions = currentGroups.map((group) => ({
+    ...group,
+    pendingDecisionCount: decisionCounts.get(group.threadId) ?? 0,
+  }));
   const currentMembership = memberships.find((membership) => membership.spaceId === actor.spaceId);
   if (!currentMembership) throw new IsolationError();
   const botsBySpace = partitionBySpace([...currentBots, ...inactiveBots]);
@@ -6630,8 +6650,8 @@ async function spaceNavigationDto(
     current: {
       id: actor.spaceId,
       name: currentMembership.space.name,
-      bots: currentBots,
-      groups: currentGroups,
+      bots: currentBotsWithDecisions,
+      groups: currentGroupsWithDecisions,
       externalConversations: externalConversations.filter(
         (conversation) => conversation.spaceId === actor.spaceId,
       ),

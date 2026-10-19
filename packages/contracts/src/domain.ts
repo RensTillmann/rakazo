@@ -97,6 +97,8 @@ export const BotSchema = z.object({
   previewRoutineName: z.string().optional(),
   status: z.string(),
   runErrorId: Id.nullable().default(null),
+  /** Fleet: cards in this bot's own chat waiting for the user while their run is paused. */
+  pendingDecisionCount: z.number().int().nonnegative().optional(),
   computerMode: ComputerModeSchema,
   updatedAt: z.string(),
   /** Fleet patch: newest message time, null for a chat without messages. Drives roster recency. */
@@ -175,6 +177,8 @@ export const GroupSchema = z.object({
   preview: z.string(),
   unread: z.boolean(),
   updatedAt: z.string(),
+  /** Fleet: cards in this room waiting for the user while their run is paused. */
+  pendingDecisionCount: z.number().int().nonnegative().optional(),
   createdAt: z.string(),
 });
 export type Group = z.infer<typeof GroupSchema>;
@@ -237,6 +241,7 @@ export const SpaceBotSchema = BotSchema.pick({
   parentBotId: true,
   preview: true,
   previewRoutineName: true,
+  pendingDecisionCount: true,
   status: true,
   runErrorId: true,
   updatedAt: true,
@@ -253,6 +258,7 @@ export const SpaceGroupSchema = GroupSchema.pick({
   members: true,
   preview: true,
   unread: true,
+  pendingDecisionCount: true,
   updatedAt: true,
 });
 export type SpaceGroup = z.infer<typeof SpaceGroupSchema>;

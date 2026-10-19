@@ -21,14 +21,17 @@ export function rosterWorkStatusLabel(status: string): string | null {
   }
 }
 
-/** The chat's newest run waits for the user: a question, approval or secret card, or a takeover. */
-export function rosterNeedsAnswer(status: string): boolean {
-  return status === "waiting_input" || status === "waiting_takeover";
+/**
+ * The chat waits for the user: a question, approval or secret card, or a takeover. A bot can be
+ * working and have a waiting card at the same time, so a pending card count also counts.
+ */
+export function rosterNeedsAnswer(status: string, pendingDecisionCount = 0): boolean {
+  return status === "waiting_input" || status === "waiting_takeover" || pendingDecisionCount > 0;
 }
 
-/** Short sidebar label while a run waits for the user. Null when nothing waits. */
-export function rosterNeedsAnswerLabel(status: string): string | null {
-  return rosterNeedsAnswer(status) ? t`Needs your answer` : null;
+/** Short sidebar label while something waits for the user. Null when nothing waits. */
+export function rosterNeedsAnswerLabel(status: string, pendingDecisionCount = 0): string | null {
+  return rosterNeedsAnswer(status, pendingDecisionCount) ? t`Needs your answer` : null;
 }
 
 /**
@@ -45,8 +48,9 @@ export function groupRosterStatus(members: ReadonlyArray<{ status?: string | nul
 }
 
 /** Compact rows keep actionable status visible in place of the message preview. */
-export function compactRosterStatusLabel(status: string): string | null {
-  const workStatus = rosterWorkStatusLabel(status) ?? rosterNeedsAnswerLabel(status);
+export function compactRosterStatusLabel(status: string, pendingDecisionCount = 0): string | null {
+  const workStatus =
+    rosterNeedsAnswerLabel(status, pendingDecisionCount) ?? rosterWorkStatusLabel(status);
   if (workStatus) return workStatus;
   switch (status) {
     case "failed":

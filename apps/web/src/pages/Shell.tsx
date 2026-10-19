@@ -41,13 +41,9 @@ import {
   MESSAGE_REACTIONS,
   normalizeCreateBotProfile,
 } from "@rakazo/contracts";
-import type {
-  ComposerMention,
-  FoldedTranscript,
-  OpenAskSummary,
-  SlashActionId,
-} from "@rakazo/core";
+import type { ComposerMention, FoldedTranscript, SlashActionId } from "@rakazo/core";
 import {
+  answerableAskMessageIds,
   attachmentsForThread,
   botMentionTextColors,
   buildComposerMentionOptions,
@@ -62,7 +58,6 @@ import {
   isPeerReceiptBlocks,
   isRunTerminalEvent,
   isToolActivityBlock,
-  latestAnswerableAskMessageId,
   mentionChipKey,
   nestRosterByParent,
   normalizeRunError,
@@ -79,7 +74,6 @@ import {
   searchHitThreadTarget,
   serializeComposerPrompt,
   speechFromBlocks,
-  summarizeOpenAsk,
   timeSeparatorIds,
   trackRosterActivity,
   truncateSlashDescription,
@@ -177,6 +171,7 @@ import {
   useHoldToTalk,
 } from "../components/composer/HoldToTalk";
 import { ComputerWorkspace } from "../components/computer/ComputerWorkspace";
+import { DecisionDock } from "../components/DecisionDock";
 import { lazyOverlay } from "../components/ErrorBoundary";
 import { FlagMessageDialog, type FlagTarget } from "../components/FlagMessageDialog";
 import { InboundDeliveryCard } from "../components/InboundDeliveryCard";
@@ -251,6 +246,7 @@ import {
   screenIframeSandbox,
 } from "../lib/computer-screen";
 import { publishComputerCommand } from "../lib/computer-workspace";
+import { decisionDockEvent, pendingDecisionSignature } from "../lib/decision-queue";
 import { desktopBridge } from "../lib/desktop";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { publishActivityEvent } from "../lib/live-activity-terminal";
@@ -1503,7 +1499,11 @@ function SpaceShell() {
       autoSpoken.current = lastBot?.id ?? null;
       return;
     }
-    if (snapshot.run && ["running", "queued", "leased"].includes(snapshot.run.status)) return;
+    // A waiting card can sit in `run` while another run works beside it.
+    const working = activeThreadRuns(snapshot).some((run) =>
+      ["running", "queued", "leased"].includes(run.status),
+    );
+    if (working) return;
     if (!lastBot || lastBot.id === autoSpoken.current) return;
     const text = speechFromBlocks(lastBot.blocks);
     if (!text) return;
@@ -1511,7 +1511,8 @@ function SpaceShell() {
     void speaker.speak(text, { botId: active.id, messageId: lastBot.id });
   }, [
     snapshot?.messages,
-    snapshot?.run?.status,
+    snapshot?.run,
+    snapshot?.activeRuns,
     snapshot?.botId,
     active?.autoSpeak,
     active?.id,
@@ -1533,6 +1534,9 @@ function SpaceShell() {
       document.removeEventListener("visibilitychange", markVisibleBotRead);
     };
   }, [active?.id, markBotReadIfVisible]);
+
+  // Fleet: bumped on live events that can add, answer or end a card; the decision dock refetches.
+  const [decisionsEpoch, setDecisionsEpoch] = useState(0);
 
   useEffect(() => {
     if (!active) return;
@@ -1595,6 +1599,7 @@ function SpaceShell() {
           currentBot?.notifyOnFinish ?? false,
           false,
         );
+        if (decisionDockEvent(event)) setDecisionsEpoch((epoch) => epoch + 1);
         if (event.type === "thread.cleared") {
           expandedHistoryThread.current = null;
           pinnedAroundRef.current = null;
@@ -1708,6 +1713,7 @@ function SpaceShell() {
           true,
           true,
         );
+        if (decisionDockEvent(event)) setDecisionsEpoch((epoch) => epoch + 1);
         if (event.type === "thread.message.created" && event.payload.role === "bot") {
           readVisibleGroups.current.delete(groupId);
           markVisibleGroupRead();
@@ -2143,7 +2149,7 @@ function SpaceShell() {
     setReplyQuote(null);
   }, []);
   const currentRuns = activeThreadRuns(activeSnapshot);
-  const answerableAskMessageId = latestAnswerableAskMessageId(activeSnapshot);
+  const answerableAskIds = useMemo(() => answerableAskMessageIds(activeSnapshot), [activeSnapshot]);
   const workingRuns = currentRuns.filter((run) =>
     ["running", "queued", "leased"].includes(run.status),
   );
@@ -2179,25 +2185,30 @@ function SpaceShell() {
     },
     [bots, transcriptMembers],
   );
-  // Fleet: the open card that composer text would answer, and whether the user chose the card's
-  // own "I'll type it" option (which skips the send confirm).
-  const [armedAskMessageId, setArmedAskMessageId] = useState<string | null>(null);
-  const composerOpenAsk = useMemo<ComposerOpenAsk | null>(() => {
-    const summary = summarizeOpenAsk(
-      answerableAskMessageId
-        ? activeSnapshot?.messages.find((message) => message.id === answerableAskMessageId)
-        : null,
-    );
-    if (!summary) return null;
-    return {
-      ...summary,
-      botName: summary.botId ? resolveTranscriptBot(summary.botId)?.name : undefined,
-      armed: armedAskMessageId === summary.messageId,
-    };
-  }, [activeSnapshot?.messages, answerableAskMessageId, armedAskMessageId, resolveTranscriptBot]);
-  const answerAskInChat = useCallback((message: ThreadMessage) => {
-    setArmedAskMessageId(message.id);
+  // Fleet: a transcript chip asks the decision dock to show that card.
+  const [decisionFocus, setDecisionFocus] = useState<{ messageId: string; nonce: number } | null>(
+    null,
+  );
+  const openDecision = useCallback((message: ThreadMessage) => {
+    setDecisionFocus((previous) => ({ messageId: message.id, nonce: (previous?.nonce ?? 0) + 1 }));
   }, []);
+  const [decisionDockInset, setDecisionDockInset] = useState(0);
+  // The 3s sidebar poll carries each chat's waiting-card count; the dock refetches when one moves.
+  const pendingDecisionsKey = useMemo(
+    () => pendingDecisionSignature([...bots, ...groups]),
+    [bots, groups],
+  );
+  const refreshAfterDecision = useCallback(
+    (decision: { botId: string; groupId: string | null }) => {
+      if (decision.groupId && activeGroupId.current === decision.groupId) {
+        void refreshGroupThreadRef.current(decision.groupId).catch(() => undefined);
+      } else if (!decision.groupId && activeBotId.current === decision.botId) {
+        void refreshThreadRef.current(decision.botId).catch(() => undefined);
+      }
+      void refreshBots().catch(() => undefined);
+    },
+    [refreshBots],
+  );
   const workingBots: GroupAvatarMember[] = workingRuns.map((run) => {
     const bot = resolveTranscriptBot(run.botId);
     return {
@@ -3594,7 +3605,8 @@ function SpaceShell() {
                             ? item.chat.status
                             : groupRosterStatus(item.chat.members);
                         const workStatusLabel = rosterWorkStatusLabel(rowStatus);
-                        const needsAnswer = rosterNeedsAnswer(rowStatus);
+                        const pendingDecisions = item.chat.pendingDecisionCount ?? 0;
+                        const needsAnswer = rosterNeedsAnswer(rowStatus, pendingDecisions);
                         const attentionDot = needsAnswer || item.chat.unread;
                         const rowError =
                           item.kind === "bot" &&
@@ -3606,12 +3618,12 @@ function SpaceShell() {
                         const compactStatusLabel = compact
                           ? rowError
                             ? t`Error`
-                            : compactRosterStatusLabel(rowStatus)
+                            : compactRosterStatusLabel(rowStatus, pendingDecisions)
                           : null;
                         const rosterLine = compact
                           ? compactStatusLabel
-                          : (workStatusLabel ??
-                            rosterNeedsAnswerLabel(rowStatus) ??
+                          : (rosterNeedsAnswerLabel(rowStatus, pendingDecisions) ??
+                            workStatusLabel ??
                             (item.kind === "bot"
                               ? sidebarBotPreview(
                                   item.chat,
@@ -4325,54 +4337,67 @@ function SpaceShell() {
             </Button>
           </div>
         ) : (
-          <Transcript
-            key={activeSnapshot?.threadId}
-            scrollRef={messageScroll}
-            scrollRequest={scrollRequest}
-            onScrollRequestHandled={clearScrollRequest}
-            artifactTarget={transcriptArtifactTarget}
-            transcript={transcript}
-            showToolActivity={showToolActivity}
-            olderCursor={activeSnapshot?.olderCursor ?? null}
-            loadingOlder={loadingOlder}
-            answerableAskMessageId={answerableAskMessageId}
-            running={transcriptRunning}
-            workingBots={workingBots}
-            onCallBack={
-              bootstrapMe?.phoneCallsEnabled && !inGroup && active
-                ? () => callBot(active)
-                : undefined
-            }
-            onLoadOlder={loadOlder}
-            onOpenBot={openBot}
-            onAnswer={answerMessage}
-            onAnswerInChat={answerAskInChat}
-            onReply={(message) => {
-              setReplyTarget(message);
-              setReplyQuote(null);
-            }}
-            onQuote={(message, quote) => {
-              setReplyTarget(message);
-              setReplyQuote(quote);
-            }}
-            onReact={reactToMessage}
-            flagLabel={flagTarget?.label}
-            onFlag={flagTarget ? flagMessage : undefined}
-            onJumpToMessage={jumpToReplyMessage}
-            onOpenPeerMessages={(peer) => {
-              setPeerConversation(peer);
-            }}
-            memberName={resolveTranscriptMemberName}
-            peerBot={resolveTranscriptBot}
-            threadBotId={activeGroup ? undefined : active?.id}
-            onRefresh={refreshActiveThread}
-            onBotChanged={refreshBots}
-            onAddRoutine={addSkillRoutine}
-            voiceReady={Boolean(voiceStatus?.ready)}
-            speakingMessageId={speakingMessageId}
-            onSpeak={speakMessage}
-            onOpenComputer={onOpenComputer}
-          />
+          <div className="relative flex min-h-0 flex-1">
+            <Transcript
+              key={activeSnapshot?.threadId}
+              scrollRef={messageScroll}
+              scrollRequest={scrollRequest}
+              onScrollRequestHandled={clearScrollRequest}
+              artifactTarget={transcriptArtifactTarget}
+              transcript={transcript}
+              showToolActivity={showToolActivity}
+              olderCursor={activeSnapshot?.olderCursor ?? null}
+              loadingOlder={loadingOlder}
+              answerableAskIds={answerableAskIds}
+              bottomInset={decisionDockInset}
+              running={transcriptRunning}
+              workingBots={workingBots}
+              onCallBack={
+                bootstrapMe?.phoneCallsEnabled && !inGroup && active
+                  ? () => callBot(active)
+                  : undefined
+              }
+              onLoadOlder={loadOlder}
+              onOpenBot={openBot}
+              onAnswer={answerMessage}
+              onOpenDecision={openDecision}
+              onReply={(message) => {
+                setReplyTarget(message);
+                setReplyQuote(null);
+              }}
+              onQuote={(message, quote) => {
+                setReplyTarget(message);
+                setReplyQuote(quote);
+              }}
+              onReact={reactToMessage}
+              flagLabel={flagTarget?.label}
+              onFlag={flagTarget ? flagMessage : undefined}
+              onJumpToMessage={jumpToReplyMessage}
+              onOpenPeerMessages={(peer) => {
+                setPeerConversation(peer);
+              }}
+              memberName={resolveTranscriptMemberName}
+              peerBot={resolveTranscriptBot}
+              threadBotId={activeGroup ? undefined : active?.id}
+              onRefresh={refreshActiveThread}
+              onBotChanged={refreshBots}
+              onAddRoutine={addSkillRoutine}
+              voiceReady={Boolean(voiceStatus?.ready)}
+              speakingMessageId={speakingMessageId}
+              onSpeak={speakMessage}
+              onOpenComputer={onOpenComputer}
+            />
+            <DecisionDock
+              userId={userId ?? null}
+              currentThreadId={activeSnapshot?.threadId ?? null}
+              refreshKey={`${decisionsEpoch}|${pendingDecisionsKey}`}
+              focusRequest={decisionFocus}
+              groups={groups}
+              bots={bots}
+              onHeightChange={setDecisionDockInset}
+              onAnswered={refreshAfterDecision}
+            />
+          </div>
         )}
         {recordingSkill ? (
           <div className="px-6 pb-2 text-center text-[13px] text-destructive">
@@ -4407,8 +4432,6 @@ function SpaceShell() {
             onAttachmentPick={onAttachmentPick}
             onRemoveAttachment={removeAttachment}
             onSend={sendMessage}
-            openAsk={composerOpenAsk}
-            onJumpToAsk={jumpToReplyMessage}
             onStop={stopRun}
             phoneCallsEnabled={bootstrapMe?.phoneCallsEnabled === true}
             dictationTranscribe={voiceStatus ? Boolean(voiceStatus.transcribe) : undefined}
@@ -4579,8 +4602,9 @@ function SpaceShell() {
                   }}
                 />
                 {activeRoutines.map((routine) => {
-                  const routineRunning =
-                    snapshot?.run?.routineId === routine.id && isActive(snapshot.run.status);
+                  const routineRunning = activeThreadRuns(snapshot).some(
+                    (run) => run.routineId === routine.id && isActive(run.status),
+                  );
                   return (
                     <RoutineListRow
                       key={routine.id}
@@ -5599,14 +5623,15 @@ const Transcript = memo(function Transcript({
   showToolActivity,
   olderCursor,
   loadingOlder,
-  answerableAskMessageId,
+  answerableAskIds,
+  bottomInset,
   running,
   workingBots,
   onCallBack,
   onLoadOlder,
   onOpenBot,
   onAnswer,
-  onAnswerInChat,
+  onOpenDecision,
   onReply,
   onQuote,
   onReact,
@@ -5633,7 +5658,9 @@ const Transcript = memo(function Transcript({
   showToolActivity: boolean;
   olderCursor: number | null;
   loadingOlder: boolean;
-  answerableAskMessageId: string | null;
+  answerableAskIds: ReadonlySet<string>;
+  /** Fleet: height of the decision dock floating over the transcript's bottom edge. */
+  bottomInset: number;
   running: boolean;
   workingBots: GroupAvatarMember[];
   /** Calls the bot back from a missed call in the transcript. */
@@ -5641,7 +5668,7 @@ const Transcript = memo(function Transcript({
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
   onAnswer: (message: ThreadMessage, text: string, username?: string) => Promise<void>;
-  onAnswerInChat?: (message: ThreadMessage) => void;
+  onOpenDecision: (message: ThreadMessage) => void;
   onReply: (message: ThreadMessage) => void;
   onQuote: (message: ThreadMessage, quote: string) => void;
   onReact: (message: ThreadMessage, reaction: MessageReaction) => Promise<void>;
@@ -5980,6 +6007,7 @@ const Transcript = memo(function Transcript({
           }
         }}
         className="rk-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-5 md:px-7 md:py-6"
+        style={bottomInset > 0 ? { paddingBottom: bottomInset + 24 } : undefined}
       >
         {olderCursor != null ? (
           <button
@@ -6065,7 +6093,7 @@ const Transcript = memo(function Transcript({
                       <MessageView
                         artifactTarget={artifactTarget}
                         message={message}
-                        canAnswer={message.id === answerableAskMessageId}
+                        canAnswer={answerableAskIds.has(message.id)}
                         onOpenBot={onOpenBot}
                         onOpenPeerMessages={onOpenPeerMessages}
                         peerReplies={
@@ -6077,7 +6105,7 @@ const Transcript = memo(function Transcript({
                         }
                         onTogglePeerReplies={togglePeerReplies}
                         onAnswer={onAnswer}
-                        onAnswerInChat={onAnswerInChat}
+                        onOpenDecision={onOpenDecision}
                         speakerName={
                           peerRoute
                             ? peerRoute.speakerName
@@ -6190,6 +6218,7 @@ const Transcript = memo(function Transcript({
         aria-hidden={atEnd}
         tabIndex={atEnd ? -1 : 0}
         onClick={jumpToLatest}
+        style={bottomInset > 0 ? { bottom: bottomInset + 32 } : undefined}
         className={`absolute bottom-4 left-1/2 z-20 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-border bg-muted/95 text-foreground/75 shadow-md backdrop-blur transition-[opacity,transform,background-color] duration-200 ease-[cubic-bezier(.22,1,.36,1)] hover:bg-border motion-reduce:transition-none ${
           atEnd ? "pointer-events-none translate-y-2 opacity-0" : "translate-y-0 opacity-100"
         }`}
@@ -6304,8 +6333,6 @@ export const Composer = memo(function Composer({
   onSlashAction,
   draftKey,
   enterToSend,
-  openAsk,
-  onJumpToAsk,
 }: {
   activeName?: string;
   running: boolean;
@@ -6337,9 +6364,6 @@ export const Composer = memo(function Composer({
   onSlashAction?: (action: SlashActionId) => void;
   draftKey: string;
   enterToSend: boolean;
-  /** Fleet: the pending ask card in this thread; composer text may answer it. */
-  openAsk?: ComposerOpenAsk | null;
-  onJumpToAsk?: (messageId: string) => void;
 }) {
   const { t } = useLingui();
   const [draft, setDraft] = useState(() => readComposerDraft(draftKey));
@@ -6367,10 +6391,6 @@ export const Composer = memo(function Composer({
   });
   const [selectedSkill, setSelectedSkill] = useState<AgentSkillCatalogEntry | null>(null);
   const [selectedMentions, setSelectedMentions] = useState<ComposerMention[]>([]);
-  const answerGuard = openAsk?.answersWithText && !openAsk.armed ? openAsk : null;
-  // Keyed to one card, so the confirm drops itself when that card is answered or replaced.
-  const [confirmingAskId, setConfirmingAskId] = useState<string | null>(null);
-  const confirmingAnswer = answerGuard !== null && confirmingAskId === answerGuard.messageId;
   const editRevision = useRef(0);
   useEffect(
     () =>
@@ -6393,11 +6413,6 @@ export const Composer = memo(function Composer({
     }
   }, [replyId, quote]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const askArmed = Boolean(openAsk?.armed);
-  useEffect(() => {
-    // Fleet: the card's "I'll type it" option arms the composer and hands it focus.
-    if (askArmed) textareaRef.current?.focus();
-  }, [askArmed]);
   const [composerExpanded, setComposerExpanded] = useState(false);
   const attachButtonRef = useRef<HTMLButtonElement>(null);
   const composerActionsRef = useRef<HTMLDivElement>(null);
@@ -6622,19 +6637,8 @@ export const Composer = memo(function Composer({
     mentionQuery === null &&
     (slashSkillOptions.length > 0 || slashActionOptions.length > 0);
 
-  function requestSend() {
-    if (!canSend || sending || disabled) return;
-    // Only typed text answers the card; an attachment-only send is unaffected.
-    if (answerGuard && serializeComposerPrompt(draft, selectedSkill, selectedMentions).trim()) {
-      setConfirmingAskId(answerGuard.messageId);
-      return;
-    }
-    void send();
-  }
-
   async function send() {
     if (!canSend || sending || disabled) return;
-    setConfirmingAskId(null);
     const revision = editRevision.current;
     const clientNonce = retryNonce.current ?? newClientNonce();
     retryNonce.current = null;
@@ -6893,29 +6897,6 @@ export const Composer = memo(function Composer({
           {attachmentNotice}
         </div>
       ) : null}
-      {openAsk ? (
-        <button
-          type="button"
-          data-testid="composer-open-ask"
-          onClick={() => onJumpToAsk?.(openAsk.messageId)}
-          className="mb-2 block w-full truncate rounded-[12px] border border-warning/40 bg-warning/10 px-3 py-1.5 text-start text-[13px] text-warning hover:bg-warning/15"
-        >
-          {openAsk.answersWithText
-            ? t`Open question: ${openAsk.question} · your message will answer it`
-            : t`Open question: ${openAsk.question} · answer it on the card first`}
-        </button>
-      ) : null}
-      {confirmingAnswer && answerGuard ? (
-        <AnswerConfirm
-          botName={answerGuard.botName ?? activeName}
-          question={answerGuard.question}
-          onConfirm={() => void send()}
-          onCancel={() => {
-            setConfirmingAskId(null);
-            textareaRef.current?.focus();
-          }}
-        />
-      ) : null}
       {pendingAttachments.length ? (
         <div className="mb-3 flex flex-wrap gap-2">
           {pendingAttachments.map((attachment) => (
@@ -7127,11 +7108,6 @@ export const Composer = memo(function Composer({
             onChange={(event) => updateDraft(event.target.value)}
             onPaste={handlePaste}
             onKeyDown={(event) => {
-              if (confirmingAnswer && event.key === "Escape") {
-                event.preventDefault();
-                setConfirmingAskId(null);
-                return;
-              }
               if (
                 event.key === "Backspace" &&
                 draft.length === 0 &&
@@ -7171,7 +7147,7 @@ export const Composer = memo(function Composer({
               }
               if (action.type === "send") {
                 event.preventDefault();
-                requestSend();
+                void send();
               }
             }}
             disabled={disabled}
@@ -7213,7 +7189,7 @@ export const Composer = memo(function Composer({
                 size="icon"
                 aria-label={t`Send`}
                 disabled={sending || !canSend || disabled}
-                onClick={requestSend}
+                onClick={() => void send()}
                 className="size-8 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95"
               >
                 <ArrowUp size={16} strokeWidth={2.2} />
@@ -7238,7 +7214,7 @@ export const Composer = memo(function Composer({
                 size="icon"
                 aria-label={t`Send`}
                 disabled={sending || !canSend || disabled}
-                onClick={requestSend}
+                onClick={() => void send()}
                 className="size-8 shrink-0 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95 disabled:bg-white/10 disabled:text-muted-foreground/30 disabled:shadow-none"
               >
                 <ArrowUp size={16} strokeWidth={2.2} />
@@ -7250,63 +7226,6 @@ export const Composer = memo(function Composer({
     </fieldset>
   );
 });
-
-/** Fleet: the pending ask card shown above the composer. `armed` means the user chose the card's
- * own "type it" option, so the next send answers it without a confirm. */
-export type ComposerOpenAsk = OpenAskSummary & { botName?: string; armed: boolean };
-
-/** Fleet: inline confirm before composer text is taken as an open card's answer. */
-function AnswerConfirm({
-  botName,
-  question,
-  onConfirm,
-  onCancel,
-}: {
-  botName?: string;
-  question: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const { t } = useLingui();
-  const confirmRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    confirmRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-  }, []);
-  const bot = botName ?? t`the bot`;
-  return (
-    <div
-      ref={confirmRef}
-      role="alertdialog"
-      aria-label={t`Send as answer?`}
-      data-testid="composer-answer-confirm"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          onCancel();
-        } else if (
-          event.key === "Enter" &&
-          !event.shiftKey &&
-          // A focused button handles its own Enter, so Enter on Cancel cancels.
-          !(event.target instanceof HTMLButtonElement)
-        ) {
-          event.preventDefault();
-          onConfirm();
-        }
-      }}
-      className="mb-2 rounded-[14px] border border-warning/40 bg-warning/10 px-4 py-3 text-[13.5px] text-foreground"
-    >
-      <p>{t`This answers ${bot}'s open question: '${question}'.`}</p>
-      <div className="mt-2 flex gap-2">
-        <Button size="sm" onClick={onConfirm}>
-          <Trans>Send as answer</Trans>
-        </Button>
-        <Button size="sm" variant="outline" onClick={onCancel}>
-          <Trans>Cancel</Trans>
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 type ComposerLayout = { barHeight: number; fieldX: number; fieldY: number };
 
@@ -7655,7 +7574,7 @@ const MessageView = memo(function MessageView({
   canAnswer,
   message,
   onAnswer,
-  onAnswerInChat,
+  onOpenDecision,
   onOpenBot,
   onOpenPeerMessages,
   peerReplies,
@@ -7679,7 +7598,8 @@ const MessageView = memo(function MessageView({
   canAnswer: boolean;
   message: ThreadMessage;
   onAnswer: (message: ThreadMessage, text: string, username?: string) => Promise<void>;
-  onAnswerInChat?: (message: ThreadMessage) => void;
+  /** Fleet: opens the decision dock on this message's waiting card. */
+  onOpenDecision: (message: ThreadMessage) => void;
   onOpenBot: (botId: string) => void;
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   /** Set on a received marker whose peer run has folded replies. */
@@ -8183,13 +8103,27 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "ask") {
+          // Fleet: a waiting card is answered in the decision dock; the transcript keeps a chip.
+          if (canAnswer && block.status !== "answered") {
+            return (
+              <button
+                key={i}
+                type="button"
+                data-testid="decision-chip"
+                onClick={() => onOpenDecision(message)}
+                className="inline-flex w-fit items-center gap-2 rounded-full border border-warning/40 bg-warning/10 px-3 py-1.5 text-[13px] text-warning hover:bg-warning/15"
+              >
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-warning" />
+                <Trans>Decision waiting · open</Trans>
+              </button>
+            );
+          }
           return (
             <AskCard
               key={i}
               block={block}
               canAnswer={canAnswer}
               onAnswer={(text, username) => onAnswer(message, text, username)}
-              onAnswerInChat={onAnswerInChat ? () => onAnswerInChat(message) : undefined}
             />
           );
         }

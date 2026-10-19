@@ -65,6 +65,17 @@ describe("rosterNeedsAnswer", () => {
   });
 });
 
+describe("pending decision count", () => {
+  it("flags a working bot that also has a waiting card", () => {
+    expect(rosterNeedsAnswer("running", 1)).toBe(true);
+    expect(rosterNeedsAnswer("idle", 2)).toBe(true);
+    expect(rosterNeedsAnswer("running", 0)).toBe(false);
+    expect(rosterNeedsAnswerLabel("running", 1)).toBe("Needs your answer");
+    expect(compactRosterStatusLabel("running", 1)).toBe("Needs your answer");
+    expect(compactRosterStatusLabel("running", 0)).toBe("Working…");
+  });
+});
+
 describe("groupRosterStatus", () => {
   it("prefers a member waiting for the user over a working member", () => {
     expect(groupRosterStatus([{ status: "running" }, { status: "waiting_input" }])).toBe(

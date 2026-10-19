@@ -76,13 +76,10 @@ export function AskCard({
   block,
   canAnswer,
   onAnswer,
-  onAnswerInChat,
 }: {
   block: AskBlock;
   canAnswer: boolean;
   onAnswer: (text: string, username?: string) => Promise<void>;
-  /** Fleet: the card's own free-text option; arms the composer so the next send answers this card. */
-  onAnswerInChat?: () => void;
 }) {
   const { t } = useLingui();
   const [editing, setEditing] = useState(false);
@@ -248,7 +245,7 @@ export function AskCard({
         <div className="mt-3.5 text-[13.5px] font-medium text-muted-foreground">
           <Trans>No longer active</Trans>
         </div>
-      ) : askActions?.length ? (
+      ) : askActions?.length && !(editing && !approvalActions && !block.instructionUpdate) ? (
         <div className={approvalActions ? "mt-3.5 flex flex-wrap gap-2" : "mt-3.5 space-y-1.5"}>
           {displayActions?.map((action) => (
             <Button
@@ -281,13 +278,13 @@ export function AskCard({
               )}
             </Button>
           ))}
-          {onAnswerInChat && !approvalActions && !block.instructionUpdate ? (
+          {!approvalActions && !block.instructionUpdate ? (
             <Button
               variant="link"
-              data-testid="ask-answer-in-chat"
+              data-testid="ask-type-answer"
               className="h-auto px-0 text-[13.5px]"
               disabled={submitting}
-              onClick={onAnswerInChat}
+              onClick={() => setEditing(true)}
             >
               <Trans>I'll type it</Trans>
             </Button>

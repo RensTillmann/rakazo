@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  answerableAskMessageIds,
   latestAnswerableAskMessageId,
   resolveAskChoice,
   selectedAskActionLabel,
@@ -39,6 +40,30 @@ describe("latestAnswerableAskMessageId", () => {
         messages: [{ id: "ask-1", runId: "run-1", blocks: [{ kind: "ask", status: "answered" }] }],
       }),
     ).toBeNull();
+  });
+});
+
+describe("answerableAskMessageIds", () => {
+  it("returns every pending card of every waiting run, not only the newest", () => {
+    const ids = answerableAskMessageIds({
+      activeRuns: [
+        { id: "run-a", status: "waiting_input" },
+        { id: "run-b", status: "waiting_input" },
+        { id: "run-c", status: "running" },
+      ],
+      messages: [
+        { id: "ask-a", runId: "run-a", blocks: [{ kind: "ask", status: "pending" }] },
+        { id: "ask-b", runId: "run-b", blocks: [{ kind: "ask", status: "pending" }] },
+        { id: "ask-b-old", runId: "run-b", blocks: [{ kind: "ask", status: "answered" }] },
+        { id: "ask-c", runId: "run-c", blocks: [{ kind: "ask", status: "pending" }] },
+        { id: "text", runId: "run-a", blocks: [{ kind: "text" }] },
+      ],
+    });
+    expect([...ids]).toEqual(["ask-a", "ask-b"]);
+  });
+
+  it("is empty without a snapshot", () => {
+    expect(answerableAskMessageIds(null).size).toBe(0);
   });
 });
 

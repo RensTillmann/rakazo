@@ -100,6 +100,10 @@ msgstr ""
 msgid "{0}'s screen"
 msgstr ""
 
+#: src/components/DecisionDock.tsx
+msgid "{addedCount} new decisions waiting"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "{amount} / {period}"
 msgstr ""
@@ -114,6 +118,10 @@ msgstr "{commandVariable} ayrılmıştır ve komut değişkeni olarak kullanıla
 
 #: src/lib/billing.ts
 msgid "{count} days"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "{count} decisions"
 msgstr ""
 
 #: src/lib/billing.ts
@@ -291,6 +299,10 @@ msgstr "@{0}"
 
 #: src/components/UsageBars.tsx
 msgid "≈ ${cost} at API prices"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "1 decision"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -1014,7 +1026,6 @@ msgstr "Görselleri okuyamaz"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2089,6 +2100,18 @@ msgstr ""
 msgid "days"
 msgstr "gün"
 
+#: src/pages/Shell.tsx
+msgid "Decision waiting · open"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions {position} of {count}"
+msgstr ""
+
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -2212,6 +2235,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "Ayrıntılar"
+
+#: src/components/DecisionDock.tsx
+msgid "Direct chat"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
@@ -3246,6 +3273,10 @@ msgstr ""
 msgid "Minimize call"
 msgstr ""
 
+#: src/components/DecisionDock.tsx
+msgid "Minimize decisions"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "minute"
 msgstr "dakika"
@@ -3393,6 +3424,10 @@ msgstr ""
 msgid "New bot"
 msgstr "Yeni bot"
 
+#: src/components/DecisionDock.tsx
+msgid "New decision from {botName}"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "New group"
 msgstr "Yeni grup"
@@ -3421,6 +3456,10 @@ msgstr ""
 
 #: src/pages/Board.tsx
 msgid "New ticket"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Next decision"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -3688,16 +3727,6 @@ msgstr "Tam pencerede aç"
 msgid "Open navigation"
 msgstr "Gezinmeyi aç"
 
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · answer it on the card first"
-msgstr ""
-
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · your message will answer it"
-msgstr ""
-
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "Kabuğu aç"
@@ -3876,6 +3905,10 @@ msgstr "{0} önizle"
 
 #: src/pages/Artifacts.tsx
 msgid "Preview isn't available for this file type — download it to view it."
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Previous decision"
 msgstr ""
 
 #: src/pages/Board.tsx
@@ -4519,14 +4552,6 @@ msgstr ""
 msgid "Send answer"
 msgstr "Yanıtı gönder"
 
-#: src/pages/Shell.tsx
-msgid "Send as answer"
-msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Send as answer?"
-msgstr ""
-
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "Silme kodu gönder"
@@ -4985,10 +5010,6 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr ""
 
-#: src/pages/Shell.tsx
-msgid "the bot"
-msgstr ""
-
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "Bağlantı zaman aşımına uğradı."
@@ -5020,10 +5041,6 @@ msgstr "Düşünüyor"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
-msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "This answers {bot}'s open question: '{question}'."
 msgstr ""
 
 #: src/pages/Shell.tsx

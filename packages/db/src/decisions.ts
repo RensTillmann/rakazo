@@ -1,0 +1,110 @@
+import type { Actor, MessageBlock } from "@rakazo/contracts";
+import type { PrismaClient } from "./client.js";
+
+/** Fleet: one pending card whose run is paused in `waiting_input`, for the decision dock. */
+export type PendingDecisionRow = {
+  messageId: string;
+  runId: string;
+  botId: string;
+  botName: string;
+  groupId: string | null;
+  threadId: string;
+  createdAt: string;
+  block: MessageBlock;
+};
+
+type DecisionActor = Pick<Actor, "spaceId" | "userId">;
+
+function pendingAskBlock(blocks: unknown): MessageBlock | null {
+  if (!Array.isArray(blocks)) return null;
+  for (const block of blocks as MessageBlock[]) {
+    if (block?.kind === "ask" && block.status !== "answered") return block;
+  }
+  return null;
+}
+
+/** Chats the user can answer cards in: a live bot's own chat or a live room. */
+function answerableThreadWhere(actor: DecisionActor) {
+  return {
+    spaceId: actor.spaceId,
+    userId: actor.userId,
+    OR: [
+      { botId: { not: null }, bot: { archivedAt: null } },
+      { groupId: { not: null }, group: { archivedAt: null } },
+    ],
+  };
+}
+
+/**
+ * Every pending card the user may answer, oldest first. A card counts only while its run is
+ * still `waiting_input`; a card on a finished or cancelled run is history.
+ */
+export async function listPendingDecisions(
+  prisma: PrismaClient,
+  actor: DecisionActor,
+): Promise<PendingDecisionRow[]> {
+  const runs = await prisma.run.findMany({
+    where: {
+      spaceId: actor.spaceId,
+      status: "waiting_input",
+      thread: answerableThreadWhere(actor),
+    },
+    select: {
+      id: true,
+      botId: true,
+      threadId: true,
+      bot: { select: { name: true } },
+      thread: { select: { groupId: true } },
+    },
+  });
+  if (runs.length === 0) return [];
+  const runsById = new Map(runs.map((run) => [run.id, run]));
+  const messages = await prisma.message.findMany({
+    where: { runId: { in: [...runsById.keys()] } },
+    orderBy: [{ createdAt: "asc" }, { seq: "asc" }],
+    select: { id: true, runId: true, threadId: true, botId: true, blocks: true, createdAt: true },
+  });
+  const decisions: PendingDecisionRow[] = [];
+  for (const message of messages) {
+    const run = message.runId ? runsById.get(message.runId) : undefined;
+    if (!run || run.threadId !== message.threadId) continue;
+    const block = pendingAskBlock(message.blocks);
+    if (!block) continue;
+    decisions.push({
+      messageId: message.id,
+      runId: run.id,
+      botId: run.botId,
+      botName: run.bot.name,
+      groupId: run.thread.groupId,
+      threadId: run.threadId,
+      createdAt: message.createdAt.toISOString(),
+      block,
+    });
+  }
+  return decisions;
+}
+
+/** Pending card count per thread, for the sidebar's "Needs your answer" dot. */
+export async function pendingDecisionCountsByThread(
+  prisma: PrismaClient,
+  threadIds: readonly string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (threadIds.length === 0) return counts;
+  const runs = await prisma.run.findMany({
+    where: { threadId: { in: [...threadIds] }, status: "waiting_input" },
+    select: { id: true, threadId: true },
+  });
+  if (runs.length === 0) return counts;
+  const threadByRun = new Map(runs.map((run) => [run.id, run.threadId]));
+  const messages = await prisma.message.findMany({
+    where: { runId: { in: [...threadByRun.keys()] } },
+    select: { runId: true, threadId: true, blocks: true },
+  });
+  for (const message of messages) {
+    const threadId = message.runId ? threadByRun.get(message.runId) : undefined;
+    if (!threadId || threadId !== message.threadId || !pendingAskBlock(message.blocks)) continue;
+    counts.set(threadId, (counts.get(threadId) ?? 0) + 1);
+  }
+  return counts;
+}

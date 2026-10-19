@@ -100,6 +100,10 @@ msgstr "{0} will still respond to direct mentions."
 msgid "{0}'s screen"
 msgstr "{0}'s screen"
 
+#: src/components/DecisionDock.tsx
+msgid "{addedCount} new decisions waiting"
+msgstr "{addedCount} new decisions waiting"
+
 #: src/lib/billing.ts
 msgid "{amount} / {period}"
 msgstr "{amount} / {period}"
@@ -115,6 +119,10 @@ msgstr "{commandVariable} is reserved and cannot be used as a command variable. 
 #: src/lib/billing.ts
 msgid "{count} days"
 msgstr "{count} days"
+
+#: src/components/DecisionDock.tsx
+msgid "{count} decisions"
+msgstr "{count} decisions"
 
 #: src/lib/billing.ts
 msgid "{count} months"
@@ -292,6 +300,10 @@ msgstr "@{0}"
 #: src/components/UsageBars.tsx
 msgid "≈ ${cost} at API prices"
 msgstr "≈ ${cost} at API prices"
+
+#: src/components/DecisionDock.tsx
+msgid "1 decision"
+msgstr "1 decision"
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -1014,7 +1026,6 @@ msgstr "Can't read images"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2089,6 +2100,18 @@ msgstr "Day-to-day work"
 msgid "days"
 msgstr "days"
 
+#: src/pages/Shell.tsx
+msgid "Decision waiting · open"
+msgstr "Decision waiting · open"
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions"
+msgstr "Decisions"
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions {position} of {count}"
+msgstr "Decisions {position} of {count}"
+
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -2212,6 +2235,10 @@ msgstr "Desktop update"
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "Details"
+
+#: src/components/DecisionDock.tsx
+msgid "Direct chat"
+msgstr "Direct chat"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
@@ -3246,6 +3273,10 @@ msgstr "Minimize bots"
 msgid "Minimize call"
 msgstr "Minimize call"
 
+#: src/components/DecisionDock.tsx
+msgid "Minimize decisions"
+msgstr "Minimize decisions"
+
 #: src/pages/RoutineSchedule.tsx
 msgid "minute"
 msgstr "minute"
@@ -3393,6 +3424,10 @@ msgstr "Never recall tags (comma-separated)"
 msgid "New bot"
 msgstr "New bot"
 
+#: src/components/DecisionDock.tsx
+msgid "New decision from {botName}"
+msgstr "New decision from {botName}"
+
 #: src/pages/GroupPanel.tsx
 msgid "New group"
 msgstr "New group"
@@ -3422,6 +3457,10 @@ msgstr "New space"
 #: src/pages/Board.tsx
 msgid "New ticket"
 msgstr "New ticket"
+
+#: src/components/DecisionDock.tsx
+msgid "Next decision"
+msgstr "Next decision"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -3688,16 +3727,6 @@ msgstr "Open in full window"
 msgid "Open navigation"
 msgstr "Open navigation"
 
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · answer it on the card first"
-msgstr "Open question: {0} · answer it on the card first"
-
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · your message will answer it"
-msgstr "Open question: {0} · your message will answer it"
-
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "Open shell"
@@ -3877,6 +3906,10 @@ msgstr "Preview {0}"
 #: src/pages/Artifacts.tsx
 msgid "Preview isn't available for this file type — download it to view it."
 msgstr "Preview isn't available for this file type — download it to view it."
+
+#: src/components/DecisionDock.tsx
+msgid "Previous decision"
+msgstr "Previous decision"
 
 #: src/pages/Board.tsx
 msgid "Priority"
@@ -4519,14 +4552,6 @@ msgstr "Send <0>{linkCode}</0> to the line from your chat app within 10 minutes.
 msgid "Send answer"
 msgstr "Send answer"
 
-#: src/pages/Shell.tsx
-msgid "Send as answer"
-msgstr "Send as answer"
-
-#: src/pages/Shell.tsx
-msgid "Send as answer?"
-msgstr "Send as answer?"
-
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "Send deletion code"
@@ -4985,10 +5010,6 @@ msgstr "Text"
 msgid "The API did not come back. Refresh this page."
 msgstr "The API did not come back. Refresh this page."
 
-#: src/pages/Shell.tsx
-msgid "the bot"
-msgstr "the bot"
-
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "The connection timed out."
@@ -5021,10 +5042,6 @@ msgstr "Thinking"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
 msgstr "Thinking: {activeThinkingLabel}"
-
-#: src/pages/Shell.tsx
-msgid "This answers {bot}'s open question: '{question}'."
-msgstr "This answers {bot}'s open question: '{question}'."
 
 #: src/pages/Shell.tsx
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

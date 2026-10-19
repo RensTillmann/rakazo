@@ -100,6 +100,10 @@ msgstr ""
 msgid "{0}'s screen"
 msgstr "{0}의 화면"
 
+#: src/components/DecisionDock.tsx
+msgid "{addedCount} new decisions waiting"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "{amount} / {period}"
 msgstr ""
@@ -114,6 +118,10 @@ msgstr "{commandVariable}은(는) 예약되어 있어 명령 변수로 사용할
 
 #: src/lib/billing.ts
 msgid "{count} days"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "{count} decisions"
 msgstr ""
 
 #: src/lib/billing.ts
@@ -291,6 +299,10 @@ msgstr "@{0}"
 
 #: src/components/UsageBars.tsx
 msgid "≈ ${cost} at API prices"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "1 decision"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -1014,7 +1026,6 @@ msgstr "이미지를 읽을 수 없음"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2089,6 +2100,18 @@ msgstr ""
 msgid "days"
 msgstr "일"
 
+#: src/pages/Shell.tsx
+msgid "Decision waiting · open"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions {position} of {count}"
+msgstr ""
+
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -2212,6 +2235,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "세부 정보"
+
+#: src/components/DecisionDock.tsx
+msgid "Direct chat"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
@@ -3246,6 +3273,10 @@ msgstr ""
 msgid "Minimize call"
 msgstr ""
 
+#: src/components/DecisionDock.tsx
+msgid "Minimize decisions"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "minute"
 msgstr "분"
@@ -3393,6 +3424,10 @@ msgstr ""
 msgid "New bot"
 msgstr "새 Bot 만들기"
 
+#: src/components/DecisionDock.tsx
+msgid "New decision from {botName}"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "New group"
 msgstr "새 그룹 만들기"
@@ -3421,6 +3456,10 @@ msgstr "새 스페이스"
 
 #: src/pages/Board.tsx
 msgid "New ticket"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Next decision"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -3688,16 +3727,6 @@ msgstr "전체 창으로 열기"
 msgid "Open navigation"
 msgstr "메뉴 열기"
 
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · answer it on the card first"
-msgstr ""
-
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · your message will answer it"
-msgstr ""
-
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "셸 열기"
@@ -3876,6 +3905,10 @@ msgstr "{0} 미리보기"
 
 #: src/pages/Artifacts.tsx
 msgid "Preview isn't available for this file type — download it to view it."
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Previous decision"
 msgstr ""
 
 #: src/pages/Board.tsx
@@ -4519,14 +4552,6 @@ msgstr "10분 안에 채팅 앱에서 연결할 회선으로 <0>{linkCode}</0>�
 msgid "Send answer"
 msgstr "답변 보내기"
 
-#: src/pages/Shell.tsx
-msgid "Send as answer"
-msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Send as answer?"
-msgstr ""
-
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "삭제 코드 보내기"
@@ -4985,10 +5010,6 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침하세요."
 
-#: src/pages/Shell.tsx
-msgid "the bot"
-msgstr ""
-
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "연결 시간이 초과되었습니다."
@@ -5020,10 +5041,6 @@ msgstr "생각 깊이"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
-msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "This answers {bot}'s open question: '{question}'."
 msgstr ""
 
 #: src/pages/Shell.tsx

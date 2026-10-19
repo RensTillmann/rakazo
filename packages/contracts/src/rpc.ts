@@ -102,7 +102,7 @@ import {
   VoiceInfoSchema,
   VoiceStatusSchema,
 } from "./domain.js";
-import { ComputerCommandSchema, ProductEventSchema } from "./events.js";
+import { ComputerCommandSchema, MessageBlock, ProductEventSchema } from "./events.js";
 import { Id, IsoDate } from "./ids.js";
 import {
   IntegrationProviderConfigSchema,
@@ -180,6 +180,19 @@ const threadSendInput = threadTarget
   });
 
 const spaceName = z.string().trim().min(1).max(60);
+
+/** Fleet: one waiting decision card for the decision dock. */
+export const PendingDecisionSchema = z.object({
+  messageId: Id,
+  runId: Id,
+  botId: Id,
+  botName: z.string(),
+  groupId: Id.nullable(),
+  threadId: Id,
+  createdAt: IsoDate,
+  block: MessageBlock,
+});
+export type PendingDecision = z.infer<typeof PendingDecisionSchema>;
 
 export const appContract = {
   aiConsent: {
@@ -1015,6 +1028,10 @@ export const appContract = {
       // The longest origin: a scheme, a 253-character host name and a port.
       .input(z.object({ origin: z.string().max("https://".length + 253 + ":65535".length) }))
       .output(z.object({ icon: z.string().nullable(), retry: z.boolean().optional() })),
+  },
+  /** Fleet: every pending card whose run waits for the caller, oldest first. */
+  decisions: {
+    list: oc.output(z.object({ decisions: z.array(PendingDecisionSchema) })),
   },
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),

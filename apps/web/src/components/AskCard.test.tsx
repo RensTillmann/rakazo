@@ -65,11 +65,11 @@ describe("AskCard free-text option", () => {
     ],
   } as unknown as AskBlock;
 
-  it("offers the composer as the card's free-text answer", () => {
+  it("offers an in-card typed answer next to the choices", () => {
     const html = renderToStaticMarkup(
-      <AskCard block={block} canAnswer onAnswer={async () => {}} onAnswerInChat={() => {}} />,
+      <AskCard block={block} canAnswer onAnswer={async () => {}} />,
     );
-    expect(html).toContain('data-testid="ask-answer-in-chat"');
+    expect(html).toContain('data-testid="ask-type-answer"');
     expect(html).toContain("I&#x27;ll type it");
   });
 
@@ -83,8 +83,8 @@ describe("AskCard free-text option", () => {
       ],
     } as unknown as AskBlock;
     const html = renderToStaticMarkup(
-      <AskCard block={approval} canAnswer onAnswer={async () => {}} onAnswerInChat={() => {}} />,
+      <AskCard block={approval} canAnswer onAnswer={async () => {}} />,
     );
-    expect(html).not.toContain('data-testid="ask-answer-in-chat"');
+    expect(html).not.toContain('data-testid="ask-type-answer"');
   });
 });

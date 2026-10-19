@@ -10,21 +10,30 @@ type AskSnapshot = {
   activeRuns?: readonly { id: string; status: string }[];
 };
 
-export function latestAnswerableAskMessageId(snapshot: AskSnapshot | null): string | null {
-  if (!snapshot) return null;
+/** Every pending ask whose run is paused in `waiting_input`. Cards do not block the bot, so
+ * several can wait at once and each one is answerable on its own. */
+export function answerableAskMessageIds(snapshot: AskSnapshot | null): Set<string> {
+  const ids = new Set<string>();
+  if (!snapshot) return ids;
   const waitingRunIds = new Set(
     (snapshot.activeRuns ?? (snapshot.run ? [snapshot.run] : []))
       .filter((run) => run.status === "waiting_input")
       .map((run) => run.id),
   );
-  for (let index = snapshot.messages.length - 1; index >= 0; index -= 1) {
-    const message = snapshot.messages[index];
+  for (const message of snapshot.messages) {
     if (!message?.runId || !waitingRunIds.has(message.runId)) continue;
     if (message.blocks.some((block) => block.kind === "ask" && block.status !== "answered")) {
-      return message.id;
+      ids.add(message.id);
     }
   }
-  return null;
+  return ids;
+}
+
+/** Newest answerable ask (mobile composer guard). */
+export function latestAnswerableAskMessageId(snapshot: AskSnapshot | null): string | null {
+  let latest: string | null = null;
+  for (const id of answerableAskMessageIds(snapshot)) latest = id;
+  return latest;
 }
 
 export type OpenAskSummary = {

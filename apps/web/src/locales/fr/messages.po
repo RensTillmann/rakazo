@@ -100,6 +100,10 @@ msgstr "{0} répondra toujours aux mentions directes."
 msgid "{0}'s screen"
 msgstr "Écran de {0}"
 
+#: src/components/DecisionDock.tsx
+msgid "{addedCount} new decisions waiting"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "{amount} / {period}"
 msgstr ""
@@ -114,6 +118,10 @@ msgstr "{commandVariable} est réservée et ne peut pas être utilisée comme va
 
 #: src/lib/billing.ts
 msgid "{count} days"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "{count} decisions"
 msgstr ""
 
 #: src/lib/billing.ts
@@ -291,6 +299,10 @@ msgstr "@{0}"
 
 #: src/components/UsageBars.tsx
 msgid "≈ ${cost} at API prices"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "1 decision"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -1014,7 +1026,6 @@ msgstr "Ne peut pas lire les images"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2089,6 +2100,18 @@ msgstr "Travail quotidien"
 msgid "days"
 msgstr "jours"
 
+#: src/pages/Shell.tsx
+msgid "Decision waiting · open"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Decisions {position} of {count}"
+msgstr ""
+
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -2212,6 +2235,10 @@ msgstr "Mise à jour du bureau"
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "Détails"
+
+#: src/components/DecisionDock.tsx
+msgid "Direct chat"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
@@ -3246,6 +3273,10 @@ msgstr "Réduire les bots"
 msgid "Minimize call"
 msgstr "Réduire l’appel"
 
+#: src/components/DecisionDock.tsx
+msgid "Minimize decisions"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "minute"
 msgstr "minute"
@@ -3393,6 +3424,10 @@ msgstr ""
 msgid "New bot"
 msgstr "Nouveau bot"
 
+#: src/components/DecisionDock.tsx
+msgid "New decision from {botName}"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "New group"
 msgstr "Nouveau groupe"
@@ -3421,6 +3456,10 @@ msgstr "Nouvel espace"
 
 #: src/pages/Board.tsx
 msgid "New ticket"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Next decision"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -3688,16 +3727,6 @@ msgstr "Ouvrir en fenêtre complète"
 msgid "Open navigation"
 msgstr "Ouvrir la navigation"
 
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · answer it on the card first"
-msgstr ""
-
-#. placeholder {0}: openAsk.question
-#: src/pages/Shell.tsx
-msgid "Open question: {0} · your message will answer it"
-msgstr ""
-
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "Ouvrir le shell"
@@ -3877,6 +3906,10 @@ msgstr "Aperçu de {0}"
 #: src/pages/Artifacts.tsx
 msgid "Preview isn't available for this file type — download it to view it."
 msgstr "L'aperçu n'est pas disponible pour ce type de fichier — téléchargez-le pour le consulter."
+
+#: src/components/DecisionDock.tsx
+msgid "Previous decision"
+msgstr ""
 
 #: src/pages/Board.tsx
 msgid "Priority"
@@ -4519,14 +4552,6 @@ msgstr "Envoyez <0>{linkCode}</0> au numéro depuis votre application de discuss
 msgid "Send answer"
 msgstr "Envoyer la réponse"
 
-#: src/pages/Shell.tsx
-msgid "Send as answer"
-msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Send as answer?"
-msgstr ""
-
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "Envoyer le code de suppression"
@@ -4985,10 +5010,6 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr "L'API n'est pas revenue. Actualisez cette page."
 
-#: src/pages/Shell.tsx
-msgid "the bot"
-msgstr ""
-
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "La connexion a expiré."
@@ -5020,10 +5041,6 @@ msgstr "Réflexion"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
-msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "This answers {bot}'s open question: '{question}'."
 msgstr ""
 
 #: src/pages/Shell.tsx
