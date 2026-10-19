@@ -273,6 +273,7 @@ import {
   updateChildBot,
   updateFleetGroup,
 } from "./fleet-tools.js";
+import { groupHistoryTurn, groupMessageBotIds, loadGroupAuthorNames } from "./group-history.js";
 import { handoffToGroupBot, loadGroupContext, wakeMentionedGroupMembers } from "./group-handoff.js";
 import {
   isRoomToolName,
@@ -3938,19 +3939,35 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const discoveredPromise = deps.connector
           ? deps.connector.discoverTools(context)
           : Promise.resolve([]);
+        const groupAuthors = thread.groupId
+          ? await loadGroupAuthorNames(deps.prisma, {
+              userId: run.userId,
+              botIds: groupMessageBotIds(messages),
+            })
+          : undefined;
         const threadContext = threadContextForRun(
           run.trigger,
           {
-            messages: [...messages].reverse().map((m) => ({
-              id: m.id,
-              createdAt: m.createdAt?.toISOString(),
-              seq: m.seq,
-              role: (m.role === "user" ? "user" : m.role === "system" ? "system" : "assistant") as
-                | "user"
-                | "assistant"
-                | "system",
-              content: messageToAgentHistoryText(m),
-            })),
+            messages: [...messages].reverse().map((m) => {
+              const content = messageToAgentHistoryText(m, groupAuthors?.botNames);
+              const turn = groupAuthors
+                ? groupHistoryTurn(m, content, bot.id, groupAuthors)
+                : {
+                    role: (m.role === "user"
+                      ? "user"
+                      : m.role === "system"
+                        ? "system"
+                        : "assistant") as "user" | "assistant" | "system",
+                    content,
+                  };
+              return {
+                id: m.id,
+                createdAt: m.createdAt?.toISOString(),
+                seq: m.seq,
+                role: turn.role,
+                content: turn.content,
+              };
+            }),
             summary: thread.historyCompactionSummary,
             historyCompactedUpToSeq: thread.historyCompactedUpToSeq,
           },

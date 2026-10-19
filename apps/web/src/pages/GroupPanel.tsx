@@ -372,10 +372,15 @@ export function GroupSettings({
   );
 }
 
+/** A current member's name, else the space bot's (a removed member or a non-member writer). */
 export function memberName(
   members: Group["members"] | undefined,
   botId: string | undefined,
+  bots?: ReadonlyArray<Pick<Bot, "id" | "name">>,
 ): string | undefined {
-  if (!botId || !members) return undefined;
-  return members.find((member) => member.botId === botId)?.name;
+  if (!botId) return undefined;
+  return (
+    members?.find((member) => member.botId === botId)?.name ??
+    bots?.find((bot) => bot.id === botId)?.name
+  );
 }

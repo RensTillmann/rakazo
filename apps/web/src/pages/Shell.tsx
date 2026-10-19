@@ -2110,8 +2110,8 @@ function SpaceShell() {
     };
   });
   const resolveTranscriptMemberName = useCallback(
-    (botId: string | undefined) => memberName(transcriptMembers, botId),
-    [transcriptMembers],
+    (botId: string | undefined) => memberName(transcriptMembers, botId, bots),
+    [transcriptMembers, bots],
   );
   const replyTargetName = activeReplyTarget
     ? activeReplyTarget.role === "user"

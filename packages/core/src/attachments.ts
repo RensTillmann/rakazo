@@ -126,7 +126,11 @@ export function promptTextForAttachments(
   return [caption, ...notes].filter(Boolean).join("\n\n") || "See attached files.";
 }
 
-export function blocksToAgentHistoryText(blocks: MessageBlock[]): string {
+/** `botNames` (id → name) renders handoffs with names; group history passes it. */
+export function blocksToAgentHistoryText(
+  blocks: MessageBlock[],
+  botNames?: ReadonlyMap<string, string>,
+): string {
   return blocks
     .map((block) => {
       if (block.kind === "text") return block.text;
@@ -142,7 +146,9 @@ export function blocksToAgentHistoryText(blocks: MessageBlock[]): string {
       if (block.kind === "bot_message_received") return `[from ${block.fromBotName}] ${block.text}`;
       if (block.kind === "bot_message_sent") return `[to ${block.toBotName}] ${block.text}`;
       if (block.kind === "handoff") {
-        return `[handoff ${block.fromBotId} -> ${block.toBotId}] ${block.text}`;
+        const from = botNames?.get(block.fromBotId) ?? block.fromBotId;
+        const to = botNames?.get(block.toBotId) ?? block.toBotId;
+        return `[handoff ${from} -> ${to}] ${block.text}`;
       }
       // Without the answer a later turn sees the question as still open and asks it again.
       if (block.kind === "ask") {
