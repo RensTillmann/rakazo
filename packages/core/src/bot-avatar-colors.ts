@@ -153,16 +153,16 @@ export function resolvePersonaColorDef(
  * The colour a bot's name takes in message text, readable on each theme. The persona's darker
  * stop sits on light backgrounds (darkened further when it is still pale, as for Staff White);
  * the lighter stop sits on dark ones. `rawColor` is the stored avatar value, shape suffix and all.
+ * A photo or empty avatar has no colour of its own: the persona then follows the bot id, exactly
+ * like the speaker name above its messages.
  */
 export function botMentionTextColors(
   botId: string,
   rawColor?: string | null,
 ): { onLight: string; onDark: string } {
   const color =
-    !rawColor || rawColor.startsWith("data:image/")
-      ? "#F97316"
-      : rawColor.split("::shape_")[0] || "#F97316";
-  const def = resolvePersonaColorDef(botId || color, color);
+    !rawColor || rawColor.startsWith("data:image/") ? undefined : rawColor.split("::shape_")[0];
+  const def = resolvePersonaColorDef(botId || "bot", color || undefined);
   return {
     onLight: isColorBright(def.dark) ? darkenHex(def.dark, 45) : def.dark,
     onDark: def.light,
