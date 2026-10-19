@@ -96,11 +96,20 @@ export function connectorKindFromToolName(toolName: string, connectorKinds: stri
  * `readOnly` is the connector tool's declared effect (for installed APIs, derived from the stored
  * HTTP method and read-only flag). A declared write always needs approval. A declared read never
  * relaxes the name check: the provider chooses both the name and the hint.
+ *
+ * Fleet (`trustDeclaredRead`): an MCP server's `readOnlyHint` comes from a server the owner added
+ * and allowlisted, so a declared read lifts the default-deny for names outside the read-word list
+ * (`memory_recall`). Mutating and compound names still ask whatever the hint says.
  */
-export function connectorToolRequiresApproval(toolName: string, readOnly?: boolean): boolean {
+export function connectorToolRequiresApproval(
+  toolName: string,
+  readOnly?: boolean,
+  trustDeclaredRead = false,
+): boolean {
   if (readOnly === false) return true;
   if (MUTATING_CONNECTOR_PATTERN.test(toolName)) return true;
   if (COMPOUND_CONNECTOR_ACTION_PATTERN.test(toolName)) return true;
+  if (trustDeclaredRead && readOnly === true) return false;
   return !READ_ONLY_CONNECTOR_PATTERN.test(toolName);
 }
 
@@ -132,11 +141,12 @@ export function toolRequiresApproval(
   toolName: string,
   viaConnector: boolean,
   readOnly?: boolean,
+  trustDeclaredRead = false,
 ): boolean {
   if (APPROVAL_EXEMPT_TOOLS.has(toolName)) return false;
   if (toolRequiresExplicitApproval(toolName)) return true;
   if (APPROVAL_REQUIRED_BUILTIN_TOOLS.has(toolName)) return true;
-  if (viaConnector) return connectorToolRequiresApproval(toolName, readOnly);
+  if (viaConnector) return connectorToolRequiresApproval(toolName, readOnly, trustDeclaredRead);
   return false;
 }
 
@@ -160,10 +170,11 @@ export function unattendedTriggerToolRequiresApproval(
   toolName: string,
   viaConnector: boolean,
   readOnly?: boolean,
+  trustDeclaredRead = false,
 ): boolean {
   if (trigger !== "webhook") return false;
   return viaConnector
-    ? connectorToolRequiresApproval(toolName, readOnly)
+    ? connectorToolRequiresApproval(toolName, readOnly, trustDeclaredRead)
     : !UNATTENDED_SAFE_BUILTIN_TOOLS.has(toolName);
 }
 

@@ -1055,6 +1055,33 @@ describe("MCP connector session cache", () => {
     await connector.close();
   });
 
+  it("passes the readOnlyHint annotation through as the tool's declared effect", async () => {
+    const state = {
+      failNext: false,
+      initializations: 0,
+      tools: [
+        { name: "memory_recall", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } },
+        { name: "memory_retain", inputSchema: { type: "object" }, annotations: { readOnlyHint: false } },
+        { name: "echo", inputSchema: { type: "object" } },
+      ],
+    };
+    vi.stubGlobal("fetch", mcpFetch(state));
+    const prisma = { botMcpServer: { findMany: vi.fn().mockResolvedValue([ASSIGNMENT]) } };
+    const connector = new McpConnector(prisma as never, {} as never, { network: TEST_NETWORK });
+    const tools = await connector.discoverTools({
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never);
+    expect(tools.map((tool) => [tool.name, tool.readOnly])).toEqual([
+      ["mcp__demo__memory_recall", true],
+      ["mcp__demo__memory_retain", false],
+      ["mcp__demo__echo", undefined],
+    ]);
+    await connector.close();
+  });
+
   it("does not reuse one session across workspaces", async () => {
     const state = { failNext: false, initializations: 0 };
     vi.stubGlobal("fetch", mcpFetch(state));
