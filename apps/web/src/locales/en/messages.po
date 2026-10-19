@@ -1014,6 +1014,7 @@ msgstr "Can't read images"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-credentials.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -2746,6 +2747,10 @@ msgstr "How often"
 msgid "How to check"
 msgstr "How to check"
 
+#: src/components/AskCard.tsx
+msgid "I'll type it"
+msgstr "I'll type it"
+
 #: src/pages/Shell.tsx
 msgid "I’m done"
 msgstr "I’m done"
@@ -3672,6 +3677,16 @@ msgstr "Open in full window"
 msgid "Open navigation"
 msgstr "Open navigation"
 
+#. placeholder {0}: openAsk.question
+#: src/pages/Shell.tsx
+msgid "Open question: {0} · answer it on the card first"
+msgstr "Open question: {0} · answer it on the card first"
+
+#. placeholder {0}: openAsk.question
+#: src/pages/Shell.tsx
+msgid "Open question: {0} · your message will answer it"
+msgstr "Open question: {0} · your message will answer it"
+
 #: src/components/computer/TerminalApp.tsx
 msgid "Open shell"
 msgstr "Open shell"
@@ -4481,6 +4496,14 @@ msgstr "Send <0>{linkCode}</0> to the line from your chat app within 10 minutes.
 msgid "Send answer"
 msgstr "Send answer"
 
+#: src/pages/Shell.tsx
+msgid "Send as answer"
+msgstr "Send as answer"
+
+#: src/pages/Shell.tsx
+msgid "Send as answer?"
+msgstr "Send as answer?"
+
 #: src/components/AccountAccess.tsx
 msgid "Send deletion code"
 msgstr "Send deletion code"
@@ -4935,6 +4958,10 @@ msgstr "Text"
 msgid "The API did not come back. Refresh this page."
 msgstr "The API did not come back. Refresh this page."
 
+#: src/pages/Shell.tsx
+msgid "the bot"
+msgstr "the bot"
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "The connection timed out."
@@ -4967,6 +4994,10 @@ msgstr "Thinking"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
 msgstr "Thinking: {activeThinkingLabel}"
+
+#: src/pages/Shell.tsx
+msgid "This answers {bot}'s open question: '{question}'."
+msgstr "This answers {bot}'s open question: '{question}'."
 
 #: src/pages/Shell.tsx
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

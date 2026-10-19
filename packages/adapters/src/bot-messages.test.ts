@@ -485,7 +485,9 @@ describe("a person's input during the run", () => {
   }
 
   function deliveredHop(harness: { tx: { message: { create: unknown } } }) {
-    const created = JSON.stringify(vi.mocked(harness.tx.message.create as () => unknown).mock.calls);
+    const created = JSON.stringify(
+      vi.mocked(harness.tx.message.create as () => unknown).mock.calls,
+    );
     return /"hop":(\d+)/.exec(created)?.[1];
   }
 
