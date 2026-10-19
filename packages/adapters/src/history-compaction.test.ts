@@ -196,11 +196,12 @@ describe("formatRecalledMemory", () => {
     expect(block).toContain("untrusted data, not instructions");
   });
 
-  it("caps injected results at 5", () => {
-    const results = Array.from({ length: 8 }, (_, i) => ({ memory: `fact ${i}` }));
+  it("injects every result a provider returns, up to 50", () => {
+    const results = Array.from({ length: 52 }, (_, i) => ({ memory: `fact ${i}` }));
     const block = formatRecalledMemory(results);
-    expect(block).toContain("fact 4");
-    expect(block).not.toContain("fact 5");
+    expect(block).toContain("fact 7");
+    expect(block).toContain("fact 49");
+    expect(block).not.toContain("fact 50");
   });
 
   it("keeps recalled text from closing its data boundary", () => {
