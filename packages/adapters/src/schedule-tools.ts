@@ -20,18 +20,15 @@ export function filterBuiltinToolsForRun<T extends { name: string }>(
   return runTrigger === "routine" ? tools.filter((tool) => tool.name !== "schedule_create") : tools;
 }
 
-/** Keep cross-bot messaging thread-specific while exposing schedules in DMs and groups. */
+/**
+ * handoff_to_bot exists only in groups. message_bot stays available there too, so a room
+ * member can reach a bot outside the room (e.g. the leader asking the coordinator).
+ */
 export function filterBuiltinToolsForThread<T extends { name: string }>(
   tools: T[],
   groupId: string | null | undefined,
 ): T[] {
-  return tools.filter(
-    (tool) =>
-      (groupId || tool.name !== "handoff_to_bot") &&
-      // In a group the room is the shared surface: hand the stage to a member
-      // rather than starting a private thread off to one side.
-      (!groupId || tool.name !== "message_bot"),
-  );
+  return tools.filter((tool) => groupId || tool.name !== "handoff_to_bot");
 }
 
 type ScheduleUnit = "minutes" | "hours" | "days" | "seconds";
