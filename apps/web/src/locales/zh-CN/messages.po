@@ -320,6 +320,10 @@ msgstr ""
 msgid "About spaces"
 msgstr ""
 
+#: src/components/ApprovalDetail.tsx
+msgid "Access"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr ""
@@ -595,6 +599,14 @@ msgstr "始终允许此工具"
 #: src/components/AskCard.tsx
 msgid "Always allowed"
 msgstr "始终允许"
+
+#: src/components/ApprovalDetail.tsx
+msgid "Always asks you (never automatic)"
+msgstr ""
+
+#: src/components/ApprovalDetail.tsx
+msgid "Amount"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "An API key is stored for this provider, not a subscription sign-in."
@@ -1263,6 +1275,7 @@ msgstr ""
 msgid "Coming soon"
 msgstr "即将推出"
 
+#: src/components/ApprovalDetail.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Command"
@@ -2489,6 +2502,10 @@ msgstr "标记变化的字段"
 msgid "Fields to compare, e.g. id, modifiedTime (optional)"
 msgstr "要比较的字段，例如 id, modifiedTime（可选）"
 
+#: src/components/ApprovalDetail.tsx
+msgid "File"
+msgstr ""
+
 #. placeholder {0}: attachmentSizeLabel(getMaxUploadSizeBytes())
 #: src/components/computer/FilesApp.tsx
 msgid "File exceeds the {0} upload limit."
@@ -2883,6 +2900,10 @@ msgstr "浅色"
 msgid "Linear issue"
 msgstr "Linear 工单"
 
+#: src/components/ApprovalDetail.tsx
+msgid "Link"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Link a chat app"
 msgstr "关联聊天应用"
@@ -3113,6 +3134,7 @@ msgstr "提及"
 msgid "Mentions only"
 msgstr ""
 
+#: src/components/ApprovalDetail.tsx
 #: src/pages/Shell.tsx
 msgid "Message"
 msgstr "消息"
@@ -3805,6 +3827,10 @@ msgstr ""
 msgid "Project ID"
 msgstr ""
 
+#: src/components/ApprovalDetail.tsx
+msgid "Prompt"
+msgstr ""
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Protected input"
 msgstr ""
@@ -4248,6 +4274,10 @@ msgstr "正在运行…"
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr ""
 
+#: src/components/ApprovalDetail.tsx
+msgid "Safety check"
+msgstr ""
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/Board.tsx
@@ -4345,6 +4375,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Search by domain"
+msgstr ""
+
+#: src/components/ApprovalDetail.tsx
+msgid "Search for"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -4736,6 +4770,10 @@ msgstr "流式回复"
 msgid "subagent"
 msgstr "子 Agent"
 
+#: src/components/ApprovalDetail.tsx
+msgid "Subject"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Submit"
@@ -4826,6 +4864,10 @@ msgstr "测试登录"
 #: src/components/ModelConnectionPreflightNotice.tsx
 msgid "Testing…"
 msgstr "正在测试…"
+
+#: src/components/ApprovalDetail.tsx
+msgid "Text"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
@@ -4961,11 +5003,14 @@ msgstr "时间"
 msgid "Timezone"
 msgstr ""
 
+#: src/components/ApprovalDetail.tsx
+
 #: src/pages/Board.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "标题"
 
+#: src/components/ApprovalDetail.tsx
 #: src/pages/ActivityList.tsx
 msgid "To"
 msgstr ""
@@ -5337,9 +5382,17 @@ msgstr "何时运行"
 msgid "When to use"
 msgstr "何时使用"
 
+#: src/components/ApprovalDetail.tsx
+msgid "Where"
+msgstr ""
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Bot 应在哪里运行？"
+
+#: src/components/ApprovalDetail.tsx
+msgid "Why"
+msgstr ""
 
 #: src/lib/ticket-status.ts
 msgid "Won't do"
