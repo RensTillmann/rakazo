@@ -674,6 +674,7 @@ export async function createApp(
       context: {
         actor,
         sessionId: session?.sessionId,
+        userAgent: c.req.header("user-agent") ?? undefined,
         signal: c.req.raw.signal,
         // Same user in the same space, so leaving the space also ends a stream.
         // A database failure rejects this check; only a missing membership is unauthorized.

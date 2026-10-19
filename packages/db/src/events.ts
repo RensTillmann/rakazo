@@ -220,6 +220,16 @@ export interface AnswerRunInput {
   clientNonce?: string;
   /** Only for a login card; `answer` carries its password. */
   username?: string;
+  /** Fleet: the API session that answered; stored on the block and the approval effect. */
+  answeredBy?: AskAnsweredBy;
+}
+
+/** Fleet: who answered an ask card. Holds the session id, never the session token. */
+export interface AskAnsweredBy {
+  userId: string;
+  sessionId?: string;
+  userAgent?: string;
+  at: string;
 }
 
 export interface SendUserMessageInput {
@@ -714,6 +724,7 @@ async function syncDuplicateAsks(
         messageId: found.messageId,
         answeredByUserId: input.answeredByUserId,
         answer,
+        ...(input.answeredBy ? { answeredBy: input.answeredBy } : {}),
       },
       undefined,
       source.messageId,
@@ -893,7 +904,11 @@ async function commitAnswerRunInput(
     const allowed = approvalAnswer === "allow" || approvalAnswer === "always";
     await tx.externalEffect.update({
       where: { id: approvalEffect!.id },
-      data: { status: allowed ? "approved" : "denied" },
+      data: {
+        status: allowed ? "approved" : "denied",
+        // Fleet: mirror the decider; a completed tool later replaces `result` with its output.
+        ...(input.answeredBy ? { result: { answeredBy: { ...input.answeredBy } } } : {}),
+      },
     });
     if (input.answer === "always") {
       // A batch tool (Composio's multi-execute) is allowed per action it ran, never as a whole:
@@ -970,6 +985,7 @@ async function commitAnswerRunInput(
           status: "answered" as const,
           answer: recordedAnswer,
           ...(syncedFrom ? { syncedFrom } : {}),
+          ...(input.answeredBy ? { answeredBy: input.answeredBy } : {}),
           ...(editedInstructions !== undefined && pendingAsk.instructionUpdate
             ? {
                 instructionUpdate: { ...pendingAsk.instructionUpdate, after: editedInstructions },

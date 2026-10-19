@@ -594,6 +594,64 @@ describe("thread answer delivery", () => {
     expect(sink.events.some((event) => event.message === "thread answer enqueue")).toBe(true);
     installLogger(createLogger({ service: "rakazo-api", level: "off", sinks: [] }));
   });
+
+  it("records the answering session and user agent, never the session token", async () => {
+    const answerRunInput = vi.fn().mockResolvedValue(true);
+    const prisma = {
+      bot: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "bot-1",
+          thread: { id: "thread-1" },
+          computer: null,
+        }),
+      },
+    } as unknown as PrismaClient;
+    const deps = {
+      prisma,
+      events: { answerRunInput },
+      jobs: { enqueue: vi.fn().mockResolvedValue(undefined) },
+      env: {
+        defaultProvider: "fake",
+        defaultModel: "fake-model",
+        webOrigin: "http://127.0.0.1:5173",
+        screenProxySecret: "fake-test-secret",
+        sandboxProvider: "fake",
+      },
+      dataDir: "/tmp/rakazo-router-test",
+    } as unknown as RouterDeps;
+    const actor = {
+      spaceId: "workspace-1",
+      userId: "user-1",
+      email: "user@rakazo.test",
+      isDeploymentOwner: true,
+    } satisfies Actor;
+    const handler = new RPCHandler(createRouter(deps));
+    const userAgent = `fleet-service (do not delete) ${"x".repeat(200)}`;
+
+    const { response } = await handler.handle(
+      new Request("http://127.0.0.1/rpc/threads/answer", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "better-auth.session_token=fake-session-token",
+        },
+        body: JSON.stringify({
+          json: { botId: "bot-1", runId: "run-1", messageId: "message-1", answer: "allow" },
+        }),
+      }),
+      { prefix: "/rpc", context: { actor, sessionId: "session-1", userAgent } },
+    );
+
+    expect(response.status).toBe(200);
+    const answeredBy = answerRunInput.mock.calls[0]![0].answeredBy;
+    expect(answeredBy).toEqual({
+      userId: "user-1",
+      sessionId: "session-1",
+      userAgent: userAgent.slice(0, 120),
+      at: expect.any(String),
+    });
+    expect(JSON.stringify(answeredBy)).not.toContain("fake-session-token");
+  });
 });
 
 describe("thread stream authorization", () => {

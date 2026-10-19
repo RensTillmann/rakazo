@@ -6,6 +6,7 @@ import { BOT_INSTRUCTIONS_MAX_LENGTH, commandVariableName } from "@rakazo/contra
 import { isApprovalAskBlock, isSecretAskBlock, selectedAskActionLabel } from "@rakazo/core";
 import { Button, Input, Textarea } from "@rakazo/ui-web";
 import { useState } from "react";
+import { answeredByDeviceLabel } from "../lib/answered-by-label";
 import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
 import { ApprovalDetail } from "./ApprovalDetail";
@@ -50,6 +51,25 @@ function secretFieldLabel(purpose: AskBlock["purpose"]): string {
   if (purpose === "password") return t`Password`;
   if (purpose === "api_key") return t`API key`;
   return t`Code`;
+}
+
+/** Fleet: which device answered this card, so a stray tap can be traced. */
+export function AnsweredByLine({
+  answeredBy,
+}: {
+  answeredBy: NonNullable<AskBlock["answeredBy"]>;
+}) {
+  const { t } = useLingui();
+  const device = answeredByDeviceLabel(answeredBy.userAgent);
+  const time = new Date(answeredBy.at).toLocaleString();
+  return (
+    <div
+      data-testid="ask-answered-by"
+      className="mt-1 text-[12px] font-normal text-muted-foreground"
+    >
+      {t`Answered by ${device} · ${time}`}
+    </div>
+  );
 }
 
 export function AskCard({
@@ -219,6 +239,7 @@ export function AskCard({
                 askActions,
                 Boolean(block.syncedFrom),
               )}
+          {block.answeredBy ? <AnsweredByLine answeredBy={block.answeredBy} /> : null}
         </div>
       ) : !canAnswer ? (
         <div className="mt-3.5 text-[13.5px] font-medium text-muted-foreground">
