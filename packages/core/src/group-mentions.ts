@@ -56,6 +56,24 @@ export function resolveGroupTargetBotIds(input: {
   return [...targetIds];
 }
 
+/**
+ * Members a bot names in its group reply, in roster order. Unlike a person's send there is
+ * no first-member fallback, and the author never wakes itself.
+ */
+export function resolveBotMentionedGroupBotIds(input: {
+  text: string;
+  members: GroupMemberRef[];
+  authorBotId: string;
+}): string[] {
+  const everyone = hasMentionToken(input.text, "everyone");
+  return input.members
+    .filter(
+      (member) =>
+        member.id !== input.authorBotId && (everyone || hasMentionToken(input.text, member.name)),
+    )
+    .map((member) => member.id);
+}
+
 export function inferHandoffTargetName(prompt: string): string | undefined {
   const handoffMatch =
     /hand(?:\s+this|\s+off|\s+it)?\s+to\s+@?([A-Za-z0-9][A-Za-z0-9_-]{0,39})/i.exec(prompt) ??

@@ -13,6 +13,9 @@ import { IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import { activeRunSelection, activeRunStatuses, previewFromBlocks } from "./thread-listing.js";
 
+/** Who owns a group. Bot tools act for the run's user without a full session actor. */
+type GroupActor = Pick<Actor, "spaceId" | "userId">;
+
 type GroupRecord = {
   id: string;
   spaceId: string;
@@ -97,7 +100,7 @@ function hasMinimumActiveMembers(members: readonly unknown[]) {
 
 async function assertOwnedBots(
   prisma: PrismaClient,
-  actor: Actor,
+  actor: GroupActor,
   botIds: string[],
 ): Promise<GroupMember[]> {
   const unique = [...new Set(botIds)];
@@ -295,7 +298,7 @@ export function createGroupRepos(prisma: PrismaClient) {
   }
 
   return {
-    async listGroups(actor: Actor, options: { archived?: boolean } = {}): Promise<Group[]> {
+    async listGroups(actor: GroupActor, options: { archived?: boolean } = {}): Promise<Group[]> {
       const groups = await prisma.chatGroup.findMany({
         where: {
           spaceId: actor.spaceId,
@@ -340,7 +343,10 @@ export function createGroupRepos(prisma: PrismaClient) {
       return group;
     },
 
-    async createGroup(actor: Actor, input: { name: string; botIds: string[] }): Promise<Group> {
+    async createGroup(
+      actor: GroupActor,
+      input: { name: string; botIds: string[] },
+    ): Promise<Group> {
       const members = await assertOwnedBots(prisma, actor, input.botIds);
       const created = await prisma.$transaction(async (tx) => {
         await lockSpaceForContentCreation(tx, {
@@ -376,7 +382,7 @@ export function createGroupRepos(prisma: PrismaClient) {
     },
 
     async updateGroup(
-      actor: Actor,
+      actor: GroupActor,
       input: {
         groupId: string;
         name?: string;
@@ -479,7 +485,7 @@ export function createGroupRepos(prisma: PrismaClient) {
       };
     },
 
-    async archiveGroup(actor: Actor, groupId: string) {
+    async archiveGroup(actor: GroupActor, groupId: string) {
       return prisma.$transaction(async (tx) => {
         await lockOwnedGroup(tx, actor, groupId);
         const current = await tx.chatGroup.findFirst({

@@ -73,6 +73,11 @@ export const DELEGATION_TOOL_NAMES = new Set([
   "delete_bot",
   "handoff_to_bot",
   "message_bot",
+  "room_create",
+  "room_update",
+  "room_post",
+  "room_archive",
+  "room_list",
 ]);
 
 const scheduleCreateProperties = {
@@ -1191,6 +1196,71 @@ export const builtinAgentTools: ConnectorTool[] = [
       },
       required: ["message"],
     },
+  },
+  {
+    name: "room_create",
+    description:
+      "Open a room: a group chat for one case or a standing team. List 3 to 6 bots, leader first. The room starts empty; post the brief with room_post.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Room name. For a case room: `Case <n> · <short title>`.",
+        },
+        botIds: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 3,
+          maxItems: 6,
+          description: "Member bot ids, leader first.",
+        },
+        roomKind: { type: "string", enum: ["case", "standing"] },
+        caseNumber: { type: "integer", description: "The case number for a case room." },
+      },
+      required: ["name", "botIds", "roomKind"],
+    },
+  },
+  {
+    name: "room_update",
+    description:
+      "Replace a room's members (add or swap; 3 to 6 bots, leader first). Removed bots' runs in the room are cancelled.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string" },
+        botIds: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 6 },
+      },
+      required: ["roomId", "botIds"],
+    },
+  },
+  {
+    name: "room_post",
+    description:
+      "Post in a room as yourself. Members you @-mention wake; if you name nobody, the leader wakes. A member that is already working in the room gets the post as steering.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string" },
+        text: { type: "string", description: "The message. @Name wakes that member." },
+      },
+      required: ["roomId", "text"],
+    },
+  },
+  {
+    name: "room_archive",
+    description: "Archive a room and stop its runs. Its history stays readable.",
+    inputSchema: {
+      type: "object",
+      properties: { roomId: { type: "string" } },
+      required: ["roomId"],
+    },
+  },
+  {
+    name: "room_list",
+    description:
+      "List open rooms with their members, leader first, and whether each member is busy (its newest active run may be in another chat).",
+    inputSchema: { type: "object", properties: {} },
   },
 ];
 
