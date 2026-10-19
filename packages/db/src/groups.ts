@@ -25,6 +25,7 @@ type GroupRecord = {
   sectionId: string | null;
   archivedAt: Date | null;
   pausedAt: Date | null;
+  notify: boolean;
   createdAt: Date;
   updatedAt: Date;
   thread: {
@@ -72,6 +73,7 @@ function mapGroup(group: GroupRecord): Group {
     sectionId: group.sectionId,
     archivedAt: group.archivedAt?.toISOString() ?? null,
     pausedAt: group.pausedAt?.toISOString() ?? null,
+    notify: group.notify,
     members: mapGroupMembers(group.members),
     threadId: group.thread.id,
     preview,
@@ -392,6 +394,7 @@ export function createGroupRepos(prisma: PrismaClient) {
         expectedBotIds?: string[];
         pinned?: boolean;
         sectionId?: string | null;
+        notify?: boolean;
       },
     ): Promise<{ group: Group; cancelledRunIds: string[] }> {
       const members = input.botIds ? await assertOwnedBots(prisma, actor, input.botIds) : undefined;
@@ -471,6 +474,7 @@ export function createGroupRepos(prisma: PrismaClient) {
             updatedAt: new Date(),
             pinned: input.pinned,
             sectionId: input.sectionId,
+            notify: input.notify,
           },
         });
         return tx.chatGroup

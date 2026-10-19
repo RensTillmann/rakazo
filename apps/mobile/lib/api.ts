@@ -1009,6 +1009,7 @@ export type MobileGroup = Pick<
   | "pinned"
   | "sectionId"
   | "archivedAt"
+  | "notify"
   | "unread"
   | "updatedAt"
   | "members"

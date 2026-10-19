@@ -22,6 +22,21 @@ vi.mock("@rakazo/ui-web", async (importOriginal) => {
     BotAvatar: () => <span />,
     Button: (props: ComponentProps<"button">) => <button {...props} />,
     Input: (props: ComponentProps<"input">) => <input {...props} />,
+    Switch: ({
+      checked,
+      onCheckedChange,
+    }: {
+      checked: boolean;
+      onCheckedChange: (checked: boolean) => void;
+    }) => (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label="Room notifications"
+        onClick={() => onCheckedChange(!checked)}
+      />
+    ),
     AlertDialog: ({
       children,
       onOpenChange,
@@ -118,7 +133,7 @@ const bots = [
 
 async function render(
   options: {
-    onSave?: () => Promise<void>;
+    onSave?: (input: { notify?: boolean }) => Promise<void>;
     onRemove?: () => Promise<void>;
     onResume?: () => Promise<void>;
     group?: Group;
@@ -346,5 +361,19 @@ describe("room brake", () => {
     await render({ onResume, group: { ...group, pausedAt: "2026-10-19T12:00:00.000Z" } });
     await click("Resume room");
     expect(onResume).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("room notifications", () => {
+  it("starts off and saves the switch only when it changed", async () => {
+    const onSave = vi.fn(async (_input: { notify?: boolean }) => undefined);
+    await render({ onSave });
+    expect(button("Room notifications").getAttribute("aria-checked")).toBe("false");
+    await click("Save");
+    expect(onSave.mock.calls[0]?.[0].notify).toBeUndefined();
+    await render({ onSave, instance: "again" });
+    await click("Room notifications");
+    await click("Save");
+    expect(onSave.mock.calls[1]?.[0].notify).toBe(true);
   });
 });

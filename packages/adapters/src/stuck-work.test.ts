@@ -32,7 +32,7 @@ function candidate(status: "queued" | "waiting_input" | "waiting_takeover", hour
     userId: "user-1",
     taskId: "task-1",
     bot: { name: "Ada", notifyOnFinish: true },
-    thread: { groupId: null as string | null },
+    thread: { groupId: null as string | null, group: null as { notify: boolean } | null },
   };
 }
 
@@ -380,6 +380,28 @@ describe("reconcileStuckWork", () => {
       }),
       expect.anything(),
     );
+  });
+
+  it("sends no stopped notice in a muted room, but does in a room with notifications on", async () => {
+    for (const notify of [false, true]) {
+      const run = candidate("queued", 25);
+      run.thread.groupId = "group-1";
+      run.thread.group = { notify };
+      const client = expireClient(run);
+      const { jobs } = publisher();
+      const { provider, send } = notifications();
+
+      await reconcileStuckWork({
+        prisma: client as unknown as PrismaClient,
+        jobs,
+        events: { notify: vi.fn(async () => undefined) } as unknown as ThreadEvents,
+        notifications: provider,
+        now,
+        batchSize: 100,
+      });
+
+      expect(send).toHaveBeenCalledTimes(notify ? 1 : 0);
+    }
   });
 
   it("does not write a status line when the cancel loses the race", async () => {

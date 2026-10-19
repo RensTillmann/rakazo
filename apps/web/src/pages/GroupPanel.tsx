@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { Bot, Group } from "@rakazo/contracts";
 import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN } from "@rakazo/contracts";
-import { BotAvatar, Button, Checkbox, Input } from "@rakazo/ui-web";
+import { BotAvatar, Button, Checkbox, Input, Switch } from "@rakazo/ui-web";
 import { X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { errorText } from "../lib/user-error";
@@ -226,7 +226,7 @@ export function GroupSettings({
 }: {
   group: Group;
   bots: Bot[];
-  onSave: (input: { name?: string; botIds?: string[] }) => Promise<void>;
+  onSave: (input: { name?: string; botIds?: string[]; notify?: boolean }) => Promise<void>;
   /** Lifts the room brake; shown only while the room is paused. */
   onResume?: () => Promise<void>;
   onRemove: () => Promise<void>;
@@ -239,6 +239,7 @@ export function GroupSettings({
   const nameId = useId();
   const [name, setName] = useState(group.name);
   const [selected, setSelected] = useState(group.members.map((member) => member.botId));
+  const [notify, setNotify] = useState(group.notify ?? false);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -279,6 +280,7 @@ export function GroupSettings({
         )
           ? undefined
           : selected,
+        notify: notify !== (group.notify ?? false) ? notify : undefined,
       });
     } catch (cause) {
       setError(errorText(cause, t`Could not save group`));
@@ -345,6 +347,22 @@ export function GroupSettings({
         />
       </label>
       <MemberPicker bots={bots} selected={selected} onChange={setSelected} onOpenBot={onOpenBot} />
+      <div className="mt-5 flex items-center justify-between">
+        <div className="space-y-0.5 pe-4">
+          <div id={`${nameId}-notify-label`} className="text-[13.5px] font-medium text-foreground">
+            <Trans>Notifications for this room</Trans>
+          </div>
+          <div id={`${nameId}-notify-desc`} className="text-[12px] text-muted-foreground/70">
+            <Trans>Questions and takeovers always notify you</Trans>
+          </div>
+        </div>
+        <Switch
+          checked={notify}
+          aria-labelledby={`${nameId}-notify-label`}
+          aria-describedby={`${nameId}-notify-desc`}
+          onCheckedChange={setNotify}
+        />
+      </div>
       <Button
         className="mt-5 w-full"
         disabled={saving || !validSelection(name, selected)}

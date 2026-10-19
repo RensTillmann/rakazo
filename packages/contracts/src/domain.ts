@@ -164,6 +164,8 @@ export const GroupSchema = z.object({
   archivedAt: z.string().nullable(),
   /** Set while the room brake has paused bot-started runs. Optional for older clients. */
   pausedAt: z.string().nullable().optional(),
+  /** Room push for finished runs (help and takeover always push). Optional for older clients. */
+  notify: z.boolean().optional(),
   members: z.array(GroupMemberSchema),
   threadId: Id,
   preview: z.string(),
@@ -193,6 +195,7 @@ export const UpdateGroupInput = z.object({
   expectedBotIds: z.array(Id).max(GROUP_MEMBER_MAX).optional(),
   pinned: z.boolean().optional(),
   sectionId: Id.nullable().optional(),
+  notify: z.boolean().optional(),
 });
 export type UpdateGroupInput = z.infer<typeof UpdateGroupInput>;
 
