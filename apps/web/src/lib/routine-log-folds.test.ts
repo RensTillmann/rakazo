@@ -103,7 +103,11 @@ describe("sidebarBotPreview", () => {
   it("shows the text for ordinary messages or when routine output is shown", () => {
     expect(sidebarBotPreview({ preview: "Here you go." }, false, label)).toBe("Here you go.");
     expect(
-      sidebarBotPreview({ preview: "Tracker: 14 open", previewRoutineName: "Tracker" }, true, label),
+      sidebarBotPreview(
+        { preview: "Tracker: 14 open", previewRoutineName: "Tracker" },
+        true,
+        label,
+      ),
     ).toBe("Tracker: 14 open");
   });
 });

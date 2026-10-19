@@ -289,7 +289,9 @@ export function runBudgetWarningPrompt(
     parts.push(`${usage.modelCalls} of ${limits.maxModelCalls} model calls`);
   }
   if (limits.maxMs > 0) {
-    parts.push(`${formatBudgetMinutes(usage.usedMs)} of ${formatBudgetMinutes(limits.maxMs)} minutes`);
+    parts.push(
+      `${formatBudgetMinutes(usage.usedMs)} of ${formatBudgetMinutes(limits.maxMs)} minutes`,
+    );
   }
   return `Run budget almost used (${parts.join(" / ")}). Save your progress now so the next run can continue: where you are, what is done, the exact next step. Then stop or finish.`;
 }

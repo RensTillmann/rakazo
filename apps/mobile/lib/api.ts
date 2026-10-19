@@ -1442,7 +1442,9 @@ export function applyMobileThreadEvent(
       // the message already carries instead of dropping it out of its call.
       callId: typeof event.payload?.callId === "string" ? event.payload.callId : known?.callId,
       routineLog:
-        typeof event.payload?.routineLog === "string" ? event.payload.routineLog : known?.routineLog,
+        typeof event.payload?.routineLog === "string"
+          ? event.payload.routineLog
+          : known?.routineLog,
       blocks: (event.payload?.blocks as MobileMessage["blocks"]) ?? [],
       botId: event.botId ?? (event.payload?.botId ? String(event.payload.botId) : undefined),
       ...replyMetadata(event.payload ?? {}, known),

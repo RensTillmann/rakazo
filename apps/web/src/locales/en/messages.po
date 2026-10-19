@@ -4302,6 +4302,14 @@ msgstr "Rotate key"
 msgid "Routine"
 msgstr "Routine"
 
+#: src/pages/Shell.tsx
+msgid "Routine log · {routineName}"
+msgstr "Routine log · {routineName}"
+
+#: src/components/RoutineLogRow.tsx
+msgid "Routine log · {routineName} · {time}"
+msgstr "Routine log · {routineName} · {time}"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "Routines"
@@ -4646,6 +4654,10 @@ msgstr "Show password"
 #: src/pages/GroupPanel.tsx
 msgid "Show selected"
 msgstr "Show selected"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Show routine output"
+msgstr "Show routine output"
 
 #: src/pages/Shell.tsx
 msgid "Show settings"

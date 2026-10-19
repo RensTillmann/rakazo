@@ -4301,6 +4301,14 @@ msgstr ""
 msgid "Routine"
 msgstr "Routine"
 
+#: src/pages/Shell.tsx
+msgid "Routine log · {routineName}"
+msgstr ""
+
+#: src/components/RoutineLogRow.tsx
+msgid "Routine log · {routineName} · {time}"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "Routinen"
@@ -4643,6 +4651,9 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Show selected"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Show routine output"
 msgstr ""
 
 #: src/pages/Shell.tsx
