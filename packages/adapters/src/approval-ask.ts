@@ -337,9 +337,7 @@ function plainAction(
   const mcp = /^mcp__(.+?)__(.+)$/.exec(toolName);
   if (mcp) {
     const [, server, tool] = mcp;
-    return (
-      actionFromDescription(toolDescription, tool!) ?? `use ${humanize(tool!)} (${server})`
-    );
+    return actionFromDescription(toolDescription, tool!) ?? `use ${humanize(tool!)} (${server})`;
   }
   if (/^[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+$/.test(toolName)) {
     return connectorAction(toolName.toUpperCase());

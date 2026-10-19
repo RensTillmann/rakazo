@@ -1060,8 +1060,16 @@ describe("MCP connector session cache", () => {
       failNext: false,
       initializations: 0,
       tools: [
-        { name: "memory_recall", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } },
-        { name: "memory_retain", inputSchema: { type: "object" }, annotations: { readOnlyHint: false } },
+        {
+          name: "memory_recall",
+          inputSchema: { type: "object" },
+          annotations: { readOnlyHint: true },
+        },
+        {
+          name: "memory_retain",
+          inputSchema: { type: "object" },
+          annotations: { readOnlyHint: false },
+        },
         { name: "echo", inputSchema: { type: "object" } },
       ],
     };

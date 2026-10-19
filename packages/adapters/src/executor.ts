@@ -92,6 +92,7 @@ import {
   redactSecrets,
   renderBotDirectory,
   resolveActionApprovalDetail,
+  runPushEnabled,
   sandboxCommandTimeoutMs,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
@@ -99,7 +100,6 @@ import {
   unattendedTriggerToolRequiresApproval,
   userTurnMessageForRun,
   withoutThinking,
-  runPushEnabled,
 } from "@rakazo/core";
 import {
   approvalEffectKey,
@@ -122,8 +122,8 @@ import {
   loadRunHistoryMessages,
   parseComputerMode,
   readHistory,
-  recordUsage,
   recordSubscriptionLimitReading,
+  recordUsage,
   reserveInstructionProposal,
   retireModelCredential,
   SpaceLimitError,
@@ -255,18 +255,12 @@ import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { redactConnectorPayload, sanitizeConnectorError } from "./connector-safety.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
-import { groupHistoryTurn, groupMessageBotIds, loadGroupAuthorNames } from "./group-history.js";
 import { handoffToGroupBot, loadGroupContext, wakeMentionedGroupMembers } from "./group-handoff.js";
+import { groupHistoryTurn, groupMessageBotIds, loadGroupAuthorNames } from "./group-history.js";
 import {
-  isRoomToolName,
-  roomArchive,
-  roomCreate,
-  roomList,
-  roomPost,
-  roomResume,
-  roomToolsAllowedForBot,
-  roomUpdate,
-} from "./room-tools.js";
+  HINDSIGHT_PROVIDER_ID,
+  HINDSIGHT_UNAVAILABLE_NOTICE,
+} from "./hindsight-memory-provider.js";
 import {
   COMPACTION_BATCH_SIZE,
   formatCompactedSummary,
@@ -278,10 +272,6 @@ import {
   selectCompactedHistory,
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
-import {
-  HINDSIGHT_PROVIDER_ID,
-  HINDSIGHT_UNAVAILABLE_NOTICE,
-} from "./hindsight-memory-provider.js";
 import {
   assertConnectorToolArgs,
   CATALOG_EXECUTE,
@@ -340,6 +330,16 @@ import { actorMayUsePrivateEndpoint } from "./private-endpoint.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { assertSafeRemoteUrl } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
+import {
+  isRoomToolName,
+  roomArchive,
+  roomCreate,
+  roomList,
+  roomPost,
+  roomResume,
+  roomToolsAllowedForBot,
+  roomUpdate,
+} from "./room-tools.js";
 import {
   commitConsumedRunSecret,
   normalizeSecretAskPurpose,
@@ -4732,7 +4732,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           // Declared effect of the operation this call dispatches (installed API method and
           // flag). Install config is immutable per route resource, so it cannot drift before
           // execute; a catalog call uses the tool it was just resolved to.
-          const declaredTool = viaConnector ? (resolvedTool ?? connectorTools.get(name)) : undefined;
+          const declaredTool = viaConnector
+            ? (resolvedTool ?? connectorTools.get(name))
+            : undefined;
           const declaredReadOnly = declaredTool?.readOnly;
           // Fleet: an MCP server's readOnlyHint (tools/list annotations) is honoured as a read.
           const trustDeclaredRead = declaredTool?.route?.connectorId === "mcp";

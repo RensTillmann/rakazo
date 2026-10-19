@@ -173,12 +173,13 @@ describe("shell rules", () => {
 
   it("ignores other tools, a missing command and an invalid stored regex", () => {
     expect(
-      resolveActionApprovalDetail({ toolName: "write_file", shellCommand: "git push", rules: [ask] })
-        .source,
+      resolveActionApprovalDetail({
+        toolName: "write_file",
+        shellCommand: "git push",
+        rules: [ask],
+      }).source,
     ).toBe("default");
-    expect(resolveActionApprovalDetail({ toolName: "shell", rules: [ask] }).source).toBe(
-      "default",
-    );
+    expect(resolveActionApprovalDetail({ toolName: "shell", rules: [ask] }).source).toBe("default");
     expect(decide("git (push", [{ ...ask, matchValue: "git (push" }]).source).toBe("default");
   });
 
