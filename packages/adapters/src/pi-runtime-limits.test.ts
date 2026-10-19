@@ -128,8 +128,9 @@ describe("clipToolResultText", () => {
   it("bounds oversized tool output for the in-turn transcript", () => {
     const text = "x".repeat(TOOL_RESULT_TEXT_LIMIT + 50);
     const clipped = clipToolResultText(text);
-    expect(clipped.endsWith("…")).toBe(true);
-    expect(clipped.length).toBe(TOOL_RESULT_TEXT_LIMIT + 1);
+    expect(clipped).toBe(
+      `${"x".repeat(TOOL_RESULT_TEXT_LIMIT)}\n[cut off: showed 12,000 of 12,050 characters. Ask a narrower question.]`,
+    );
   });
 });
 
@@ -148,13 +149,9 @@ describe("clipToolResultContent", () => {
     expect(clipped[0]).toEqual({ type: "text", text: first });
     expect(clipped[1]).toEqual(image);
     const overflow = clipped[2] as { type: "text"; text: string };
-    expect(overflow.type).toBe("text");
-    expect(overflow.text.endsWith("…")).toBe(true);
-    expect(overflow.text.startsWith("b")).toBe(true);
-    expect(overflow.text.length).toBe(11);
-    const textChars = clipped
-      .filter((part) => part.type === "text")
-      .reduce((sum, part) => sum + part.text.replace(/…$/, "").length, 0);
-    expect(textChars).toBe(TOOL_RESULT_TEXT_LIMIT);
+    expect(overflow).toEqual({
+      type: "text",
+      text: `${"b".repeat(10)}\n[cut off: showed 12,000 of 12,043 characters. Ask a narrower question.]`,
+    });
   });
 });

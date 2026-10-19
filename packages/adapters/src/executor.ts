@@ -428,6 +428,7 @@ import {
   userProgressClientNonce,
 } from "./user-progress.js";
 import { createWebProvider } from "./web-provider-factory.js";
+import { READ_TOOL_RESULT_TOOL, toolResultOverflowEnabled } from "./tool-result-overflow.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
 
 const READ_ONLY_AGENT_TOOLS = new Set([
@@ -437,6 +438,7 @@ const READ_ONLY_AGENT_TOOLS = new Set([
   "read_history",
   "search_history",
   "request_takeover",
+  "read_tool_result",
   "run_subagent",
   "task_catalog",
   "recall_memory",
@@ -8417,6 +8419,7 @@ export function selectBuiltinToolsForRun(options: {
         (!isBackgroundRunTrigger(options.trigger) &&
           (options.botId === undefined || roomToolsAllowedForBot(options.botId)))) &&
       (options.voiceCall || tool.name !== "end_call") &&
+      (toolResultOverflowEnabled() || tool.name !== READ_TOOL_RESULT_TOOL) &&
       (options.historyRetrievalEnabled ||
         !["search_history", "read_history"].includes(tool.name)) &&
       (!options.messagingChannelRun ||

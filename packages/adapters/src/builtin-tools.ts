@@ -1019,6 +1019,24 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "read_tool_result",
+    description:
+      "Read more of a tool result that was cut off earlier in this run. Use the ref and offset from its cut-off line. Returns up to 12,000 characters.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "The ref from the cut-off line, e.g. r1." },
+        offset: {
+          type: "integer",
+          minimum: 0,
+          description: "Character to start from, as given in the cut-off line.",
+        },
+        length: { type: "integer", minimum: 1, maximum: 12_000 },
+      },
+      required: ["ref", "offset"],
+    },
+  },
+  {
     name: "run_subagent",
     description:
       "Run a short-lived helper inside this turn only. It is not a bot: no list entry, no thread, no computer of its own, and it disappears when this turn ends. Never call this because the user asked to create a bot — that is spawn_bot, and spawn_bot alone.",
