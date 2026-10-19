@@ -228,10 +228,11 @@ import {
   toTicketDto,
   touchGroupUpdatedAt,
 } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import { enrichLogContext, getLogger } from "@rakazo/logging";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
+import { answeredByFromRequest } from "./answered-by.js";
 import {
   ArtifactListCursorError,
   createOwnedArtifact,
@@ -779,6 +780,8 @@ export function createRouter(deps: RouterDeps) {
     actor: Actor | null;
     /** The signed-in session, so a push token ends with the session that registered it. */
     sessionId?: string;
+    /** Fleet: the request's User-Agent, recorded on the ask card it answers. */
+    userAgent?: string;
     signal?: AbortSignal;
     /** Re-runs the request's auth so a long-lived stream notices sign-out and revocation. */
     stillAuthorized?: () => Promise<boolean>;
@@ -2510,6 +2513,11 @@ export function createRouter(deps: RouterDeps) {
       }),
       answer: authed.threads.answer.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+        // Fleet: name the procedure and session on this log line only, to keep logs small.
+        enrichLogContext({
+          "rpc.procedure": "threads/answer",
+          ...(context.sessionId ? { "session.id": context.sessionId } : {}),
+        });
         let syncedRunIds: string[] = [];
         const answered = await deps.events.answerRunInput({
           spaceId: context.actor.spaceId,
@@ -2518,6 +2526,11 @@ export function createRouter(deps: RouterDeps) {
           messageId: input.messageId,
           answeredByUserId: context.actor.userId,
           answer: input.answer,
+          answeredBy: answeredByFromRequest({
+            userId: context.actor.userId,
+            sessionId: context.sessionId,
+            userAgent: context.userAgent,
+          }),
           clientNonce: input.clientNonce,
           username: input.username,
           onSyncedRuns: (runIds) => (syncedRunIds = runIds),
