@@ -97,6 +97,8 @@ export const BotSchema = z.object({
   runErrorId: Id.nullable().default(null),
   computerMode: ComputerModeSchema,
   updatedAt: z.string(),
+  /** Fleet patch: newest message time, null for a chat without messages. Drives roster recency. */
+  lastMessageAt: z.string().nullable().default(null),
   createdAt: z.string(),
   voiceId: z.string().nullable(),
   autoSpeak: z.boolean(),
@@ -235,6 +237,7 @@ export const SpaceBotSchema = BotSchema.pick({
   status: true,
   runErrorId: true,
   updatedAt: true,
+  lastMessageAt: true,
 });
 export type SpaceBot = z.infer<typeof SpaceBotSchema>;
 

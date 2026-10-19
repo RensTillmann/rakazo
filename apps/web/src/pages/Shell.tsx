@@ -1737,9 +1737,9 @@ function SpaceShell() {
             ]
           : [];
     const grouped = sidebarGroupsForSpaces(sidebarSpaces, query);
-    // Fleet patch: active bots (working, waiting for an answer, unread) move to one untitled
-    // top block, newest activity first. The state only changes on real activity changes; it
-    // starts at the first non-empty bot list so already-active bots keep their message times.
+    // Fleet patch: a WhatsApp-style recency block. Every bot with activity (a message, working,
+    // waiting for an answer, unread) sits in one untitled top block, newest activity first, and
+    // stays there. Times come from the server, plus live bumps; unchanged polls keep the state.
     const rosterBots = sidebarSpaces.flatMap((space) => space.bots);
     const activity =
       rosterBots.length > 0
@@ -1752,6 +1752,8 @@ function SpaceShell() {
       grouped,
       activity,
       (item) => (item.kind === "bot" ? item.chat.id : null),
+      // Folders stay visible as drop targets once their last bot moved up, as for any empty folder.
+      (group) => !query && group.sectionId !== null,
     );
     if (ordered.active.length === 0) return ordered.groups;
     const activeGroup: (typeof grouped)[number] = {

@@ -76,8 +76,8 @@ export function spaceInboxItems(
       ),
     };
   });
-  // Fleet patch: active bots (working, waiting for an answer, unread) lead the whole list,
-  // newest activity first; rooms and everything else keep their place.
+  // Fleet patch: a WhatsApp-style recency block. Bots with any activity lead the whole list,
+  // newest activity first, and stay there; rooms and bots without activity keep their place.
   const allGroups = perSpace.flatMap((entry) => entry.groups);
   type InboxGroup = (typeof allGroups)[number];
   const ordered = orderRosterWithActiveFirst<InboxGroup["bots"][number], InboxGroup>(

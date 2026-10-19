@@ -20,6 +20,7 @@ function bot(id = "bot-1"): Bot {
     archivedAt: null,
     unread: false,
     updatedAt: "2026-01-01T00:00:00.000Z",
+    lastMessageAt: null,
     computerMode: "team",
     modelProvider: null,
     modelId: null,

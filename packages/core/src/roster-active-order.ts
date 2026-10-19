@@ -1,9 +1,12 @@
 /**
- * Fleet patch: active bots move to the very top of the roster.
+ * Fleet patch: a WhatsApp-style recency block at the very top of the roster.
  *
- * A bot is active while a run is in progress, it waits for the user's answer, or it has an
- * unread reply. Active bots render in one top block, newest activity first; when a bot is no
- * longer active it returns to its normal place. Rooms never move.
+ * Every bot with any activity renders in one top block, newest activity first, and stays there:
+ * a newer active bot simply goes above it. The activity time is the latest of the bot's newest
+ * message (`lastMessageAt`, from the server, so the order survives reloads and devices) and any
+ * change seen live (starts working, starts waiting for the user, a new unread reply), so a bot
+ * that starts working jumps to the top before its first message lands. Bots without any
+ * activity keep their pinned slot or folder. Rooms never move.
  */
 
 const WORKING_STATUSES: Record<string, true> = { queued: true, leased: true, running: true };
@@ -13,20 +16,22 @@ export type RosterActivityBot = {
   id: string;
   status?: string | null;
   unread?: boolean;
-  /** Time of the newest message; identifies which unread reply is the latest. */
+  /** Row time; used only when the payload predates `lastMessageAt`. */
   updatedAt?: string | null;
+  /** Newest message time, null for a chat without messages. */
+  lastMessageAt?: string | null;
 };
 
 type TrackedActivity = {
   working: boolean;
   waiting: boolean;
-  /** The `updatedAt` of the newest unread reply, null when read. */
+  /** The message time of the newest unread reply, null when read. */
   unreadKey: string | null;
-  /** Activity time in ms: when it started working, asked, or its latest unread reply arrived. */
+  /** Activity time in ms: newest of the server message time and live bumps. */
   at: number;
 };
 
-/** Active bot id -> its tracked activity. Absent ids are inactive. */
+/** Bot id -> its tracked activity. Absent ids have no activity and keep their place. */
 export type RosterActivityState = ReadonlyMap<string, TrackedActivity>;
 
 export function rosterBotIsActive(bot: RosterActivityBot): boolean {
@@ -43,11 +48,12 @@ function parsedTime(value: string | null | undefined): number | null {
 }
 
 /**
- * Advance the activity state from a fresh bot list. The activity time only changes when a bot
- * starts working, starts waiting for an answer, or gets a newer unread reply, so a poll that
- * returns the same states returns the same map (same reference) and the order never flickers.
+ * Advance the activity state from a fresh bot list. A bot's time only moves forward: to a newer
+ * server message time, or to `now` when it starts working, starts waiting for an answer, or gets
+ * a newer unread reply. A poll that returns the same times and states returns the same map
+ * (same reference), so the order never flickers.
  *
- * `previous === null` is the first load: already-active bots take their newest message time.
+ * `previous === null` is the first load: the order comes from the server message times.
  */
 export function trackRosterActivity(
   previous: RosterActivityState | null,
@@ -57,14 +63,20 @@ export function trackRosterActivity(
   const next = new Map<string, TrackedActivity>();
   let changed = previous === null;
   for (const bot of bots) {
-    if (!rosterBotIsActive(bot)) continue;
     const status = bot.status ?? "idle";
     const working = WORKING_STATUSES[status] === true;
     const waiting = WAITING_STATUSES[status] === true;
-    const unreadKey = bot.unread === true ? (bot.updatedAt ?? "") : null;
+    const serverAt = parsedTime(
+      bot.lastMessageAt === undefined ? bot.updatedAt : bot.lastMessageAt,
+    );
+    const unreadKey = bot.unread === true ? (bot.lastMessageAt ?? bot.updatedAt ?? "") : null;
     const before = previous?.get(bot.id);
     if (!before) {
-      const at = previous === null ? (parsedTime(bot.updatedAt) ?? now) : now;
+      const live = working || waiting || unreadKey !== null;
+      if (serverAt === null && !live) continue;
+      // A bot that turns active mid-session jumps to the top now; on first load it takes
+      // its message time so the order equals the order before the reload.
+      const at = previous !== null && live ? Math.max(now, serverAt ?? now) : (serverAt ?? now);
       next.set(bot.id, { working, waiting, unreadKey, at });
       changed = true;
       continue;
@@ -73,15 +85,18 @@ export function trackRosterActivity(
       (working && !before.working) ||
       (waiting && !before.waiting) ||
       (unreadKey !== null && unreadKey !== before.unreadKey);
+    const at = Math.max(before.at, serverAt ?? before.at, bumped ? now : before.at);
     if (
-      bumped ||
+      at !== before.at ||
       working !== before.working ||
       waiting !== before.waiting ||
       unreadKey !== before.unreadKey
     ) {
       changed = true;
+      next.set(bot.id, { working, waiting, unreadKey, at });
+    } else {
+      next.set(bot.id, before);
     }
-    next.set(bot.id, { working, waiting, unreadKey, at: bumped ? now : before.at });
   }
   if (!changed && previous && previous.size !== next.size) changed = true;
   return changed || !previous ? next : previous;
@@ -90,14 +105,16 @@ export function trackRosterActivity(
 type RosterGroupLike<I> = { bots: readonly I[] };
 
 /**
- * Pull active bots out of their pinned slot or folder into one top list, newest activity first
- * (ties keep roster order). Groups emptied only by this move are dropped; everything else,
- * including rooms (items where `botId` returns null), keeps its exact place.
+ * Pull bots with activity out of their pinned slot or folder into one top list, newest activity
+ * first (ties keep roster order). A group emptied by this move is dropped unless `keepEmpty`
+ * says the surface shows that group empty (e.g. a folder that stays a drop target). Everything
+ * else, including rooms (items where `botId` returns null), keeps its exact place.
  */
 export function orderRosterWithActiveFirst<I, G extends RosterGroupLike<I>>(
   groups: readonly G[],
   activity: RosterActivityState,
   botId: (item: I) => string | null,
+  keepEmpty: (group: G) => boolean = () => false,
 ): { active: I[]; groups: G[] } {
   if (activity.size === 0) return { active: [], groups: [...groups] };
   const active: { item: I; at: number; index: number }[] = [];
@@ -111,7 +128,7 @@ export function orderRosterWithActiveFirst<I, G extends RosterGroupLike<I>>(
       else kept.push(item);
     }
     if (kept.length === group.bots.length) rest.push(group);
-    else if (kept.length > 0) rest.push({ ...group, bots: kept });
+    else if (kept.length > 0 || keepEmpty(group)) rest.push({ ...group, bots: kept });
   }
   active.sort((a, b) => b.at - a.at || a.index - b.index);
   return { active: active.map((entry) => entry.item), groups: rest };

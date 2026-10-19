@@ -962,7 +962,7 @@ export type MobileBot = Pick<
   | "autoSpeak"
   | "fleetManagement"
 > &
-  Partial<Pick<Bot, "parentBotId" | "spaceId" | "instructions">>;
+  Partial<Pick<Bot, "parentBotId" | "spaceId" | "instructions" | "lastMessageAt">>;
 
 export type MobileBotSection = BotSection;
 

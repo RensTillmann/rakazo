@@ -89,6 +89,7 @@ function mapBot(
   runErrorId: string | null = null,
   updatedAt: Date = bot.updatedAt,
   incomingCall: Bot["incomingCall"] = null,
+  lastMessageAt: Date | null = null,
 ): Bot {
   if (!bot.thread) {
     throw new IsolationError("Bot is missing its thread");
@@ -117,6 +118,7 @@ function mapBot(
     computerMode: bot.computer ? parseComputerMode(bot.computer.scope) : "team",
     createdAt: bot.createdAt.toISOString(),
     updatedAt: updatedAt.toISOString(),
+    lastMessageAt: lastMessageAt?.toISOString() ?? null,
     voiceId: bot.voiceId ?? null,
     autoSpeak: bot.autoSpeak ?? false,
     modelProvider: bot.modelProvider ? canonicalPiProviderId(bot.modelProvider) : null,
@@ -206,6 +208,7 @@ export function createRepos(
         status: bot.runs[0]?.status ?? "idle",
         runErrorId: rosterRunErrorId(bot.thread.runs[0], bot.runs[0]),
         updatedAt: rosterUpdatedAt(bot.thread.messages[0], bot.updatedAt).toISOString(),
+        lastMessageAt: bot.thread.messages[0]?.createdAt.toISOString() ?? null,
       };
     });
   }
@@ -417,6 +420,7 @@ export function createRepos(
         bots.map(async (bot) => {
           let messages = bot.thread?.messages ?? [];
           const updatedAt = rosterUpdatedAt(messages[0], bot.updatedAt);
+          const lastMessageAt = messages[0]?.createdAt ?? null;
           let preview = "";
           for (let attempt = 0; attempt < 5; attempt++) {
             const windowRunIds = [
@@ -459,6 +463,7 @@ export function createRepos(
                 ? [callsByThread.get(bot.thread.id)!]
                 : [],
             ),
+            lastMessageAt,
           );
         }),
       );
