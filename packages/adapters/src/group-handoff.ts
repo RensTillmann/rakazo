@@ -1,6 +1,7 @@
 import { runContinueJob } from "@rakazo/adapter-kit";
 import { MessageBlock } from "@rakazo/contracts";
 import {
+  ACTIVE_RUN_STATUSES,
   botMessageHopExhausted,
   capRoomWakes,
   nextBotMessageHop,
@@ -13,11 +14,15 @@ import {
   IsolationError,
   lockOwnedGroup,
   type PrismaClient,
+  roomRunAllowedInTransaction,
   touchGroupUpdatedAt,
   wakeGroupMembersInTransaction,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import type { ExecutorDeps } from "./executor.js";
+
+const ROOM_PAUSED_ERROR =
+  "this room reached its daily run budget and is paused; post the result here instead, and use room_resume or ask Rens to resume it";
 
 export async function handoffToGroupBot(
   deps: Pick<ExecutorDeps, "prisma" | "events" | "jobs">,
@@ -71,22 +76,41 @@ export async function handoffToGroupBot(
     const existing = await tx.message.findUnique({
       where: { threadId_clientNonce: { threadId: run.threadId, clientNonce: deliveryKey } },
       select: {
+        id: true,
         sourceRuns: {
           orderBy: { createdAt: "asc" },
           take: 1,
           select: { id: true, botId: true },
         },
+        steeringMessages: { take: 1, select: { botId: true, runId: true } },
       },
     });
     if (existing) {
       const nextRun = existing.sourceRuns[0];
+      const steered = existing.steeringMessages[0];
       const event = await tx.event.findFirst({
         where: { threadId: run.threadId, runId: run.id, type: "group.handoff" },
         orderBy: { seq: "desc" },
         select: { seq: true },
       });
-      if (!nextRun || !event) return { error: "recorded handoff is incomplete" } as const;
-      return { ok: true, botId: nextRun.botId, runId: nextRun.id, eventSeq: event.seq } as const;
+      if (!event) return { error: "recorded handoff is incomplete" } as const;
+      if (nextRun) {
+        return {
+          ok: true,
+          botId: nextRun.botId,
+          runId: nextRun.id,
+          steered: false,
+          eventSeq: event.seq,
+        } as const;
+      }
+      if (!steered) return { error: "recorded handoff is incomplete" } as const;
+      return {
+        ok: true,
+        botId: steered.botId,
+        runId: steered.runId,
+        steered: true,
+        eventSeq: event.seq,
+      } as const;
     }
 
     let targetId = input.bot_id?.trim();
@@ -125,6 +149,23 @@ export async function handoffToGroupBot(
       } as const;
     }
 
+    // Check the brake before posting the handoff: a refused run must not leave a handoff
+    // block behind, and the pause it sets has to commit. A busy target is steered instead.
+    const targetBusy = await tx.run.findFirst({
+      where: {
+        threadId: run.threadId,
+        botId: targetId,
+        status: { in: [...ACTIVE_RUN_STATUSES] },
+      },
+      select: { id: true },
+    });
+    if (
+      !targetBusy &&
+      !(await roomRunAllowedInTransaction(tx, { groupId, threadId: run.threadId }))
+    ) {
+      return { error: ROOM_PAUSED_ERROR } as const;
+    }
+
     const handoffBlock: MessageBlock = {
       kind: "handoff",
       fromBotId: run.botId,
@@ -140,28 +181,16 @@ export async function handoffToGroupBot(
       runId: run.id,
       clientNonce: deliveryKey,
     });
-    const task = await tx.task.create({
-      data: {
-        spaceId: run.spaceId,
-        botId: targetId,
-        threadId: run.threadId,
-        userId: run.userId,
-        prompt: input.message,
-        status: "queued",
-      },
+    const [wake] = await wakeGroupMembersInTransaction(tx, {
+      groupId,
+      spaceId: run.spaceId,
+      userId: run.userId,
+      threadId: run.threadId,
+      messageId: message.id,
+      botIds: [targetId],
+      prompt: input.message,
     });
-    const nextRun = await tx.run.create({
-      data: {
-        spaceId: run.spaceId,
-        botId: targetId,
-        threadId: run.threadId,
-        taskId: task.id,
-        userId: run.userId,
-        status: "queued",
-        trigger: "follow_up",
-        sourceMessageId: message.id,
-      },
-    });
+    if (!wake || wake.paused) return { error: ROOM_PAUSED_ERROR } as const;
     const event = await appendEventInTransaction(tx, {
       spaceId: run.spaceId,
       threadId: run.threadId,
@@ -176,21 +205,31 @@ export async function handoffToGroupBot(
       },
     });
     await touchGroupUpdatedAt(tx, groupId);
-    return { ok: true, botId: targetId, runId: nextRun.id, eventSeq: event.seq } as const;
+    return {
+      ok: true,
+      botId: targetId,
+      runId: wake.runId,
+      steered: wake.steered,
+      eventSeq: event.seq,
+    } as const;
   });
   if ("error" in committed) return committed;
   await deps.events.notify(run.threadId, committed.eventSeq).catch((error) => {
     getLogger().error("group handoff realtime notification", error);
   });
-  await deps.jobs.enqueue(runContinueJob(committed.runId)).catch((error) => {
-    // The queued run is durable and the job reconciler will repair a missed immediate wake.
-    getLogger().error("group handoff enqueue", error);
-  });
+  if (committed.runId && !committed.steered) {
+    await deps.jobs.enqueue(runContinueJob(committed.runId)).catch((error) => {
+      // The queued run is durable and the job reconciler will repair a missed immediate wake.
+      getLogger().error("group handoff enqueue", error);
+    });
+  }
   return {
     ok: true,
     botId: committed.botId,
     runId: committed.runId,
-    note: "Handoff recorded. End this turn without narrating it; the next bot owns the next stage.",
+    note: committed.steered
+      ? "Handoff recorded. The next bot is already working here and got it as steering. End this turn without narrating it."
+      : "Handoff recorded. End this turn without narrating it; the next bot owns the next stage.",
   };
 }
 

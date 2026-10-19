@@ -12,10 +12,15 @@ const run = {
 
 function harness(
   sourceBlocks: unknown,
-  existing?: { sourceRuns: { id: string; botId: string }[] },
+  existing?: {
+    sourceRuns: { id: string; botId: string }[];
+    steeringMessages?: { botId: string; runId: string | null }[];
+  },
+  activeRuns: Array<{ id: string; botId: string; status: string; trigger: string }> = [],
 ) {
   const runCreate = vi.fn(async () => ({ id: "run-b" }));
   const messageCreate = vi.fn(async () => ({ id: "message-1" }));
+  const steeringCreate = vi.fn(async () => ({ id: "steer-1" }));
   const tx = {
     $queryRaw: vi.fn(async () => [{ id: "group-1" }]),
     chatGroup: {
@@ -25,18 +30,29 @@ function harness(
           bot: { id, name: id.toUpperCase() },
         })),
       })),
+      findUnique: vi.fn(async () => ({ pausedAt: null, budgetResetAt: null })),
       update: vi.fn(async () => ({ id: "group-1" })),
     },
     run: {
-      findFirst: vi.fn(async () => ({
-        id: run.id,
-        sourceMessage: { blocks: sourceBlocks },
-      })),
-      findUnique: vi.fn(async () => ({ status: "running" })),
+      // The source-run lookup filters on its id; the busy-target lookup does not.
+      findFirst: vi.fn(async (args: { where: { id?: string; botId: string } }) =>
+        args.where.id
+          ? { id: run.id, sourceMessage: { blocks: sourceBlocks } }
+          : (activeRuns.find((active) => active.botId === args.where.botId) ?? null),
+      ),
+      findMany: vi.fn(async () => activeRuns),
+      // The source run writes the handoff message; the wake replay lookup (by nonce) finds nothing.
+      findUnique: vi.fn(async (args: { where: { id?: string } }) =>
+        args.where.id ? { status: "running", startedAt: null } : null,
+      ),
+      count: vi.fn(async () => 0),
       create: runCreate,
     },
+    steeringMessage: { findFirst: vi.fn(async () => null), create: steeringCreate },
     message: {
-      findUnique: vi.fn(async () => existing ?? null),
+      findUnique: vi.fn(async () =>
+        existing ? { id: "message-0", steeringMessages: [], ...existing } : null,
+      ),
       create: messageCreate,
     },
     thread: {
@@ -61,6 +77,7 @@ function harness(
     },
     messageCreate,
     runCreate,
+    steeringCreate,
   };
 }
 
@@ -153,6 +170,26 @@ describe("group handoff ownership", () => {
       }),
     ).resolves.toEqual({ error: "cannot verify the group handoff chain" });
     expect(runCreate).not.toHaveBeenCalled();
+  });
+
+  it("steers a target that already has an active run in this thread", async () => {
+    const { deps, runCreate, steeringCreate } = harness(
+      [{ kind: "text", text: "user request" }],
+      undefined,
+      [{ id: "run-b1", botId: "bot-b", status: "running", trigger: "follow_up" }],
+    );
+
+    await expect(
+      handoffToGroupBot(deps as never, run, "group-1", {
+        bot_id: "bot-b",
+        message: "Next stage",
+      }),
+    ).resolves.toMatchObject({ ok: true, botId: "bot-b", runId: "run-b1" });
+    expect(runCreate).not.toHaveBeenCalled();
+    expect(steeringCreate).toHaveBeenCalledWith({
+      data: { messageId: "message-1", botId: "bot-b", userId: "user-1", runId: "run-b1" },
+    });
+    expect(deps.jobs.enqueue).not.toHaveBeenCalled();
   });
 });
 
