@@ -133,6 +133,8 @@ export interface AppEnv {
   flagBot: string | undefined;
   /** Menu label for that action; defaults to "Forward to bot…". */
   flagLabel: string | undefined;
+  /** URL with `{n}` that "case 174" in messages links to; unset leaves it as text. */
+  caseLinkUrl: string | undefined;
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
@@ -282,6 +284,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     imageTag: optional(source.RAKAZO_IMAGE_TAG),
     flagBot: optional(source.RAKAZO_FLAG_BOT),
     flagLabel: optional(source.RAKAZO_FLAG_LABEL),
+    caseLinkUrl: parseCaseLinkUrl(source.RAKAZO_CASE_LINK_URL),
   };
 }
 
@@ -327,6 +330,18 @@ function parseExtraOrigins(value: string | undefined): string[] {
       return url.origin;
     });
   return [...new Set(origins)];
+}
+
+/** `RAKAZO_CASE_LINK_URL`: an http(s) URL with `{n}` where the case number goes. */
+function parseCaseLinkUrl(value: string | undefined): string | undefined {
+  const template = optional(value);
+  if (!template) return undefined;
+  const sample = template.replaceAll("{n}", "1");
+  const protocol = URL.canParse(sample) ? new URL(sample).protocol : "";
+  if (!template.includes("{n}") || (protocol !== "http:" && protocol !== "https:")) {
+    throw new Error(`RAKAZO_CASE_LINK_URL: ${template} is not an http(s) URL with {n}`);
+  }
+  return template;
 }
 
 function optional(value: string | undefined): string | undefined {

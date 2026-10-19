@@ -645,6 +645,8 @@ export interface RouterDeps {
     flagBot?: string;
     /** `RAKAZO_FLAG_LABEL`: menu label for flagging a message. */
     flagLabel?: string;
+    /** `RAKAZO_CASE_LINK_URL`: URL with `{n}` that "case 174" in messages links to; unset = off. */
+    caseLinkUrl?: string;
   };
 }
 
@@ -6734,6 +6736,7 @@ async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     ticketBoardEnabled: deps.env.ticketBoardEnabled === true,
     phoneCallsEnabled: deps.env.phoneCallsEnabled === true,
     maxUploadSizeBytes: attachmentMaxBytes(deps.env),
+    caseLinkUrl: deps.env.caseLinkUrl,
     userId: actor.userId,
     email: user.email,
     name: user.name,

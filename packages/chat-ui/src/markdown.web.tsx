@@ -1,5 +1,14 @@
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { createContext, memo, useCallback, useContext, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  Fragment,
+  memo,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { HastNode } from "./table-utils";
@@ -19,6 +28,8 @@ import {
 import { CheckIcon, CopyIcon, GlobeIcon, ImageIcon } from "./icons";
 import type { ChatMarkdownProps, MentionBot } from "./markdown";
 import {
+  CaseLinkContext,
+  caseLinkParts,
   closeUnterminatedFence,
   hasTextSelection,
   inlineMarkdownImageSrc,
@@ -61,35 +72,72 @@ function preserveSkippedTableText() {
   };
 }
 
-const MENTION_TAGS_SKIPPED = new Set(["a", "code", "pre"]);
+const TEXT_MARKS_SKIPPED: Record<string, true> = { a: true, code: true, pre: true };
+
+/** Replace text outside links and code with the nodes `split` returns; null keeps the text. */
+function splitText(tree: HastNode, split: (value: string) => HastNode[] | null) {
+  const walk = (node: HastNode) => {
+    if (!node.children || TEXT_MARKS_SKIPPED[node.tagName ?? ""]) return;
+    node.children = node.children.flatMap((child): HastNode[] => {
+      if (child.type !== "text") {
+        walk(child);
+        return [child];
+      }
+      return split(child.value ?? "") ?? [child];
+    });
+  };
+  walk(tree);
+}
 
 /** Wrap `@Name` mentions of known bots in text outside links and code. */
 function markMentions(bots: readonly MentionBot[]) {
   return (tree: HastNode) => {
     if (bots.length === 0) return;
-    const walk = (node: HastNode) => {
-      if (!node.children || MENTION_TAGS_SKIPPED.has(node.tagName ?? "")) return;
-      node.children = node.children.flatMap((child): HastNode[] => {
-        if (child.type !== "text") {
-          walk(child);
-          return [child];
-        }
-        const parts = mentionParts(child.value ?? "", bots);
-        if (parts.length === 1 && parts[0]?.type === "text") return [child];
-        return parts.map((part) =>
-          part.type === "text"
-            ? { type: "text", value: part.value }
-            : {
-                type: "element",
-                tagName: "span",
-                properties: { dataMentionBot: part.bot.id },
-                children: [{ type: "text", value: part.value }],
-              },
-        );
-      });
-    };
-    walk(tree);
+    splitText(tree, (value) => {
+      const parts = mentionParts(value, bots);
+      if (parts.length === 1 && parts[0]?.type === "text") return null;
+      return parts.map((part) =>
+        part.type === "text"
+          ? { type: "text", value: part.value }
+          : {
+              type: "element",
+              tagName: "span",
+              properties: { dataMentionBot: part.bot.id },
+              children: [{ type: "text", value: part.value }],
+            },
+      );
+    });
   };
+}
+
+/** Link "case 174" in text outside links and code through the deployment's case link. */
+function markCaseLinks(template: string | null) {
+  return (tree: HastNode) => {
+    if (!template) return;
+    splitText(tree, (value) => {
+      const parts = caseLinkParts(value, template);
+      if (parts.length === 1 && parts[0]?.type === "text") return null;
+      return parts.map((part) =>
+        part.type === "text"
+          ? { type: "text", value: part.value }
+          : {
+              type: "element",
+              tagName: "a",
+              properties: { href: part.href, dataCaseLink: "" },
+              children: [{ type: "text", value: part.value }],
+            },
+      );
+    });
+  };
+}
+
+/** A case link opens the tracker in a new tab; the deployment chose the address, so no prompt. */
+function CaseLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer noopener" className="text-link underline">
+      {children}
+    </a>
+  );
 }
 
 export function BotMention({ bot, children }: { bot: MentionBot; children: ReactNode }) {
@@ -144,15 +192,27 @@ function MarkdownSpan({
   return <span {...props}>{children}</span>;
 }
 
+/** Plain text with "case 174" linked and `@Name` mentions coloured. */
 function MentionedText({ children }: { children: string }) {
   const bots = useContext(MentionBotsContext);
-  return mentionParts(children, bots).map((part, index) =>
-    part.type === "text" ? (
-      part.value
+  const caseLink = useContext(CaseLinkContext);
+  return caseLinkParts(children, caseLink).map((casePart, caseIndex) =>
+    casePart.type === "case" ? (
+      <CaseLink key={caseIndex} href={casePart.href}>
+        {casePart.value}
+      </CaseLink>
     ) : (
-      <BotMention key={index} bot={part.bot}>
-        {part.value}
-      </BotMention>
+      <Fragment key={caseIndex}>
+        {mentionParts(casePart.value, bots).map((part, index) =>
+          part.type === "text" ? (
+            part.value
+          ) : (
+            <BotMention key={index} bot={part.bot}>
+              {part.value}
+            </BotMention>
+          ),
+        )}
+      </Fragment>
     ),
   );
 }
@@ -551,9 +611,12 @@ function WebsiteLink({
 function MarkdownAnchor({
   node,
   ...props
-}: React.ComponentPropsWithoutRef<"a"> & { node?: MarkdownHast }) {
+}: React.ComponentPropsWithoutRef<"a"> & { node?: MarkdownHast; "data-case-link"?: string }) {
   const loadRemote = useContext(RemoteImagesContext);
   const href = typeof props.href === "string" ? props.href : "";
+  if (href && props["data-case-link"] !== undefined) {
+    return <CaseLink href={href}>{props.children}</CaseLink>;
+  }
   const image = href ? soleRemoteImage(node) : undefined;
   if (image && !remoteImageRenders(image.href, loadRemote, false)) {
     return <LinkedRemoteImage href={href} image={image} alt={image.alt} title={image.title} />;
@@ -625,9 +688,10 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   const { request, dialog } = useExternalLinkConfirm();
   const source = streaming ? closeUnterminatedFence(children) : children;
   const mentionBots = useContext(MentionBotsContext);
+  const caseLink = useContext(CaseLinkContext);
   const rehypePlugins = useMemo<Options["rehypePlugins"]>(
-    () => [preserveSkippedTableText, [markMentions, mentionBots]],
-    [mentionBots],
+    () => [preserveSkippedTableText, [markMentions, mentionBots], [markCaseLinks, caseLink]],
+    [mentionBots, caseLink],
   );
 
   return (
@@ -662,6 +726,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
 
 export type { ChatMarkdownProps, LinkFavicons, MentionBot, MentionOpenBot } from "./markdown";
 export {
+  CaseLinkContext,
   hasTextSelection,
   LinkFaviconsContext,
   MentionBotsContext,

@@ -12,7 +12,7 @@ import Markdown, {
   MarkdownStream,
 } from "@ronradtke/react-native-markdown-display";
 import type { ComponentType, ReactNode } from "react";
-import { createContext, memo, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, Fragment, memo, useCallback, useContext, useMemo, useState } from "react";
 import type {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -34,6 +34,8 @@ import {
 } from "react-native";
 import type { ChatMarkdownProps, MentionBot } from "./markdown";
 import {
+  CaseLinkContext,
+  caseLinkParts,
   inlineMarkdownImageSrc,
   LinkFaviconsContext,
   LinkFaviconsPausedContext,
@@ -419,33 +421,54 @@ function mentionStyle(bot: MentionBot, scheme: ResolvedAppearance): TextStyle {
   };
 }
 
-/** Text with `@Name` mentions of known bots drawn in each bot's colour. */
+/** Text with "case 174" linked and `@Name` mentions of known bots drawn in each bot's colour. */
 function MentionedText({
   children,
   scheme,
+  linkStyle = { textDecorationLine: "underline" },
 }: {
   children: string;
   scheme?: ResolvedAppearance;
+  linkStyle?: StyleProp<TextStyle>;
 }): ReactNode {
   const bots = useContext(MentionBotsContext);
   const contextScheme = useContext(MentionSchemeContext);
   const open = useContext(MentionOpenBotContext);
-  return mentionParts(children, bots).map((part, index) =>
+  const caseLink = useContext(CaseLinkContext);
+  const mentions = (text: string) =>
+    mentionParts(text, bots).map((part, index) =>
+      part.type === "text" ? (
+        part.value
+      ) : open ? (
+        // A tap opens the bot's chat; a long press still reaches the message's text selection.
+        <Text
+          key={index}
+          style={mentionStyle(part.bot, scheme ?? contextScheme)}
+          accessibilityRole="button"
+          accessibilityLabel={open.label(part.bot.names[0] ?? part.bot.id)}
+          onPress={() => open.onOpenBot(part.bot.id)}
+        >
+          {part.value}
+        </Text>
+      ) : (
+        <Text key={index} style={mentionStyle(part.bot, scheme ?? contextScheme)}>
+          {part.value}
+        </Text>
+      ),
+    );
+  const parts = caseLinkParts(children, caseLink);
+  if (parts.length === 1 && parts[0]?.type === "text") return mentions(children);
+  return parts.map((part, index) =>
     part.type === "text" ? (
-      part.value
-    ) : open ? (
-      // A tap opens the bot's chat; a long press still reaches the message's text selection.
+      <Fragment key={index}>{mentions(part.value)}</Fragment>
+    ) : (
+      // The deployment chose the case link's address, so it opens without a prompt.
       <Text
         key={index}
-        style={mentionStyle(part.bot, scheme ?? contextScheme)}
-        accessibilityRole="button"
-        accessibilityLabel={open.label(part.bot.names[0] ?? part.bot.id)}
-        onPress={() => open.onOpenBot(part.bot.id)}
+        style={linkStyle}
+        accessibilityRole="link"
+        onPress={() => void openSafeLink(part.href)}
       >
-        {part.value}
-      </Text>
-    ) : (
-      <Text key={index} style={mentionStyle(part.bot, scheme ?? contextScheme)}>
         {part.value}
       </Text>
     ),
@@ -809,7 +832,11 @@ const renderRules: RenderRules = {
   ),
   text: (node, _children, parents, styleMap, inherited) => (
     <Text key={node.key} style={textStyleForParents(inherited, parents, styleMap)}>
-      {enclosingLink(parents) ? node.content : <MentionedText>{node.content}</MentionedText>}
+      {enclosingLink(parents) ? (
+        node.content
+      ) : (
+        <MentionedText linkStyle={styleMap.link}>{node.content}</MentionedText>
+      )}
     </Text>
   ),
   table: (node, children, _parent, styleMap) => (
@@ -1078,7 +1105,11 @@ export const LinkifiedText = memo(function LinkifiedText({
       {plainTextLinkParts(children).map((part, index) => {
         if (part.type === "text") {
           return (
-            <MentionedText key={index} scheme={colorScheme}>
+            <MentionedText
+              key={index}
+              scheme={colorScheme}
+              linkStyle={{ color: linkColor, textDecorationLine: "underline" }}
+            >
               {part.value}
             </MentionedText>
           );
@@ -1214,6 +1245,7 @@ const layout = StyleSheet.create({
 
 export type { ChatMarkdownProps, LinkFavicons, MentionBot, MentionOpenBot } from "./markdown";
 export {
+  CaseLinkContext,
   LinkFaviconsContext,
   MentionBotsContext,
   MentionOpenBotContext,

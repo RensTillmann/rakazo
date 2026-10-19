@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { LinkFavicons } from "@rakazo/chat-ui/web";
-import { LinkFaviconsContext, RemoteImagesContext } from "@rakazo/chat-ui/web";
+import { CaseLinkContext, LinkFaviconsContext, RemoteImagesContext } from "@rakazo/chat-ui/web";
 import { LOCAL_SETTINGS_PAGE } from "@rakazo/contracts";
 import { Button, Skeleton } from "@rakazo/ui-web";
 import {
@@ -17,7 +17,11 @@ import { LoadingState } from "./components/ai/primitives";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SubscriptionGate } from "./components/SubscriptionGate";
 import { authClient } from "./lib/auth";
-import { getTicketBoardEnabled, subscribeTicketBoardEnabled } from "./lib/bootstrap";
+import {
+  getCaseLinkUrl,
+  getTicketBoardEnabled,
+  subscribeTicketBoardEnabled,
+} from "./lib/bootstrap";
 import { markAfterPaint, markOnce } from "./lib/performance";
 import { getRemoteImagesEnabled, subscribeRemoteImages } from "./lib/remote-images-preference";
 import { rpc } from "./lib/rpc";
@@ -96,6 +100,8 @@ function SessionApp() {
     getTicketBoardEnabled,
     () => false,
   );
+  // Every bootstrap capability change notifies the same listeners, the case link included.
+  const caseLinkUrl = useSyncExternalStore(subscribeTicketBoardEnabled, getCaseLinkUrl, () => null);
   const session = authClient.useSession();
   const gate = sessionGate(session);
   const [holdingUnreachable, setHoldingUnreachable] = useState(false);
@@ -125,7 +131,7 @@ function SessionApp() {
   }
 
   const user = session.data?.user;
-  return (
+  const routes = (
     <div className="h-full" data-rakazo-app-state="ready">
       <Suspense fallback={<div className="h-full bg-background" />}>
         <Routes>
@@ -184,6 +190,7 @@ function SessionApp() {
       </Suspense>
     </div>
   );
+  return <CaseLinkContext.Provider value={caseLinkUrl}>{routes}</CaseLinkContext.Provider>;
 }
 
 /**

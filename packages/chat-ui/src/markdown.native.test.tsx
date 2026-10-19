@@ -173,6 +173,7 @@ import { createRoot } from "react-dom/client";
 import { Platform, Pressable } from "react-native";
 import type { LinkFavicons, MermaidDiagramProps } from "./markdown.native";
 import {
+  CaseLinkContext,
   ChatMarkdown,
   LinkFaviconsContext,
   LinkifiedText,
@@ -1305,5 +1306,60 @@ describe("native markdown diagrams", () => {
   it("leaves other fences and an empty mermaid fence as code", () => {
     expect(renderWithDiagrams("```ts\nconst a = 1;\n```")).not.toContain("<diagram-probe");
     expect(renderWithDiagrams("```mermaid\n\n```")).not.toContain("<diagram-probe");
+  });
+});
+
+describe("native case links", () => {
+  const template = "https://tracker.example.test/issues/{n}";
+
+  async function render(node: ReactNode) {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    alert.mockClear();
+    linking.openURL.mockClear();
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<CaseLinkContext.Provider value={template}>{node}</CaseLinkContext.Provider>);
+    });
+    const links = [...container.querySelectorAll<HTMLElement>("[data-accessibility-role='link']")];
+    return {
+      container,
+      links,
+      cleanup: async () => {
+        await act(async () => root.unmount());
+      },
+    };
+  }
+
+  it("links case numbers in bot markdown, not in code or an existing link", async () => {
+    const view = await render(
+      <ChatMarkdown>
+        {
+          "**Case 174** and case #12. `case 5` [case 6](https://example.test) #3536 showcase 7\n\n```\ncase 9\n```"
+        }
+      </ChatMarkdown>,
+    );
+    const texts = view.links.map((link) => link.textContent);
+    expect(texts).toContain("Case 174");
+    expect(texts).toContain("case #12");
+    expect(texts.filter((text) => /case (5|9)|#3536|showcase/.test(text ?? ""))).toEqual([]);
+    expect(view.links.filter((link) => link.textContent?.includes("case 6"))).toHaveLength(1);
+
+    await act(async () => view.links.find((link) => link.textContent === "Case 174")?.click());
+    await vi.waitFor(() => {
+      expect(linking.openURL).toHaveBeenCalledWith("https://tracker.example.test/issues/174");
+    });
+    expect(alert).not.toHaveBeenCalled();
+    await view.cleanup();
+  });
+
+  it("links case numbers in a person's plain text", async () => {
+    const view = await render(
+      <LinkifiedText color="#000" linkColor="#00f" palette={darkTokens}>
+        {"see case 175 and `case 6`"}
+      </LinkifiedText>,
+    );
+    expect(view.links.map((link) => link.textContent)).toEqual(["case 175"]);
+    await view.cleanup();
   });
 });

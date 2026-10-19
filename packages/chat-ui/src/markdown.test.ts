@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import {
+  caseLinkHref,
+  caseLinkParts,
   closeUnterminatedFence,
   inlineMarkdownImageSrc,
   linkFaviconOrigin,
@@ -392,5 +394,69 @@ describe("mentionParts", () => {
       { type: "mention", value: "@qUINN", bot: quinn },
       { type: "text", value: "?" },
     ]);
+  });
+});
+
+describe("caseLinkParts", () => {
+  const template = "https://tracker.example.test/issues/{n}";
+  const linked = (text: string) =>
+    caseLinkParts(text, template).filter((part) => part.type === "case");
+
+  it.each([
+    ["case 174", "case 174"],
+    ["Case 174", "Case 174"],
+    ["CASE 174.", "CASE 174"],
+    ["see case #174, then", "case #174"],
+    ["(case 174)", "case 174"],
+  ])("links %j", (text, value) => {
+    expect(linked(text)).toEqual([
+      { type: "case", value, href: "https://tracker.example.test/issues/174" },
+    ]);
+  });
+
+  it.each([
+    "cases 12",
+    "showcase 5",
+    "case_5",
+    "case 174abc",
+    "case 1.5",
+    "#174",
+    "Zendesk #3536",
+    "case\n174",
+    "case",
+    "`case 174`",
+    "``a `case 174` b``",
+  ])("leaves %j as text", (text) => {
+    expect(caseLinkParts(text, template)).toEqual([{ type: "text", value: text }]);
+  });
+
+  it("keeps the text around each link and skips only the code span", () => {
+    expect(caseLinkParts("case 1 `case 2` and Case #3!", template)).toEqual([
+      { type: "case", value: "case 1", href: "https://tracker.example.test/issues/1" },
+      { type: "text", value: " `case 2` and " },
+      { type: "case", value: "Case #3", href: "https://tracker.example.test/issues/3" },
+      { type: "text", value: "!" },
+    ]);
+  });
+
+  it("links after an unclosed backtick", () => {
+    expect(linked("a ` b case 7")).toHaveLength(1);
+  });
+
+  it("leaves text alone without a usable template", () => {
+    for (const value of [
+      null,
+      undefined,
+      "",
+      "https://tracker.example.test/issues",
+      "javascript:{n}",
+    ]) {
+      expect(caseLinkParts("case 174", value)).toEqual([{ type: "text", value: "case 174" }]);
+    }
+  });
+
+  it("builds only http(s) case links", () => {
+    expect(caseLinkHref(template, "9")).toBe("https://tracker.example.test/issues/9");
+    expect(caseLinkHref("mailto:x@example.test?subject={n}", "9")).toBeUndefined();
   });
 });

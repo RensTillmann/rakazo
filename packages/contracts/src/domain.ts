@@ -1439,6 +1439,8 @@ export const MeSchema = z.object({
   maxUploadSizeBytes: z.number().int().positive().optional(),
   ticketBoardEnabled: z.boolean(),
   phoneCallsEnabled: z.boolean().default(false),
+  /** Fleet `RAKAZO_CASE_LINK_URL`: "case 174" in messages links here, `{n}` the number; absent = off. */
+  caseLinkUrl: z.string().optional(),
   userId: Id,
   email: z.string().email(),
   name: z.string(),

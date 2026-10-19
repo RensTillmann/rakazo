@@ -539,3 +539,69 @@ export function mentionParts(text: string, bots: readonly MentionBot[]): Mention
   }
   return parts;
 }
+
+/**
+ * The deployment's case link (`RAKAZO_CASE_LINK_URL`): a URL with `{n}` where the case number
+ * goes. Apps provide it from `me`; null leaves "case 174" as text.
+ */
+export const CaseLinkContext = createContext<string | null>(null);
+
+export type CaseLinkPart =
+  | { type: "text"; value: string }
+  | { type: "case"; value: string; href: string };
+
+const CASE_REFERENCE = /case[^\S\r\n]+#?(\d+)/giu;
+
+/** Code spans in `text` as [start, end) ranges; a run of backticks that never closes is text. */
+function codeSpanRanges(text: string): [number, number][] {
+  const ranges: [number, number][] = [];
+  let index = text.indexOf("`");
+  while (index !== -1) {
+    const end = codeSpanEnd(text, index);
+    if (end !== undefined) {
+      ranges.push([index, end]);
+      index = text.indexOf("`", end);
+      continue;
+    }
+    while (text[index] === "`") index += 1;
+    index = text.indexOf("`", index);
+  }
+  return ranges;
+}
+
+/** The link for case `number`, or undefined when the template is not an http(s) URL with `{n}`. */
+export function caseLinkHref(template: string, number: string): string | undefined {
+  if (!template.includes("{n}")) return undefined;
+  const href = sanitizeMarkdownUrl(template.replaceAll("{n}", number));
+  return href && httpUrl(href) ? href : undefined;
+}
+
+/**
+ * Split message text into literal runs and "case 174" / "Case #174" references linked through
+ * the template. Only the whole word "case" before a number counts: "cases 12", "showcase 5", a
+ * bare "#174" and code spans stay text.
+ */
+export function caseLinkParts(text: string, template: string | null | undefined): CaseLinkPart[] {
+  if (!template || !/case/i.test(text)) return [{ type: "text", value: text }];
+  const code = text.includes("`") ? codeSpanRanges(text) : [];
+  const parts: CaseLinkPart[] = [];
+  let last = 0;
+  for (const match of text.matchAll(CASE_REFERENCE)) {
+    const start = match.index;
+    const end = start + match[0].length;
+    const number = match[1] ?? "";
+    // "case 1.5" is a decimal, not case 1.
+    const decimal = /^[.,]\d/.test(text.slice(end, end + 2));
+    if (isWordChar(text[start - 1]) || isWordChar(text[end]) || decimal) continue;
+    if (code.some(([from, to]) => start >= from && start < to)) continue;
+    const href = caseLinkHref(template, number);
+    if (!href) return [{ type: "text", value: text }];
+    if (start > last) parts.push({ type: "text", value: text.slice(last, start) });
+    parts.push({ type: "case", value: match[0], href });
+    last = end;
+  }
+  if (last < text.length || parts.length === 0) {
+    parts.push({ type: "text", value: text.slice(last) });
+  }
+  return parts;
+}
