@@ -57,8 +57,10 @@ import {
   mentionChipKey,
   nestRosterByParent,
   normalizeRunError,
+  orderRosterWithActiveFirst,
   plainTextFromMarkdown,
   projectMessageReactions,
+  type RosterActivityState,
   reorderBotTo,
   replyAttachment,
   resolveComposerSendPlan,
@@ -69,6 +71,7 @@ import {
   serializeComposerPrompt,
   speechFromBlocks,
   timeSeparatorIds,
+  trackRosterActivity,
   truncateSlashDescription,
   userVisibleMessages,
   withLiveStreamingProgress,
@@ -1599,6 +1602,7 @@ export function ShellPage() {
     };
   }, [activeGroup?.id, groupId, notifyBrowserForEvent]);
 
+  const rosterActivityRef = useRef<RosterActivityState | null>(null);
   const sidebarGroups = useMemo(() => {
     const sidebarSpaces =
       spaces.length > 0
@@ -1620,7 +1624,33 @@ export function ShellPage() {
               },
             ]
           : [];
-    return sidebarGroupsForSpaces(sidebarSpaces, query);
+    const grouped = sidebarGroupsForSpaces(sidebarSpaces, query);
+    // Fleet patch: active bots (working, waiting for an answer, unread) move to one untitled
+    // top block, newest activity first. The state only changes on real activity changes; it
+    // starts at the first non-empty bot list so already-active bots keep their message times.
+    const rosterBots = sidebarSpaces.flatMap((space) => space.bots);
+    const activity =
+      rosterBots.length > 0
+        ? trackRosterActivity(rosterActivityRef.current, rosterBots)
+        : (rosterActivityRef.current ?? new Map());
+    if (rosterBots.length > 0) rosterActivityRef.current = activity;
+    const ordered = orderRosterWithActiveFirst(grouped, activity, (item) =>
+      item.kind === "bot" ? item.chat.id : null,
+    );
+    if (ordered.active.length === 0) return ordered.groups;
+    const activeGroup: (typeof grouped)[number] = {
+      key: "active",
+      title: null,
+      bots: ordered.active,
+      sectionId: null,
+      showLock: false,
+      emptySpaceId: undefined,
+      spaceId: bootstrapMe?.spaceId ?? "",
+      spaceName: "",
+      canRenameSpace: false,
+      canDeleteSpace: false,
+    };
+    return [activeGroup, ...ordered.groups];
   }, [bootstrapMe, botSections, bots, groups, spaces, query]);
 
   const openSpaceChat = useCallback(
