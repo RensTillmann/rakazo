@@ -616,6 +616,14 @@ msgstr "Hay una clave de API guardada para este proveedor, no un inicio de sesi�
 msgid "An integration tool"
 msgstr "Una herramienta de integración"
 
+#: src/lib/answered-by-label.ts
+msgid "Android phone"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "Android tablet"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Answer"
 msgstr "Responder"
@@ -628,6 +636,10 @@ msgstr "Contestar"
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Respondido"
+
+#: src/components/AskCard.tsx
+msgid "Answered by {device} · {time}"
+msgstr ""
 
 #. placeholder {0}: selectedAskActionLabel(answer, actions)
 #: src/components/AskCard.tsx
@@ -2575,6 +2587,9 @@ msgstr "Marcar acciones inesperadas"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Fleet management"
+
+#: src/lib/answered-by-label.ts
+msgid "fleet service"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -2821,6 +2836,14 @@ msgstr "Cantidad del intervalo"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Unidad del intervalo"
+
+#: src/lib/answered-by-label.ts
+msgid "iPad"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "iPhone"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4862,6 +4885,10 @@ msgstr "Probar"
 msgid "Test API key"
 msgstr "Probar clave de API"
 
+#: src/lib/answered-by-label.ts
+msgid "test browser"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "Ejecución de prueba"
@@ -5129,6 +5156,10 @@ msgstr "Deshacer"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "unknown device"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx

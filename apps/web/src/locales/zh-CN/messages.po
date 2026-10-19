@@ -616,6 +616,14 @@ msgstr "此提供方存储的是 API 密钥，不是订阅登录。"
 msgid "An integration tool"
 msgstr "集成工具"
 
+#: src/lib/answered-by-label.ts
+msgid "Android phone"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "Android tablet"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Answer"
 msgstr "回答"
@@ -628,6 +636,10 @@ msgstr ""
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "已回答"
+
+#: src/components/AskCard.tsx
+msgid "Answered by {device} · {time}"
+msgstr ""
 
 #. placeholder {0}: selectedAskActionLabel(answer, actions)
 #: src/components/AskCard.tsx
@@ -2574,6 +2586,9 @@ msgstr "标记异常操作"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Fleet management"
+
+#: src/lib/answered-by-label.ts
+msgid "fleet service"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -2820,6 +2835,14 @@ msgstr "间隔数量"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "间隔单位"
+
+#: src/lib/answered-by-label.ts
+msgid "iPad"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "iPhone"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4860,6 +4883,10 @@ msgstr "测试"
 msgid "Test API key"
 msgstr "测试 API 密钥"
 
+#: src/lib/answered-by-label.ts
+msgid "test browser"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "测试运行"
@@ -5127,6 +5154,10 @@ msgstr "撤销"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
+msgstr ""
+
+#: src/lib/answered-by-label.ts
+msgid "unknown device"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx

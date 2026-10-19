@@ -616,6 +616,14 @@ msgstr "An API key is stored for this provider, not a subscription sign-in."
 msgid "An integration tool"
 msgstr "An integration tool"
 
+#: src/lib/answered-by-label.ts
+msgid "Android phone"
+msgstr "Android phone"
+
+#: src/lib/answered-by-label.ts
+msgid "Android tablet"
+msgstr "Android tablet"
+
 #: src/components/AskCard.tsx
 msgid "Answer"
 msgstr "Answer"
@@ -628,6 +636,10 @@ msgstr "Answer"
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Answered"
+
+#: src/components/AskCard.tsx
+msgid "Answered by {device} · {time}"
+msgstr "Answered by {device} · {time}"
 
 #. placeholder {0}: selectedAskActionLabel(answer, actions)
 #: src/components/AskCard.tsx
@@ -2577,6 +2589,10 @@ msgstr "Flag unexpected actions"
 msgid "Fleet management"
 msgstr "Fleet management"
 
+#: src/lib/answered-by-label.ts
+msgid "fleet service"
+msgstr "fleet service"
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Forgot password?"
@@ -2821,6 +2837,14 @@ msgstr "Interval amount"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Interval unit"
+
+#: src/lib/answered-by-label.ts
+msgid "iPad"
+msgstr "iPad"
+
+#: src/lib/answered-by-label.ts
+msgid "iPhone"
+msgstr "iPhone"
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4863,6 +4887,10 @@ msgstr "Test"
 msgid "Test API key"
 msgstr "Test API key"
 
+#: src/lib/answered-by-label.ts
+msgid "test browser"
+msgstr "test browser"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "Test run"
@@ -5131,6 +5159,10 @@ msgstr "Undo"
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr "Uninstall"
+
+#: src/lib/answered-by-label.ts
+msgid "unknown device"
+msgstr "unknown device"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Unknown tool"

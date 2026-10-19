@@ -39,7 +39,10 @@ describe("loadApprovalTrigger", () => {
 
   it("names a webhook routine and its source, never the payload", async () => {
     const prisma = fakePrisma({
-      message: { blocks: text("Inbound webhook payload: secret stuff"), clientNonce: "github:b1:x" },
+      message: {
+        blocks: text("Inbound webhook payload: secret stuff"),
+        clientNonce: "github:b1:x",
+      },
       routine: { name: "Inbox triage run" },
     });
     const trigger = await loadApprovalTrigger(
@@ -54,7 +57,9 @@ describe("loadApprovalTrigger", () => {
   it("quotes the asking bot", async () => {
     const prisma = fakePrisma({
       message: {
-        blocks: [{ kind: "bot_message_received", fromBotId: "b2", fromBotName: "Jill", text: "Ship it" }],
+        blocks: [
+          { kind: "bot_message_received", fromBotId: "b2", fromBotName: "Jill", text: "Ship it" },
+        ],
       },
     });
     await expect(
