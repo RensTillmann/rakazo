@@ -238,6 +238,7 @@ import {
   readFileAsBase64,
   revokePendingAttachmentPreviews,
 } from "../lib/pending-attachments";
+import { type PeerRoomView, peerRoomView } from "../lib/peer-messages";
 import { markAfterPaint, markOnce } from "../lib/performance";
 import { quoteDraftForSelection } from "../lib/quote-selection";
 import { getResponseStreamingEnabled, subscribeResponseStreaming } from "../lib/response-streaming";
@@ -4065,6 +4066,7 @@ export function ShellPage() {
             }}
             memberName={resolveTranscriptMemberName}
             peerBot={resolveTranscriptBot}
+            threadBotId={activeGroup ? undefined : active?.id}
             onRefresh={refreshActiveThread}
             onBotChanged={refreshBots}
             onAddRoutine={addSkillRoutine}
@@ -5242,6 +5244,7 @@ const Transcript = memo(function Transcript({
   onOpenPeerMessages,
   memberName,
   peerBot,
+  threadBotId,
   onRefresh,
   onBotChanged,
   onAddRoutine,
@@ -5273,6 +5276,8 @@ const Transcript = memo(function Transcript({
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   memberName?: (botId: string | undefined) => string | undefined;
   peerBot: (botId: string) => { name?: string; color: string; status?: string } | undefined;
+  /** The bot whose 1:1 chat this is; peer messages render inline only there. */
+  threadBotId?: string;
   onRefresh: () => Promise<void>;
   onBotChanged: () => Promise<void>;
   onAddRoutine: (name: string, prompt: string) => void;
@@ -5293,6 +5298,17 @@ const Transcript = memo(function Transcript({
     [messages],
   );
   const reactionView = useMemo(() => projectMessageReactions(messages), [messages]);
+  const threadBotName = threadBotId ? peerBot(threadBotId)?.name : undefined;
+  // In a bot's 1:1 chat its bot-to-bot messages read like room messages; display only.
+  const peerRoutes = useMemo(() => {
+    const routes = new Map<string, PeerRoomView>();
+    if (!threadBotId || !threadBotName) return routes;
+    for (const message of messages) {
+      const view = peerRoomView(message, { id: threadBotId, name: threadBotName });
+      if (view) routes.set(message.id, view);
+    }
+    return routes;
+  }, [messages, threadBotId, threadBotName]);
   const separatorIds = timeSeparatorIds(
     reactionView.visibleMessages.filter((message) =>
       messageHasVisibleBlocks(message.blocks, showToolActivity),
@@ -5568,7 +5584,8 @@ const Transcript = memo(function Transcript({
               </div>
             );
           }
-          const message = item.message;
+          const peerRoute = peerRoutes.get(item.message.id);
+          const message = peerRoute?.message ?? item.message;
           if (!messageHasVisibleBlocks(message.blocks, showToolActivity)) return null;
           const peerReceipt = isPeerReceiptBlocks(message.blocks);
           // An automatic wake is stored with the owner's role; it sits on the bot side instead.
@@ -5610,14 +5627,17 @@ const Transcript = memo(function Transcript({
                       onOpenPeerMessages={onOpenPeerMessages}
                       onAnswer={onAnswer}
                       speakerName={
-                        peerReceipt
-                          ? undefined
-                          : message.role === "bot"
-                            ? memberName?.(message.botId)
-                            : undefined
+                        peerRoute
+                          ? peerRoute.speakerName
+                          : peerReceipt
+                            ? undefined
+                            : message.role === "bot"
+                              ? memberName?.(message.botId)
+                              : undefined
                       }
                       memberName={memberName}
                       peerBot={peerBot}
+                      peerRoute={peerRoute}
                       replyParent={
                         message.replyToMessageId
                           ? messageById.get(message.replyToMessageId)
@@ -7027,6 +7047,7 @@ const MessageView = memo(function MessageView({
   speakerName,
   memberName,
   peerBot,
+  peerRoute,
   replyParent,
   onJumpToMessage,
   onRefresh,
@@ -7047,6 +7068,8 @@ const MessageView = memo(function MessageView({
   speakerName?: string;
   memberName?: (botId: string | undefined) => string | undefined;
   peerBot: (botId: string) => { name?: string; color: string; status?: string } | undefined;
+  /** A bot-to-bot message drawn as a room message: who it went to, and its peer chat. */
+  peerRoute?: PeerRoomView;
   replyParent?: ThreadMessage;
   onJumpToMessage?: (messageId: string) => void;
   onRefresh: () => Promise<void>;
@@ -7079,6 +7102,14 @@ const MessageView = memo(function MessageView({
     () => resolvePersonaColorDef(message.botId ?? "bot", speakerBot?.color),
     [message.botId, speakerBot?.color],
   );
+  const peerIntentLabel = (intent: NonNullable<PeerRoomView["intent"]>) =>
+    ({
+      request: t`request`,
+      result: t`result`,
+      question: t`question`,
+      status: t`status`,
+      fyi: t`fyi`,
+    })[intent];
   const messageContext = (
     <>
       {speakerName ? (
@@ -7101,6 +7132,29 @@ const MessageView = memo(function MessageView({
             />
             {speakerName}
           </button>
+          {peerRoute ? (
+            <div
+              data-testid="peer-route"
+              className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted-foreground"
+            >
+              <span dir="auto">
+                → {peerRoute.recipientName}
+                {peerRoute.intent ? ` · ${peerIntentLabel(peerRoute.intent)}` : ""}
+              </span>
+              <button
+                type="button"
+                className="hover:text-foreground hover:underline"
+                onClick={() =>
+                  onOpenPeerMessages({
+                    peerBotId: peerRoute.peerBotId,
+                    peerBotName: peerRoute.peerBotName,
+                  })
+                }
+              >
+                {t`Open conversation`}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <ReplyLine

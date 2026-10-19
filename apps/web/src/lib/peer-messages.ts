@@ -75,3 +75,42 @@ export function peerConversations(messages: readonly ThreadMessage[]): PeerConve
   }
   return [...byPeer.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
+
+export interface PeerRoomView {
+  /** Display copy of the stored message, shaped like the speaker's message in a room. */
+  message: ThreadMessage;
+  speakerName: string;
+  recipientName: string;
+  intent?: PeerBlock["intent"];
+  peerBotId: string;
+  peerBotName: string;
+}
+
+/**
+ * A bot-to-bot message in `threadBot`'s 1:1 chat, recast as the speaker's room message so the
+ * reader sees the exchange inline. Display only; undefined (keep the compact row) without text.
+ */
+export function peerRoomView(
+  message: ThreadMessage,
+  threadBot: { id: string; name: string },
+): PeerRoomView | undefined {
+  if (message.blocks.length !== 1) return undefined;
+  const block = message.blocks[0];
+  if (!block || !isPeerBlock(block) || !block.text.trim()) return undefined;
+  const sent = block.kind === "bot_message_sent";
+  const peerBotId = sent ? block.toBotId : block.fromBotId;
+  const peerBotName = sent ? block.toBotName : block.fromBotName;
+  return {
+    message: {
+      ...message,
+      role: "bot",
+      botId: sent ? threadBot.id : peerBotId,
+      blocks: [{ kind: "text", text: block.text }],
+    },
+    speakerName: sent ? threadBot.name : peerBotName,
+    recipientName: sent ? peerBotName : threadBot.name,
+    intent: block.intent,
+    peerBotId,
+    peerBotName,
+  };
+}
