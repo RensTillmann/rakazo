@@ -254,7 +254,7 @@ import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { redactConnectorPayload, sanitizeConnectorError } from "./connector-safety.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
-import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
+import { handoffToGroupBot, loadGroupContext, wakeMentionedGroupMembers } from "./group-handoff.js";
 import {
   isRoomToolName,
   roomArchive,
@@ -7882,6 +7882,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
               botMessageOutcome.text,
               botMessageOutcome.intent,
             ).catch((error) => getLogger().error("bot message result return", error));
+          }
+          if (thread.groupId && !handedOff && text && !isBackgroundRunTrigger(run.trigger)) {
+            await wakeMentionedGroupMembers(deps, run, thread.groupId, text).catch((error) =>
+              getLogger().error("group mention wake", error),
+            );
           }
           const notifyBody = completionNotificationPreview(text);
           if (

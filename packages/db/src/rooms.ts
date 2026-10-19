@@ -49,14 +49,20 @@ export async function wakeGroupMembersInTransaction(
       const steerable = active.find(
         (run) => STEERABLE_RUN_STATUSES[run.status] === true && isConversationalRun(run.trigger),
       );
-      await tx.steeringMessage.create({
-        data: {
-          messageId: input.messageId,
-          botId,
-          userId: input.userId,
-          runId: steerable?.id ?? null,
-        },
+      const alreadySteered = await tx.steeringMessage.findFirst({
+        where: { messageId: input.messageId, botId },
+        select: { id: true },
       });
+      if (!alreadySteered) {
+        await tx.steeringMessage.create({
+          data: {
+            messageId: input.messageId,
+            botId,
+            userId: input.userId,
+            runId: steerable?.id ?? null,
+          },
+        });
+      }
       wakes.push({ botId, runId: steerable?.id ?? active[0]?.id ?? null, steered: true });
       continue;
     }

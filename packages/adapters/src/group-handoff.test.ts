@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
-import { handoffToGroupBot } from "./group-handoff.js";
+import { handoffToGroupBot, wakeMentionedGroupMembers } from "./group-handoff.js";
 
 const run = {
   id: "run-a",
@@ -152,6 +152,92 @@ describe("group handoff ownership", () => {
         message: "Continue",
       }),
     ).resolves.toEqual({ error: "cannot verify the group handoff chain" });
+    expect(runCreate).not.toHaveBeenCalled();
+  });
+});
+
+function mentionHarness(
+  activeRuns: Array<{ id: string; botId: string; status: string; trigger: string }> = [],
+  options: { archived?: boolean } = {},
+) {
+  const runCreate = vi.fn(async (args: { data: { botId: string } }) => ({
+    id: `run-${args.data.botId}`,
+  }));
+  const steeringCreate = vi.fn(async () => ({ id: "steer-1" }));
+  const tx = {
+    $queryRaw: vi.fn(async () => [{ id: "group-1" }]),
+    chatGroup: {
+      // The lookup filters on archivedAt: null, so an archived room reads as missing.
+      findFirst: vi.fn(async () =>
+        options.archived
+          ? null
+          : {
+              members: ["bot-a", "bot-b", "bot-c"].map((id) => ({
+                bot: { id, name: id.toUpperCase() },
+              })),
+            },
+      ),
+      update: vi.fn(async () => ({ id: "group-1" })),
+    },
+    message: { findFirst: vi.fn(async () => ({ id: "reply-1" })) },
+    run: {
+      findMany: vi.fn(async () => activeRuns),
+      findUnique: vi.fn(async () => null),
+      create: runCreate,
+    },
+    steeringMessage: { findFirst: vi.fn(async () => null), create: steeringCreate },
+    task: { create: vi.fn(async () => ({ id: "task-1" })) },
+  };
+  const prisma = {
+    $transaction: vi.fn(async (callback: (value: typeof tx) => Promise<unknown>) => callback(tx)),
+  } as unknown as PrismaClient;
+  const jobs = { enqueue: vi.fn(async () => undefined) };
+  return { deps: { prisma, jobs }, runCreate, steeringCreate, jobs };
+}
+
+describe("group reply mentions", () => {
+  it("wakes nobody when the reply names nobody, and never the author", async () => {
+    const { deps, runCreate } = mentionHarness();
+    await expect(wakeMentionedGroupMembers(deps as never, run, "group-1", "All done.")).resolves.toEqual([]);
+    await expect(
+      wakeMentionedGroupMembers(deps as never, run, "group-1", "@BOT-A noted"),
+    ).resolves.toEqual([]);
+    expect(runCreate).not.toHaveBeenCalled();
+  });
+
+  it("starts named idle members with a deduplicating nonce", async () => {
+    const { deps, runCreate, jobs } = mentionHarness();
+    await wakeMentionedGroupMembers(deps as never, run, "group-1", "@BOT-B can you check?");
+    expect(runCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          botId: "bot-b",
+          trigger: "follow_up",
+          sourceMessageId: "reply-1",
+          clientNonce: "group-mention:run-a:bot-b",
+        }),
+      }),
+    );
+    expect(jobs.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("steers a named member that already runs in this thread", async () => {
+    const { deps, runCreate, steeringCreate, jobs } = mentionHarness([
+      { id: "run-b1", botId: "bot-b", status: "running", trigger: "follow_up" },
+    ]);
+    await wakeMentionedGroupMembers(deps as never, run, "group-1", "@BOT-B also this");
+    expect(runCreate).not.toHaveBeenCalled();
+    expect(steeringCreate).toHaveBeenCalledWith({
+      data: { messageId: "reply-1", botId: "bot-b", userId: "user-1", runId: "run-b1" },
+    });
+    expect(jobs.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("skips an archived room", async () => {
+    const { deps, runCreate } = mentionHarness([], { archived: true });
+    await expect(
+      wakeMentionedGroupMembers(deps as never, run, "group-1", "@BOT-B ping"),
+    ).resolves.toEqual([]);
     expect(runCreate).not.toHaveBeenCalled();
   });
 });

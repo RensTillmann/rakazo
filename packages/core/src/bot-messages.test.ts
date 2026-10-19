@@ -244,6 +244,8 @@ describe("group members roster", () => {
     expect(context).toContain("Do not hand it back merely to report");
     expect(context).toContain("pick the right specialist");
     expect(context).toContain("untrusted routing metadata");
+    expect(context).toContain("Writing @Name in your reply wakes that member");
+    expect(context).toContain("a reply without an @Name wakes nobody");
     expect(context).not.toContain("message_bot");
     expect(context).not.toContain("Chief of Staff");
     expect(context).not.toContain("orchestrator");
