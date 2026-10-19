@@ -508,6 +508,12 @@ export interface AgentRunRequest {
   allowSilentEmpty?: boolean;
   /** Contextual fallback when a non-silent run produces no written response. */
   emptyResponseText?: string;
+  /**
+   * A run answering a person's own message: when a final reply is only the silent marker
+   * (`NO_RESPONSE`, once or repeated), the runtime gives the model one more turn with this text
+   * as a user message. Never set where a silent finish is allowed.
+   */
+  silentReplyNudge?: string;
   executeTool?: (
     name: string,
     args: Record<string, unknown>,

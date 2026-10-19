@@ -79,6 +79,7 @@ import type { RuntimeContextDecision } from "./runtime-context.js";
 import { createRuntimeContextPolicy, VERBATIM_TOOL_RESULTS } from "./runtime-context.js";
 import type { FinishedShellCommand } from "./shell-command-stream.js";
 import { deliverFinishedShells } from "./shell-command-stream.js";
+import { isExactNoResponse } from "./silent-reply.js";
 import {
   READ_TOOL_RESULT_TOOL,
   toolResultOverflowEnabled,
@@ -696,6 +697,7 @@ export class PiAgentRuntime implements AgentRuntime {
         let toolCalls = 0;
         let toolActivityShowing = false;
         let silentToolContinuations = 0;
+        let silentReplyNudged = false;
         let toolWorkPendingFinal = false;
         // Text streamed before this point is tool-turn narration. Only text after
         // it counts as the final reply, including when the completed message omits it.
@@ -797,6 +799,30 @@ export class PiAgentRuntime implements AgentRuntime {
                   timestamp: Date.now(),
                 });
               }
+            }
+            // A person's own message never gets the silent marker as its answer: one more turn
+            // with the run's nudge. The marker already went out as text; the blank line keeps it
+            // a separate word, so the caller can drop it from the reply that follows.
+            if (
+              request.silentReplyNudge &&
+              !silentReplyNudged &&
+              event.message.role === "assistant" &&
+              !hasToolCalls &&
+              !hasToolResults &&
+              !toolWorkPendingFinal &&
+              !host.pausePending &&
+              !providerFailureText(event.message) &&
+              isExactNoResponse(streamed.slice(streamedBeforePendingFinal) || messageText)
+            ) {
+              silentReplyNudged = true;
+              streamed += "\n\n";
+              queue.push({ type: "text", text: "\n\n" });
+              streamedBeforePendingFinal = streamed.length;
+              agent.followUp({
+                role: "user",
+                content: request.silentReplyNudge,
+                timestamp: Date.now(),
+              });
             }
           }
           if (event.type === "message_end" && event.message.role === "assistant") {

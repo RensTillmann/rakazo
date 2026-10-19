@@ -12,6 +12,7 @@ import {
   NO_RESPONSE,
   ROUTINE_SILENT_REPLY_GUIDANCE,
   runAllowsSilentEmpty,
+  runAnswersPerson,
   runBehaviorTrigger,
   runIdentityInstruction,
   runPromotesMidTurnNarration,
@@ -210,6 +211,20 @@ describe("deliveries that run one routine", () => {
     );
     expect(runBehaviorTrigger({ trigger: "user", routineId: "routine-1" })).toBe("user");
     expect(runBehaviorTrigger({ trigger: "routine", routineId: "routine-1" })).toBe("routine");
+  });
+});
+
+describe("runs answering a person's own message", () => {
+  it("are app sends, their follow-ups and direct messages, nothing automatic", () => {
+    const run = (trigger: string, routineId: string | null = null) => ({ trigger, routineId });
+    expect(runAnswersPerson(run("user"), false)).toBe(true);
+    expect(runAnswersPerson(run("follow_up"), false)).toBe(true);
+    expect(runAnswersPerson(run("messaging"), false)).toBe(true);
+    expect(runAnswersPerson(run("messaging"), true)).toBe(false);
+    expect(runAnswersPerson(run("messaging", "routine-1"), false)).toBe(false);
+    for (const trigger of ["routine", "webhook", "bot_message", "created", "tickets"]) {
+      expect(runAnswersPerson(run(trigger), false)).toBe(false);
+    }
   });
 });
 

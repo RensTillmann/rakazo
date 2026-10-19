@@ -4,7 +4,7 @@ import type * as DbModule from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import type * as BotMessagesModule from "./bot-messages.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
-import { createRunExecutor } from "./executor.js";
+import { createRunExecutor, PERSON_SILENT_REPLY_NUDGE } from "./executor.js";
 
 type Published = { role: string; blocks: MessageBlock[]; clientNonce?: string };
 const published: Published[] = [];
@@ -37,7 +37,13 @@ vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
 const NARRATION = "Label missing; create it.";
 const SECRET = "sk-live-0123456789abcdef";
 
-type HistoryRow = { id: string; seq: number; role: string; blocks: MessageBlock[] };
+type HistoryRow = {
+  id: string;
+  seq: number;
+  role: string;
+  blocks: MessageBlock[];
+  clientNonce?: string;
+};
 
 /**
  * One run whose runtime yields `script` (tool events are executed). User-triggered unless
@@ -64,6 +70,7 @@ function fixture(
     startedAt: new Date(Date.now() - 10 * 60_000),
   };
   const history = (options.history ?? []).map((row) => ({
+    clientNonce: null,
     ...row,
     threadId: run.threadId,
     botId: row.role === "bot" ? run.botId : null,
@@ -441,5 +448,120 @@ describe("model thinking in a run's chat", () => {
     const input = JSON.stringify(f.runtimeRun.mock.calls[0]![0]);
     expect(input).toContain("Urgent and later.");
     expect(input).not.toContain("PRIVATE-REASONING-MARKER");
+  });
+});
+
+describe("a run answering a person's own message", () => {
+  const personSource: MessageBlock[] = [
+    { kind: "text", text: "polisje.nl is a client site. Its mail is client mail." },
+  ];
+  const thread: HistoryRow[] = [
+    {
+      id: "fyi-1",
+      seq: 1,
+      role: "user",
+      clientNonce: "bot-message:fyi-1",
+      blocks: [
+        {
+          kind: "bot_message_received",
+          fromBotId: "bot-2",
+          fromBotName: "Isabella",
+          text: "Josy, case 173 is a bug report.",
+          intent: "fyi",
+        },
+      ],
+    },
+    {
+      id: "wake-1",
+      seq: 2,
+      role: "user",
+      clientNonce: "webhook:bot-1:delivery-1",
+      blocks: [{ kind: "text", text: 'Run routine "Fleet events":\nAct on the event.' }],
+    },
+    { id: "source-1", seq: 3, role: "user", blocks: personSource },
+  ];
+
+  it("marks the person's words, not a teammate's message or a delivered wake", async () => {
+    const f = fixture(
+      [
+        { type: "text", text: "Noted." },
+        { type: "done", text: "Noted." },
+      ],
+      {
+        source: personSource,
+        history: [
+          ...thread.slice(0, 2),
+          { id: "earlier", seq: 0, role: "user", blocks: [{ kind: "text", text: "Hi Josy" }] },
+          thread[2]!,
+        ],
+      },
+    );
+    await f.run();
+
+    const { history, prompt } = f.runtimeRun.mock.calls[0]![0];
+    expect(history.map((turn) => turn.content)).toEqual([
+      "[from the user] Hi Josy",
+      "[from Isabella] Josy, case 173 is a bug report.",
+      'Run routine "Fleet events":\nAct on the event.',
+      "[from the user] polisje.nl is a client site. Its mail is client mail.",
+    ]);
+    expect(prompt.startsWith("[from the user] Tidy labels\n\n")).toBe(true);
+  });
+
+  it("gets the nudge; routines and teammates' fyi do not", async () => {
+    const done: AgentRuntimeEvent[] = [{ type: "done", text: "ok" }];
+    const user = fixture(done, { source: personSource, history: thread });
+    await user.run();
+    expect(user.runtimeRun.mock.calls[0]![0].silentReplyNudge).toBe(PERSON_SILENT_REPLY_NUDGE);
+    expect(PERSON_SILENT_REPLY_NUDGE).toContain("NO_RESPONSE is not allowed here");
+
+    const fyi = fixture(done, { trigger: "bot_message", source: peerMessage("fyi") });
+    await fyi.run();
+    const fyiRequest = fyi.runtimeRun.mock.calls[0]![0];
+    expect(fyiRequest.silentReplyNudge).toBeUndefined();
+    expect(fyiRequest.prompt.startsWith("[from the user]")).toBe(false);
+
+    const routine = fixture(done, { trigger: "routine" });
+    await routine.run();
+    expect(routine.runtimeRun.mock.calls[0]![0].silentReplyNudge).toBeUndefined();
+  });
+
+  it("posts the answer the nudge produced, without the marker", async () => {
+    const f = fixture(
+      [
+        { type: "text", text: "NO_RESPONSE" },
+        { type: "text", text: "\n\n" },
+        { type: "text", text: "Got it: polisje.nl mail is client mail." },
+        { type: "done", text: "NO_RESPONSE\n\nGot it: polisje.nl mail is client mail." },
+      ],
+      { source: personSource, history: thread },
+    );
+    await f.run();
+
+    expect(f.finalBlocks()).toEqual([
+      { kind: "text", text: "Got it: polisje.nl mail is client mail." },
+    ]);
+  });
+
+  it.each([
+    ["once", ["NO_RESPONSE"]],
+    ["repeated around tools and after the nudge", ["NO_RESPONSE", "NO_RESPONSE\n\nNO_RESPONSE"]],
+  ])("never posts the silent marker (%s)", async (_case, texts) => {
+    const script: AgentRuntimeEvent[] = [
+      { type: "thinking", text: "A work card is waiting; stay silent." },
+      { type: "text", text: texts[0]! },
+    ];
+    if (texts[1]) {
+      script.push(
+        { type: "tool", name: "label_create", args: { name: "urgent" }, executionId: "call-1" },
+        { type: "text", text: texts[1] },
+      );
+    }
+    script.push({ type: "done", text: texts.join("") });
+    const f = fixture(script, { source: personSource, history: thread });
+    await f.run();
+
+    expect(f.finalBlocks()).toEqual([]);
+    expect(JSON.stringify(published)).not.toContain("NO_RESPONSE");
   });
 });
