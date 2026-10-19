@@ -138,6 +138,15 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     answer: z.string().optional(),
     /** Fleet: the message whose identical question card supplied this answer. */
     syncedFrom: Id.optional(),
+    /** Fleet: who answered this card through the API. Never holds the session token. */
+    answeredBy: z
+      .object({
+        userId: Id,
+        sessionId: z.string().optional(),
+        userAgent: z.string().max(120).optional(),
+        at: z.string(),
+      })
+      .optional(),
     actions: z
       .array(
         z.object({
