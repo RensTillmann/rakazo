@@ -10,6 +10,8 @@ import {
   parseRateLimitHeaders,
   SubscriptionUsageRefresher,
   subscriptionLimitsEnabled,
+  subscriptionWindow,
+  summarizeThreadUsage,
 } from "./subscription-limits.js";
 
 const NOW = new Date("2026-10-19T10:00:00Z");
@@ -222,30 +224,87 @@ describe("oauth usage endpoint", () => {
     ];
     const fetcher = vi.fn(async () => responses.shift() as Response);
     const refresher = new SubscriptionUsageRefresher({
-      loadToken: async () => "fake-fixture-token",
       fetch: fetcher as typeof fetch,
       now: () => now,
     });
-    expect((await refresher.refresh("user"))?.fiveHourUtil).toBe(0.1);
-    expect(await refresher.refresh("user")).toBeNull();
+    const token = async () => "fake-fixture-token";
+    expect((await refresher.refresh("user", token))?.fiveHourUtil).toBe(0.1);
+    expect(await refresher.refresh("user", token)).toBeNull();
     expect(fetcher).toHaveBeenCalledTimes(1);
     now += 10 * 60_000;
-    expect(await refresher.refresh("user")).toBeNull();
+    expect(await refresher.refresh("user", token)).toBeNull();
     expect(fetcher).toHaveBeenCalledTimes(2);
     now += 10 * 60_000;
-    expect(await refresher.refresh("user")).toBeNull();
+    expect(await refresher.refresh("user", token)).toBeNull();
     expect(fetcher).toHaveBeenCalledTimes(2);
     now += 6 * 60_000;
-    expect((await refresher.refresh("user"))?.fiveHourUtil).toBe(0.2);
+    expect((await refresher.refresh("user", token))?.fiveHourUtil).toBe(0.2);
   });
 
   it("does not call the endpoint without a subscription credential", async () => {
     const fetcher = vi.fn();
     const refresher = new SubscriptionUsageRefresher({
-      loadToken: async () => undefined,
       fetch: fetcher as unknown as typeof fetch,
     });
-    expect(await refresher.refresh("user")).toBeNull();
+    expect(await refresher.refresh("user", async () => undefined)).toBeNull();
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("usage shapes", () => {
+  it("shows 0% once a window's reset passed", () => {
+    const past = new Date(NOW.getTime() - 1000);
+    const future = new Date(NOW.getTime() + 3_600_000);
+    expect(subscriptionWindow(0.93, past, NOW)).toEqual({
+      usedPct: 0,
+      resetsAt: past.toISOString(),
+      reset: true,
+    });
+    expect(subscriptionWindow(0.4234, future, NOW)).toEqual({
+      usedPct: 42.3,
+      resetsAt: future.toISOString(),
+      reset: false,
+    });
+    expect(subscriptionWindow(null, null, NOW)).toEqual({
+      usedPct: null,
+      resetsAt: null,
+      reset: false,
+    });
+  });
+
+  it("sums today's chat usage and sizes the context from the latest call", () => {
+    const row = {
+      provider: "anthropic",
+      model: "fixture",
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 800,
+      cacheWriteTokens: 100,
+      totalTokens: 1050,
+      costUsd: 0.01,
+      runId: "run-1",
+      parentRunId: "run-1",
+      operationKind: "answer",
+    };
+    const second = { ...row, runId: "run-2", parentRunId: "run-2", costUsd: null };
+    const rows = [row, second, { ...row, runId: null }];
+    expect(summarizeThreadUsage(rows, second, () => 10_000)).toEqual({
+      contextTokens: 1000,
+      contextWindow: 10_000,
+      contextPct: 10,
+      cachePctToday: 80,
+      tokensToday: 3150,
+      runsToday: 2,
+      apiEquivalentCostUsdToday: 0.02,
+    });
+    expect(summarizeThreadUsage([], null, () => null)).toEqual({
+      contextTokens: null,
+      contextWindow: null,
+      contextPct: null,
+      cachePctToday: null,
+      tokensToday: 0,
+      runsToday: 0,
+      apiEquivalentCostUsdToday: null,
+    });
   });
 });

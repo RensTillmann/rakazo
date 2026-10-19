@@ -38,6 +38,7 @@ import {
   acquireComputerExecutionLease,
   applyCodexLiveCatalog,
   applyTeachingDesktopInput,
+  ANTHROPIC_OAUTH_PROVIDER,
   archiveBot,
   assertSafeRemoteUrl,
   buildMcpCredentialBlob,
@@ -77,6 +78,7 @@ import {
   listBotSecretMetadata,
   listPiCatalog,
   listScratchpadItems,
+  loadAnthropicSubscriptionToken,
   McpOAuthBroker,
   mapScratchpadItem,
   modelCredentialAuthKindsForSpace,
@@ -112,6 +114,11 @@ import {
   selectDefaultCredentialId,
   serializeModelSecret,
   storeBotSecret,
+  SUBSCRIPTION_READING_STALE_MS,
+  SubscriptionUsageRefresher,
+  subscriptionLimitsEnabled,
+  subscriptionWindow,
+  summarizeThreadUsage,
   takeoverLeaseMs,
   toComputerRef,
   touchRunningComputer,
@@ -192,7 +199,9 @@ import {
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
+  latestSubscriptionLimitReading,
   listBoards,
+  listFleetUsageBars,
   listSpaceBackupModels,
   listTicketComments,
   lockOwnedGroup,
@@ -201,6 +210,7 @@ import {
   Prisma,
   parseComputerMode,
   pushSessionExpiresAt,
+  recordSubscriptionLimitReading,
   releaseSpaceDeletionClaim,
   renameSpaceForMember,
   renewSpaceDeletionClaim,
@@ -565,6 +575,8 @@ export interface RouterDeps {
   oauthLogins: PiOAuthLogins;
   /** Live Codex catalog seam; defaults to the shared per-process cache. */
   codexCatalog?: CodexLiveCatalog;
+  /** Fleet: idle `/api/oauth/usage` refresher (10 min cache, 429 backoff); injectable for tests. */
+  subscriptionUsage?: SubscriptionUsageRefresher;
   /** Site icons for links; defaults to the per-process cache that fetches them. */
   favicons?: FaviconResolver;
   /**
@@ -775,6 +787,7 @@ export function createRouter(deps: RouterDeps) {
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
   const codexCatalog = deps.codexCatalog ?? new CodexCatalogCache();
+  const subscriptionUsage = deps.subscriptionUsage ?? new SubscriptionUsageRefresher();
   const favicons = deps.favicons ?? createFaviconResolver();
   const refreshExpiredCredential =
     deps.refreshExpiredModelCredential ??
@@ -6036,6 +6049,79 @@ export function createRouter(deps: RouterDeps) {
           modelCalls: result._count._all,
           runs,
         };
+      }),
+      limits: authed.usage.limits.handler(async ({ context }) => {
+        if (!subscriptionLimitsEnabled()) return { enabled: false, claude: null, extra: [] };
+        let reading = await latestSubscriptionLimitReading(deps.prisma, ANTHROPIC_OAUTH_PROVIDER);
+        if (!reading || Date.now() - reading.observedAt.getTime() > SUBSCRIPTION_READING_STALE_MS) {
+          // Idle refresh with the user's own subscription credential; the token stays here.
+          const fresh = await subscriptionUsage.refresh(context.actor.userId, () =>
+            loadAnthropicSubscriptionToken(deps.prisma, deps.secrets, {
+              userId: context.actor.userId,
+              spaceId: context.actor.spaceId,
+            }),
+          );
+          if (fresh) {
+            await recordSubscriptionLimitReading(deps.prisma, fresh);
+            reading = fresh;
+          }
+        }
+        const extra = await listFleetUsageBars(deps.prisma);
+        const now = new Date();
+        return {
+          enabled: true,
+          claude: reading
+            ? {
+                fiveHour: subscriptionWindow(reading.fiveHourUtil, reading.fiveHourResetAt, now),
+                sevenDay: subscriptionWindow(reading.sevenDayUtil, reading.sevenDayResetAt, now),
+                status: reading.status,
+                observedAt: reading.observedAt.toISOString(),
+                ageSeconds: Math.max(
+                  0,
+                  Math.round((now.getTime() - reading.observedAt.getTime()) / 1000),
+                ),
+              }
+            : null,
+          extra: extra.map((bar) => ({ ...bar, updatedAt: bar.updatedAt?.toISOString() ?? null })),
+        };
+      }),
+      thread: authed.usage.thread.handler(async ({ context, input }) => {
+        if (input.groupId) await groupRepos.getGroup(context.actor, input.groupId);
+        else if (input.botId) await repos.getBot(context.actor, input.botId);
+        const thread = input.groupId ? { groupId: input.groupId } : { botId: input.botId };
+        const dayStart = input.dayStart ? new Date(input.dayStart) : new Date();
+        if (!input.dayStart) dayStart.setHours(0, 0, 0, 0);
+        const where = {
+          spaceId: context.actor.spaceId,
+          userId: context.actor.userId,
+          run: { thread },
+        };
+        const select = {
+          provider: true,
+          model: true,
+          inputTokens: true,
+          outputTokens: true,
+          cacheReadTokens: true,
+          cacheWriteTokens: true,
+          totalTokens: true,
+          costUsd: true,
+          runId: true,
+          parentRunId: true,
+          operationKind: true,
+        } as const;
+        const [today, latest] = await Promise.all([
+          deps.prisma.usageRecord.findMany({
+            where: { ...where, createdAt: { gte: dayStart } },
+            select,
+          }),
+          deps.prisma.usageRecord.findFirst({
+            // The conversation's own context, not a subagent's or a compaction pass.
+            where: { ...where, operationKind: { in: ["answer", "retrieval"] } },
+            orderBy: { createdAt: "desc" },
+            select,
+          }),
+        ]);
+        return summarizeThreadUsage(today, latest);
       }),
     },
     export: {
