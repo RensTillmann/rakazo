@@ -87,7 +87,11 @@ describe("run activity events (Live activity window)", () => {
       }),
     );
     expect(result.runId).toBe("run-1");
-    expect(result.runs[0]).toMatchObject({ runId: "run-1", botName: "Mail bot", trigger: "routine" });
+    expect(result.runs[0]).toMatchObject({
+      runId: "run-1",
+      botName: "Mail bot",
+      trigger: "routine",
+    });
     expect(result.events.map((item) => item.seq)).toEqual([4, 5]);
     expect(result.nextAfterSeq).toBe(5);
   });

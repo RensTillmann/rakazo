@@ -61,7 +61,9 @@ describe("renderActivityLines", () => {
       "thread.message.created",
       {
         messageId: "m2",
-        blocks: [{ kind: "bot_message_sent", toBotId: "bot-2", toBotName: "Planner", text: "Done" }],
+        blocks: [
+          { kind: "bot_message_sent", toBotId: "bot-2", toBotName: "Planner", text: "Done" },
+        ],
       },
       8,
     ),
@@ -115,9 +117,7 @@ describe("renderActivityLines", () => {
   });
 
   it("shows a running tool until its completion arrives and reports the status bar", () => {
-    const running = [
-      event("agent.tool.called", { name: "web_search", executionId: "call-9" }, 0),
-    ];
+    const running = [event("agent.tool.called", { name: "web_search", executionId: "call-9" }, 0)];
     expect(plain(renderActivityLines(running, null))).toEqual(["● web_search()", "  ⎿ running…"]);
     expect(activityStatusLine(events)).toBe("1 steps · 2 model calls · 1m 10s");
   });
