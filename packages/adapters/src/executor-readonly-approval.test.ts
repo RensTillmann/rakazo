@@ -598,6 +598,81 @@ describe("connector read-only metadata and approval enforcement", () => {
     });
   });
 
+  describe("RAKAZO_APPROVAL_EVERY_RUN", () => {
+    const previous = process.env.RAKAZO_APPROVAL_EVERY_RUN;
+    afterEach(() => {
+      if (previous === undefined) delete process.env.RAKAZO_APPROVAL_EVERY_RUN;
+      else process.env.RAKAZO_APPROVAL_EVERY_RUN = previous;
+    });
+    const triggers = ["user", "routine", "bot_message", "follow_up", "messaging", "group"];
+
+    it.each(triggers)("leaves a %s-run write unasked with the flag off", async (trigger) => {
+      delete process.env.RAKAZO_APPROVAL_EVERY_RUN;
+      const f = fixture({ name: "demo_send_message", readOnly: false, trigger });
+      await f.run();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(f.execute).toHaveBeenCalledOnce();
+    });
+
+    it.each(triggers)(
+      "asks for a %s-run write with the flag on, without Auto Review",
+      async (trigger) => {
+        process.env.RAKAZO_APPROVAL_EVERY_RUN = "true";
+        const f = fixture({
+          name: "demo_send_message",
+          readOnly: false,
+          trigger,
+          autoReview: true,
+        });
+        await f.run();
+        expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+        expect(f.execute).not.toHaveBeenCalled();
+        expect(isApprovalPausedResult(f.results[0])).toBe(true);
+        expect(reviewMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(triggers)(
+      "runs a %s-run write the owner always-allowed with the flag on",
+      async (trigger) => {
+        process.env.RAKAZO_APPROVAL_EVERY_RUN = "true";
+        const f = fixture({
+          name: "demo_send_message",
+          readOnly: false,
+          trigger,
+          rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "demo_send_message" }],
+        });
+        await f.run();
+        expect(f.pauseRunForInput).not.toHaveBeenCalled();
+        expect(f.execute).toHaveBeenCalledOnce();
+      },
+    );
+
+    it("still lets ordinary reads and exempt built-ins run unasked", async () => {
+      process.env.RAKAZO_APPROVAL_EVERY_RUN = "true";
+      const read = fixture();
+      await read.run();
+      expect(read.pauseRunForInput).not.toHaveBeenCalled();
+      expect(read.execute).toHaveBeenCalledOnce();
+      const shell = fixture({ name: "shell", builtin: true });
+      await shell.run();
+      expect(shell.pauseRunForInput).not.toHaveBeenCalled();
+    });
+
+    it("keeps webhook runs forced to ask despite an allow rule", async () => {
+      process.env.RAKAZO_APPROVAL_EVERY_RUN = "true";
+      const f = fixture({
+        name: "demo_send_message",
+        readOnly: false,
+        trigger: "webhook",
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "demo_send_message" }],
+      });
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      expect(f.execute).not.toHaveBeenCalled();
+    });
+  });
+
   it("writes shared memory directly, including when an always-allow rule exists", async () => {
     const args = { path: " MEMORY.md ", content: "Printing: all print jobs go to Clyde." };
     const f = fixture({

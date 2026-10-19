@@ -170,6 +170,7 @@ import {
   uncertainEffectResult,
 } from "./approval-effect.js";
 import {
+  approvalEveryRun,
   autoReviewTimeoutMs,
   deploymentAutoReviewDefault,
   isAutoReviewCheckerConfigured,
@@ -4702,6 +4703,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const requiresApprovalByDefault = approvalTargets.some((target) => target.consequential);
           // RAKAZO_WEBHOOK_HONORS_RULES: the owner's rules also decide webhook-run side effects.
           const webhookRules = requiresUnattendedApproval && webhookRunsHonorRules();
+          // RAKAZO_APPROVAL_EVERY_RUN (fleet): any other run's consequential action asks unless an
+          // always_allow rule matches, the same rules-only decision webhook runs get.
+          const everyRunRules =
+            run.trigger !== "webhook" && requiresApprovalByDefault && approvalEveryRun();
+          const ownerRulesOnly = webhookRules || everyRunRules;
           const requiresMandatoryApproval =
             (requiresUnattendedApproval && !webhookRules) || toolRequiresExplicitApproval(name);
           const pluginProviders = connectedPlugins.map((plugin) => plugin.provider);
@@ -4730,8 +4736,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   readOnly: declaredReadOnly,
                   rules: approvalRules,
                 });
-          // Auto Review never decides a webhook-run side effect: only a card or the owner's rule.
-          const reviewAllowed = !requiresMandatoryApproval && !webhookRules;
+          // Auto Review never decides a rules-only side effect: only a card or the owner's rule.
+          const reviewAllowed = !requiresMandatoryApproval && !ownerRulesOnly;
           const autoReviewPref = reviewAllowed ? await loadAutoReviewPreference() : false;
           const injectedReview = reviewAllowed ? deps.autoReview : undefined;
           const checker = reviewAllowed ? resolveAutoReviewChecker() : undefined;
@@ -4750,7 +4756,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 : false));
           const plan = requiresMandatoryApproval
             ? "ask"
-            : webhookRules
+            : ownerRulesOnly
               ? approvalResolved.source === "always_allow" && approvalResolved.decision === "allow"
                 ? "allow"
                 : "ask"

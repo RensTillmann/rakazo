@@ -64,6 +64,15 @@ export function webhookRunsHonorRules(env: NodeJS.ProcessEnv = process.env): boo
   return envFlag(env, "RAKAZO_WEBHOOK_HONORS_RULES");
 }
 
+/**
+ * RAKAZO_APPROVAL_EVERY_RUN (fleet): with it on, a consequential action in any non-webhook run
+ * (user, routine, bot_message, follow_up, messaging, group) asks unless an `always_allow` rule
+ * matches; Auto Review stays out of it, as in webhook runs. Off (default): upstream behaviour.
+ */
+export function approvalEveryRun(env: NodeJS.ProcessEnv = process.env): boolean {
+  return envFlag(env, "RAKAZO_APPROVAL_EVERY_RUN");
+}
+
 export function autoReviewTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.RAKAZO_AUTO_REVIEW_TIMEOUT_MS?.trim();
   if (!raw) return DEFAULT_TIMEOUT_MS;
