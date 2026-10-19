@@ -1,5 +1,6 @@
 import type { MenuAction } from "@expo/ui/community/menu";
 import {
+  CaseLinkContext,
   ChatMarkdown,
   type MentionBot,
   MentionBotsContext,
@@ -555,12 +556,16 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   }, [streamResponses]);
   const activeThreadId = useRef<string | undefined>(undefined);
   const [agentSkills, setAgentSkills] = useState<AgentSkillCatalogEntry[]>([]);
-  const [uploadConfig, setUploadConfig] = useState<{ maxUploadSizeBytes?: number }>();
+  // Server settings from `me`: the upload limit and the case link (`RAKAZO_CASE_LINK_URL`).
+  const [serverConfig, setServerConfig] = useState<{
+    maxUploadSizeBytes?: number;
+    caseLinkUrl?: string;
+  }>();
   useEffect(() => {
     let cancelled = false;
-    void rpc<{ maxUploadSizeBytes?: number }>("me")
+    void rpc<{ maxUploadSizeBytes?: number; caseLinkUrl?: string }>("me")
       .then((me) => {
-        if (!cancelled) setUploadConfig(me);
+        if (!cancelled) setServerConfig(me);
       })
       .catch(() => undefined);
     return () => {
@@ -1913,7 +1918,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   ) {
     const targetKey = groupId ?? botId;
     if (!targetKey) return;
-    const result = await picker(activePendingAttachments.length, attachmentMaxBytes(uploadConfig));
+    const result = await picker(activePendingAttachments.length, attachmentMaxBytes(serverConfig));
     if ((groupId ?? botId) !== targetKey) return;
     if (result.attachments.length) {
       setPendingAttachments((current) => [
@@ -2310,7 +2315,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     />
   ));
 
-  return (
+  const thread = (
     <MentionBotsContext.Provider value={mentionColorBots}>
       <MentionOpenBotContext.Provider value={mentionOpenBot}>
         <KeyboardAvoidingView
@@ -2807,6 +2812,11 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
         </KeyboardAvoidingView>
       </MentionOpenBotContext.Provider>
     </MentionBotsContext.Provider>
+  );
+  return (
+    <CaseLinkContext.Provider value={serverConfig?.caseLinkUrl ?? null}>
+      {thread}
+    </CaseLinkContext.Provider>
   );
 }
 

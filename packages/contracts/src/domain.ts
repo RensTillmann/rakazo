@@ -1371,6 +1371,8 @@ export type ServerUpdateRequest = z.infer<typeof ServerUpdateRequestSchema>;
 export const MeSchema = z.object({
   maxUploadSizeBytes: z.number().int().positive().optional(),
   ticketBoardEnabled: z.boolean(),
+  /** Fleet `RAKAZO_CASE_LINK_URL`: "case 174" in messages links here, `{n}` the number; absent = off. */
+  caseLinkUrl: z.string().optional(),
   userId: Id,
   email: z.string().email(),
   name: z.string(),

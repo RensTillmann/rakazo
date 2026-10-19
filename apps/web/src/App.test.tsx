@@ -11,6 +11,7 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
 }));
 vi.mock("./lib/bootstrap", () => ({
+  getCaseLinkUrl: () => null,
   getTicketBoardEnabled: () => capability.enabled,
   subscribeTicketBoardEnabled: () => () => {},
 }));

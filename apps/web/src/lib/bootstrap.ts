@@ -6,8 +6,13 @@ import { rpc } from "./rpc";
 
 let ticketBoardEnabled = false;
 let maxUploadSizeBytes = ATTACHMENT_MAX_BYTES;
+let caseLinkUrl: string | null = null;
 export function getMaxUploadSizeBytes() {
   return maxUploadSizeBytes;
+}
+/** Fleet `RAKAZO_CASE_LINK_URL` from `me`; null leaves "case 174" as text. */
+export function getCaseLinkUrl() {
+  return caseLinkUrl;
 }
 const capabilityListeners = new Set<() => void>();
 export function getTicketBoardEnabled() {
@@ -53,6 +58,7 @@ function requestBootstrap(botId?: string) {
     markOnce("rk:renderer:bootstrap-response");
     ticketBoardEnabled = bootstrap.me.ticketBoardEnabled;
     maxUploadSizeBytes = attachmentMaxBytes(bootstrap.me);
+    caseLinkUrl = bootstrap.me.caseLinkUrl ?? null;
     for (const listener of capabilityListeners) listener();
     return bootstrap;
   });

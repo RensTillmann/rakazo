@@ -582,6 +582,7 @@ export async function createApp(
       mcpAllowPrivateEndpoint: env.mcpAllowPrivateEndpoint,
       flagBot: env.flagBot,
       flagLabel: env.flagLabel,
+      caseLinkUrl: env.caseLinkUrl,
     },
   });
   const rpc = new RPCHandler(router, {
