@@ -43,6 +43,11 @@ import {
   setResponseStreamingPreference,
 } from "../lib/response-streaming";
 import {
+  getRoutineOutputShown,
+  setRoutineOutputShown,
+  subscribeRoutineOutput,
+} from "../lib/routine-output-preference";
+import {
   getToolActivityPreference,
   setToolActivityPreference,
 } from "../lib/tool-activity-preference";
@@ -97,6 +102,12 @@ export function GeneralSettingsPanels({
     () => getToolActivityPreference() === "on",
   );
   const showToolActivityId = useId();
+  const showRoutineOutput = useSyncExternalStore(
+    subscribeRoutineOutput,
+    getRoutineOutputShown,
+    () => false,
+  );
+  const showRoutineOutputId = useId();
   const enterToSend = useSyncExternalStore(
     subscribeComposerEnterToSend,
     getComposerEnterToSend,
@@ -361,6 +372,21 @@ export function GeneralSettingsPanels({
               className="text-[14px] font-normal text-foreground/75"
             >
               <Trans>Show tool activity</Trans>
+            </Label>
+          </div>
+          <div className="flex items-start gap-3 pt-4">
+            <Switch
+              id={showRoutineOutputId}
+              data-testid="routine-output-toggle"
+              className="mt-0.5"
+              checked={showRoutineOutput}
+              onCheckedChange={(checked) => setRoutineOutputShown(checked)}
+            />
+            <Label
+              htmlFor={showRoutineOutputId}
+              className="text-[14px] font-normal text-foreground/75"
+            >
+              <Trans>Show routine output</Trans>
             </Label>
           </div>
           <div className="flex items-start gap-3 pt-4">

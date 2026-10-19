@@ -93,6 +93,8 @@ export const BotSchema = z.object({
   memoryScope: MemoryScopeSchema.nullable(),
   threadId: Id,
   preview: z.string(),
+  /** Fleet patch: set when `preview` is routine output; the sidebar shows the routine instead. */
+  previewRoutineName: z.string().optional(),
   status: z.string(),
   runErrorId: Id.nullable().default(null),
   computerMode: ComputerModeSchema,
@@ -234,6 +236,7 @@ export const SpaceBotSchema = BotSchema.pick({
   unread: true,
   parentBotId: true,
   preview: true,
+  previewRoutineName: true,
   status: true,
   runErrorId: true,
   updatedAt: true,

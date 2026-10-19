@@ -962,7 +962,9 @@ export type MobileBot = Pick<
   | "autoSpeak"
   | "fleetManagement"
 > &
-  Partial<Pick<Bot, "parentBotId" | "spaceId" | "instructions" | "lastMessageAt">>;
+  Partial<
+    Pick<Bot, "parentBotId" | "spaceId" | "instructions" | "lastMessageAt" | "previewRoutineName">
+  >;
 
 export type MobileBotSection = BotSection;
 
@@ -998,6 +1000,8 @@ export type MobileMessage = {
   replyQuote?: string;
   replyPreview?: ReplyPreview | null;
   createdAt?: string;
+  /** Fleet patch: the routine name when this is routine output the chat folds away. */
+  routineLog?: string;
   blocks: MessageBlock[];
 };
 
@@ -1437,6 +1441,8 @@ export function applyMobileThreadEvent(
       // An update can leave the call id out — the `end_call` marker does — so keep the one
       // the message already carries instead of dropping it out of its call.
       callId: typeof event.payload?.callId === "string" ? event.payload.callId : known?.callId,
+      routineLog:
+        typeof event.payload?.routineLog === "string" ? event.payload.routineLog : known?.routineLog,
       blocks: (event.payload?.blocks as MobileMessage["blocks"]) ?? [],
       botId: event.botId ?? (event.payload?.botId ? String(event.payload.botId) : undefined),
       ...replyMetadata(event.payload ?? {}, known),

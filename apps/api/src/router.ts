@@ -302,6 +302,7 @@ import {
   isBackgroundRun,
   isPeerRun,
   loadAllMessages,
+  liveRoutineLogName,
   loadMessagePage,
   shouldForwardBackgroundThreadEvent,
   shouldForwardPeerThreadEvent,
@@ -2197,6 +2198,7 @@ export function createRouter(deps: RouterDeps) {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
         const peerRunCache = new Map<string, Promise<boolean>>();
         const backgroundRunCache = new Map<string, Promise<boolean>>();
+        const routineRunCache = new Map<string, Promise<string | undefined>>();
         const follow = deps.events.follow(target.threadId, input.cursor, context.signal);
         // A half-open stream looks identical to an idle one, so punctuate silence:
         // the client treats any frame as liveness and reconnects once they stop.
@@ -2245,7 +2247,8 @@ export function createRouter(deps: RouterDeps) {
             } else if (await isBackgroundRun(deps.prisma, event.runId, backgroundRunCache)) {
               if (!shouldForwardBackgroundThreadEvent(event)) continue;
             }
-            yield event;
+            const routineLog = await liveRoutineLogName(deps.prisma, event, routineRunCache);
+            yield routineLog ? { ...event, payload: { ...event.payload, routineLog } } : event;
           }
         } finally {
           // Not awaited: closing can queue behind a read that the abort has not landed on yet.

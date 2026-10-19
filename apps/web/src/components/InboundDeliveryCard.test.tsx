@@ -4,7 +4,7 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { InboundDeliveryCard, inboundDeliverySummary } from "./InboundDeliveryCard";
+import { InboundDeliveryCard } from "./InboundDeliveryCard";
 
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (strings: TemplateStringsArray) => strings.join("") }),
@@ -40,21 +40,6 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
   vi.unstubAllGlobals();
-});
-
-describe("inboundDeliverySummary", () => {
-  it("names the routine and event from the server's header, never from the payload", () => {
-    expect(inboundDeliverySummary(GATE_WAKE)).toEqual({
-      routines: ["Inbox triage run"],
-      event: "fleet-gate.inbox",
-    });
-  });
-
-  it("reads a GitHub event without a routine", () => {
-    const text =
-      '[GitHub Event: push]\n\n<github_event_metadata>\n{"ref":"main"}\n</github_event_metadata>';
-    expect(inboundDeliverySummary(text)).toEqual({ routines: [], event: "push" });
-  });
 });
 
 describe("InboundDeliveryCard", () => {

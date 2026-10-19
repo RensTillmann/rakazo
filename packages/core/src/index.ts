@@ -48,6 +48,7 @@ export * from "./remote-images.js";
 export * from "./response-bytes.js";
 export * from "./room-limits.js";
 export * from "./roster-active-order.js";
+export * from "./routine-log.js";
 export * from "./run-error.js";
 export * from "./run-push.js";
 export * from "./run-state.js";
