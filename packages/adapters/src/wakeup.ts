@@ -7,7 +7,8 @@ import type {
 import { dispatchBackgroundJob } from "@rakazo/adapter-kit";
 import { isTooManyDatabaseConnections } from "@rakazo/db";
 import { getLogger, runCorrelatedJob, unwrapJobPayload, wrapJobPayload } from "@rakazo/logging";
-import type { Runner, WorkerUtils } from "graphile-worker";
+import { EventEmitter } from "node:events";
+import type { Runner, WorkerEvents, WorkerUtils } from "graphile-worker";
 import { makeWorkerUtils, run } from "graphile-worker";
 import type { Pool } from "pg";
 import { recordHistoryCompactAttemptsExhausted } from "./history-compaction.js";
@@ -83,6 +84,7 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
   private stopping = false;
   private superviseTask: Promise<void> | undefined;
   private wakeSleep: (() => void) | undefined;
+  private readonly ownIds = new Set<string>();
 
   constructor(
     private readonly pgPool: Pool,
@@ -119,6 +121,11 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
     }
   }
 
+  /** Worker and pool ids this process locks jobs with (graphile `locked_by`). */
+  workerIds(): string[] {
+    return [...this.ownIds];
+  }
+
   private async launchRunner(): Promise<void> {
     const handlers = this.handlers;
     if (!handlers) throw new Error("Background job worker has no handlers");
@@ -136,12 +143,17 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
         },
       ]),
     );
+    // A caller-owned emitter sees pool:create/worker:create, which fire before run() resolves.
+    const events = new EventEmitter() as WorkerEvents;
+    events.on("pool:create", ({ workerPool }) => this.ownIds.add(workerPool.id));
+    events.on("worker:create", ({ worker }) => this.ownIds.add(worker.workerId));
     const runner = await run({
       pgPool: this.pgPool,
       concurrency: this.options.concurrency ?? 4,
       pollInterval: this.options.pollInterval ?? 500,
       noHandleSignals: this.options.noHandleSignals,
       taskList,
+      events,
     });
     runner.events.on("job:failed", ({ job, error }) => {
       recordHistoryCompactAttemptsExhausted(job, error);

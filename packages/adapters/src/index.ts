@@ -95,6 +95,7 @@ export * from "./model-vision.js";
 export * from "./none-sandbox.js";
 export * from "./openai-compatible-url.js";
 export * from "./openai-voice.js";
+export * from "./orphan-recovery.js";
 export * from "./page-browser-session.js";
 export * from "./parallel-web.js";
 export * from "./pi-catalog-availability.js";
