@@ -40,6 +40,7 @@ import {
   linkifyExplicitUrls,
   linkLabel,
   MentionBotsContext,
+  MentionOpenBotContext,
   markdownLinkRequiresConfirmation,
   markRemoteImageLoaded,
   mentionParts,
@@ -423,9 +424,21 @@ function MentionedText({
 }): ReactNode {
   const bots = useContext(MentionBotsContext);
   const contextScheme = useContext(MentionSchemeContext);
+  const open = useContext(MentionOpenBotContext);
   return mentionParts(children, bots).map((part, index) =>
     part.type === "text" ? (
       part.value
+    ) : open ? (
+      // A tap opens the bot's chat; a long press still reaches the message's text selection.
+      <Text
+        key={index}
+        style={mentionStyle(part.bot, scheme ?? contextScheme)}
+        accessibilityRole="button"
+        accessibilityLabel={open.label(part.bot.names[0] ?? part.bot.id)}
+        onPress={() => open.onOpenBot(part.bot.id)}
+      >
+        {part.value}
+      </Text>
     ) : (
       <Text key={index} style={mentionStyle(part.bot, scheme ?? contextScheme)}>
         {part.value}
@@ -1149,7 +1162,12 @@ const layout = StyleSheet.create({
   },
 });
 
-export type { ChatMarkdownProps, LinkFavicons, MentionBot } from "./markdown";
-export { LinkFaviconsContext, MentionBotsContext, RemoteImagesContext } from "./markdown";
+export type { ChatMarkdownProps, LinkFavicons, MentionBot, MentionOpenBot } from "./markdown";
+export {
+  LinkFaviconsContext,
+  MentionBotsContext,
+  MentionOpenBotContext,
+  RemoteImagesContext,
+} from "./markdown";
 
 export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";

@@ -195,6 +195,7 @@ export const DE_MESSAGES: Record<string, string> = {
   Message: "Nachricht",
   "Message from {peer}": "Nachricht von {peer}",
   "Message {name}": "{name} schreiben",
+  "Open chat with {name}": "Chat mit {name} öffnen",
   "Messaged {peer}": "Nachricht an {peer} gesendet",
   "Message…": "Nachricht…",
   "No longer active": "Nicht mehr aktiv",

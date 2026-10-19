@@ -328,3 +328,18 @@ a.rk-chat-link:hover .rk-chat-link-label {
 [data-theme="dark"] .rk-mention {
   color: var(--rk-mention-on-dark);
 }
+
+.rk-mention-open {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.rk-mention-open:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rk-mention-open:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}

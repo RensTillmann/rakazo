@@ -11,6 +11,7 @@ import {
   LinkFaviconsContext,
   LinkifiedText,
   MentionBotsContext,
+  MentionOpenBotContext,
   RemoteImagesContext,
 } from "./markdown.web";
 
@@ -599,5 +600,78 @@ describe("web markdown bot mentions", () => {
     expect(renderToStaticMarkup(<ChatMarkdown>{"@Quinn"}</ChatMarkdown>)).not.toContain(
       "rk-mention",
     );
+  });
+
+  async function renderOpenable(markdown: string, onOpenBot: (botId: string) => void) {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <MentionBotsContext.Provider value={[quinn]}>
+          <MentionOpenBotContext.Provider
+            value={{ onOpenBot, label: (name) => `Open chat with ${name}` }}
+          >
+            <ChatMarkdown>{markdown}</ChatMarkdown>
+          </MentionOpenBotContext.Provider>
+        </MentionBotsContext.Provider>,
+      );
+    });
+    return {
+      container,
+      cleanup: async () => {
+        await act(async () => root.unmount());
+        container.remove();
+      },
+    };
+  }
+
+  it("opens the mentioned bot's chat on click and on Enter", async () => {
+    const onOpenBot = vi.fn();
+    const view = await renderOpenable("Ask @Quinn please", onOpenBot);
+    const mention = view.container.querySelector<HTMLElement>(".rk-mention");
+    expect(mention?.getAttribute("role")).toBe("button");
+    expect(mention?.tabIndex).toBe(0);
+    expect(mention?.getAttribute("aria-label")).toBe("Open chat with Quinn");
+
+    await act(async () => mention?.click());
+    expect(onOpenBot).toHaveBeenCalledWith("quinn");
+
+    await act(async () => {
+      mention?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    expect(onOpenBot).toHaveBeenCalledTimes(2);
+    await view.cleanup();
+  });
+
+  it("does not open the chat when the click ends a text selection", async () => {
+    const onOpenBot = vi.fn();
+    const view = await renderOpenable("Ask @Quinn please", onOpenBot);
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(view.container);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    await act(async () => view.container.querySelector<HTMLElement>(".rk-mention")?.click());
+    expect(onOpenBot).not.toHaveBeenCalled();
+    selection?.removeAllRanges();
+    await view.cleanup();
+  });
+
+  it("renders plain coloured text without onOpenBot", () => {
+    const html = withBots(<ChatMarkdown>{"@Quinn"}</ChatMarkdown>);
+    expect(html).toContain('class="rk-mention"');
+    expect(html).not.toContain('role="button"');
+    expect(html).not.toContain("tabindex");
+  });
+
+  it("leaves unknown names neither clickable nor coloured", async () => {
+    const onOpenBot = vi.fn();
+    const view = await renderOpenable("Ask @Robin please", onOpenBot);
+    expect(view.container.querySelector(".rk-mention")).toBeNull();
+    expect(view.container.querySelector("[role='button']")).toBeNull();
+    await view.cleanup();
   });
 });
