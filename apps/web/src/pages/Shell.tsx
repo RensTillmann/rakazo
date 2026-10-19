@@ -171,6 +171,7 @@ import {
   ToolOnlyNarration,
   ToolSteps,
 } from "../components/ToolActivityDisclosure";
+import { ThreadUsageLine, UsageTopBar } from "../components/UsageBars";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
@@ -4083,6 +4084,11 @@ function SpaceShell() {
                     ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
                     : (active?.name ?? t`Select a bot`)}
                 </span>
+                <ThreadUsageLine
+                  botId={inGroup ? null : (active?.id ?? null)}
+                  groupId={inGroup ? (groupId ?? null) : null}
+                  refreshKey={activeSnapshot?.run?.id ?? null}
+                />
               </span>
             </button>
           </div>
@@ -4147,6 +4153,7 @@ function SpaceShell() {
           </div>
         </div>
         <CallReturnBar />
+        <UsageTopBar refreshKey={activeSnapshot?.run?.id ?? null} />
         {!active && !activeGroup && initialBotsLoaded ? (
           <div className="grid flex-1 place-items-center">
             <Button onClick={() => setPanel("create")}>

@@ -22,6 +22,7 @@ import {
 import { ChevronLeft } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
+import { UsageTopBar } from "../components/UsageBars";
 import { formatRelativeTime } from "../lib/relative-time";
 import { rpc } from "../lib/rpc";
 import { useTicketPriorityLabels } from "../lib/ticket-priority";
@@ -116,6 +117,7 @@ export function BoardPage() {
           <Trans>New ticket</Trans>
         </Button>
       </header>
+      <UsageTopBar />
       {error ? (
         <p role="alert" className="px-4 py-2 text-sm text-destructive">
           {error}

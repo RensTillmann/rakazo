@@ -34,6 +34,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PdfViewer } from "../components/PdfViewer";
 import { SandboxedHtmlViewer } from "../components/SandboxedHtmlViewer";
+import { UsageTopBar } from "../components/UsageBars";
 import { decodeArtifactBase64, downloadArtifactBytes } from "../lib/artifact-open";
 import { takeInitialBootstrap } from "../lib/bootstrap";
 import { desktopBridge } from "../lib/desktop";
@@ -306,6 +307,7 @@ export function ArtifactsPage() {
           </div>
         ) : null}
       </header>
+      <UsageTopBar />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {artifactId ? (
