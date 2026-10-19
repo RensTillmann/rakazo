@@ -735,6 +735,40 @@ describe("connector read-only metadata and approval enforcement", () => {
       },
     );
 
+    const offers = (ids: string[]) =>
+      expect.objectContaining({
+        blocks: [
+          expect.objectContaining({ actions: ids.map((id) => expect.objectContaining({ id })) }),
+        ],
+      });
+
+    it("offers no Always allow when a shell rule caused the ask", async () => {
+      const f = fixture({ name: "shell", builtin: true, rules: [pushRule] });
+      f.setCalls(shellCall("git push"));
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(offers(["allow", "deny"]));
+    });
+
+    it("offers no Always allow when a tool-level rule caused the ask", async () => {
+      const f = fixture({
+        name: "demo_send_message",
+        readOnly: false,
+        rules: [{ effect: "require_approval", matchKind: "tool", matchValue: "demo_send_message" }],
+      });
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(offers(["allow", "deny"]));
+    });
+
+    it("keeps Always allow when a connector rule caused the ask", async () => {
+      const f = fixture({
+        name: "demo_send_message",
+        readOnly: false,
+        rules: [{ effect: "require_approval", matchKind: "connector", matchValue: "demo" }],
+      });
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(offers(["allow", "always", "deny"]));
+    });
+
     it("runs a command the rule does not match", async () => {
       const f = fixture({ name: "shell", builtin: true, rules: [pushRule] });
       f.setCalls(shellCall("git status"));

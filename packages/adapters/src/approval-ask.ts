@@ -30,7 +30,11 @@ export function buildApprovalAskBlock(
   toolName: string,
   args: Record<string, unknown>,
   secrets: string[],
-  options?: { reviewReason?: string; summary?: FleetCardSummary },
+  /**
+   * `allowAlways: false` (fleet): a tool-level or shell `require_approval` rule caused the ask,
+   * so the card offers no "Always allow"; the server then refuses an "always" answer for it.
+   */
+  options?: { reviewReason?: string; summary?: FleetCardSummary; allowAlways?: boolean },
 ): MessageBlock {
   if (options?.summary) {
     // Built from what was resolved before the effect was recorded, not from what the model typed.
@@ -104,7 +108,7 @@ export function buildApprovalAskBlock(
             { id: "allow", label: "Create space", outcome: "created" },
             { id: "deny", label: "Cancel", outcome: "cancelled" },
           ]
-        : toolRequiresExplicitApproval(toolName)
+        : toolRequiresExplicitApproval(toolName) || options?.allowAlways === false
           ? [
               { id: "allow", label: "Allow once" },
               { id: "deny", label: "Deny" },
