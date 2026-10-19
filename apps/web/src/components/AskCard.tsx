@@ -17,9 +17,12 @@ function formatAnsweredState(
   secret: boolean,
   outcome?: "created" | "cancelled",
   actions?: AskBlock["actions"],
+  synced?: boolean,
 ): string {
   if (secret) return t`Saved`;
   if (!answer) return t`Answered`;
+  if (!approval && synced)
+    return t`Answered: ${selectedAskActionLabel(answer, actions)} (same question)`;
   if (!approval) return t`Answered: ${selectedAskActionLabel(answer, actions)}`;
   if (outcome === "created") return t`Created`;
   if (outcome === "cancelled") return t`Cancelled`;
@@ -209,6 +212,7 @@ export function AskCard({
                 secretInput,
                 approvalActions?.find((action) => action.id === block.answer)?.outcome,
                 askActions,
+                Boolean(block.syncedFrom),
               )}
         </div>
       ) : !canAnswer ? (

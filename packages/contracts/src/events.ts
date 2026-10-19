@@ -137,6 +137,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     credential: botSecretDestinationSchema({ allowPrivateHttpOrigin: true }).optional(),
     status: z.enum(["pending", "answered"]).optional(),
     answer: z.string().optional(),
+    /** Fleet: the message whose identical question card supplied this answer. */
+    syncedFrom: Id.optional(),
     actions: z
       .array(
         z.object({

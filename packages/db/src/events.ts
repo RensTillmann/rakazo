@@ -49,7 +49,10 @@ export interface AppendEventInput {
 }
 
 export interface ThreadEvents {
-  answerRunInput(input: AnswerRunInput): Promise<boolean>;
+  /** `onSyncedRuns` receives other runs a duplicate-question sync queued (RAKAZO_SYNC_DUPLICATE_ASKS). */
+  answerRunInput(
+    input: AnswerRunInput & { onSyncedRuns?: (runIds: string[]) => void },
+  ): Promise<boolean>;
   append(input: AppendEventInput): Promise<ProductEvent>;
   claimSteering(input: ClaimSteeringInput): Promise<ClaimedSteeringMessage[]>;
   clearThread(input: ClearThreadInput): Promise<ClearThreadResult>;
@@ -273,7 +276,8 @@ export function createThreadEvents(
   options: { catchUpMs?: number; runSecretWriter?: RunSecretWriter } = {},
 ): ThreadEvents {
   return {
-    answerRunInput: (input) => answerRunInput(prisma, input, realtime, options.runSecretWriter),
+    answerRunInput: ({ onSyncedRuns, ...input }) =>
+      answerRunInput(prisma, input, realtime, options.runSecretWriter, onSyncedRuns),
     append: (input) => appendEvent(prisma, input, realtime),
     claimSteering: (input) => claimSteering(prisma, input),
     clearThread: (input) => clearThread(prisma, input, realtime),
@@ -647,11 +651,89 @@ async function findPendingAsk(
   return null;
 }
 
+export function normalizeAskText(text: string): string {
+  return text
+    .trim()
+    .replace(/^urgent\s*·\s*/i, "")
+    .toLowerCase()
+    .replace(/[\p{P}\p{S}]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function askLabelSet(actions: Array<{ label: string }> | undefined): string {
+  return [...new Set((actions ?? []).map((action) => normalizeAskText(action.label)))]
+    .sort()
+    .join("\n");
+}
+
+/**
+ * Answers every other open question card in the thread that asks the same question with the
+ * same option labels, as if the user had answered it. Synced answers never sync again.
+ */
+async function syncDuplicateAsks(
+  tx: Prisma.TransactionClient,
+  input: AnswerRunInput,
+  source: { messageId: string; text: string; actions?: Array<{ id: string; label: string }> },
+  selectedLabel: string | undefined,
+): Promise<{ runIds: string[]; seq: number }> {
+  const waiting = await tx.run.findMany({
+    where: {
+      spaceId: input.spaceId,
+      threadId: input.threadId,
+      status: "waiting_input",
+      id: { not: input.runId },
+    },
+    select: { id: true },
+  });
+  const question = normalizeAskText(source.text);
+  const labels = askLabelSet(source.actions);
+  const runIds: string[] = [];
+  let seq = 0;
+  for (const run of waiting) {
+    const found = await findPendingAsk(tx, { threadId: input.threadId, runId: run.id });
+    if (!found) continue;
+    const ask = found.pendingAsk;
+    // Any card tied to an approval effect is an approval decision, whatever its option ids.
+    if (ask.approvalEffectId || isApprovalAskBlock(ask) || isSecretAskBlock(ask)) continue;
+    if (normalizeAskText(ask.text) !== question || askLabelSet(ask.actions) !== labels) continue;
+    let answer = input.answer;
+    if (selectedLabel !== undefined) {
+      const action = ask.actions?.find(
+        (candidate) => normalizeAskText(candidate.label) === normalizeAskText(selectedLabel),
+      );
+      if (!action) continue;
+      answer = action.id;
+    }
+    const committed = await commitAnswerRunInput(
+      tx,
+      {
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        runId: run.id,
+        messageId: found.messageId,
+        answeredByUserId: input.answeredByUserId,
+        answer,
+      },
+      undefined,
+      source.messageId,
+    );
+    if (!committed) continue;
+    runIds.push(run.id);
+    seq = Math.max(seq, committed.seq);
+  }
+  return { runIds, seq };
+}
+
 async function commitAnswerRunInput(
   tx: Prisma.TransactionClient,
   input: AnswerRunInput,
   runSecretWriter?: RunSecretWriter,
-): Promise<{ threadId: string; seq: number } | null> {
+  /** Set when this answer is copied from an identical card; such answers never sync further. */
+  syncedFrom?: string,
+  /** The composer answers every waiting run itself, so it turns duplicate syncing off. */
+  syncDuplicates = true,
+): Promise<{ threadId: string; seq: number; syncedRunIds: string[] } | null> {
   // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
   // concurrent clear cannot deadlock against this transaction.
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
@@ -887,6 +969,7 @@ async function commitAnswerRunInput(
           ...block,
           status: "answered" as const,
           answer: recordedAnswer,
+          ...(syncedFrom ? { syncedFrom } : {}),
           ...(editedInstructions !== undefined && pendingAsk.instructionUpdate
             ? {
                 instructionUpdate: { ...pendingAsk.instructionUpdate, after: editedInstructions },
@@ -909,7 +992,26 @@ async function commitAnswerRunInput(
     runId: input.runId,
     payload: { messageId: message.id, role: "bot", blocks },
   });
-  return { threadId: updated.threadId, seq: updated.seq };
+  // Fleet: RAKAZO_SYNC_DUPLICATE_ASKS=true answers identical open question cards in the thread too.
+  const synced =
+    !approvalAsk &&
+    !pendingAsk.approvalEffectId &&
+    !secretAsk &&
+    !syncedFrom &&
+    syncDuplicates &&
+    process.env.RAKAZO_SYNC_DUPLICATE_ASKS === "true"
+      ? await syncDuplicateAsks(
+          tx,
+          input,
+          { messageId: message.id, text: pendingAsk.text, actions: pendingAsk.actions },
+          selectedChoice?.label,
+        )
+      : { runIds: [], seq: 0 };
+  return {
+    threadId: updated.threadId,
+    seq: Math.max(updated.seq, synced.seq),
+    syncedRunIds: synced.runIds,
+  };
 }
 
 export async function answerRunInput(
@@ -917,6 +1019,7 @@ export async function answerRunInput(
   input: AnswerRunInput,
   realtime?: RealtimeFanout,
   runSecretWriter?: RunSecretWriter,
+  onSyncedRuns?: (runIds: string[]) => void,
 ): Promise<boolean> {
   const commit = (writer = runSecretWriter) =>
     prisma.$transaction(async (tx: Prisma.TransactionClient) =>
@@ -928,6 +1031,7 @@ export async function answerRunInput(
 
   if (!committed) return false;
   await notifyRealtime(realtime, committed.threadId, committed.seq);
+  if (committed.syncedRunIds.length) onSyncedRuns?.(committed.syncedRunIds);
   return true;
 }
 
@@ -947,7 +1051,13 @@ export async function answerWaitingRunWithTextInTransaction(
   const found = await findPendingAsk(tx, input);
   if (!found) return null;
   if (isApprovalAskBlock(found.pendingAsk) || isSecretAskBlock(found.pendingAsk)) return null;
-  return commitAnswerRunInput(tx, { ...input, messageId: found.messageId, answer });
+  return commitAnswerRunInput(
+    tx,
+    { ...input, messageId: found.messageId, answer },
+    undefined,
+    undefined,
+    false,
+  );
 }
 
 export async function pauseRunForInput(

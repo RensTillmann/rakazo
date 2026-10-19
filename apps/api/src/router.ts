@@ -2633,6 +2633,7 @@ export function createRouter(deps: RouterDeps) {
       }),
       answer: authed.threads.answer.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+        let syncedRunIds: string[] = [];
         const answered = await deps.events.answerRunInput({
           spaceId: context.actor.spaceId,
           threadId: target.threadId,
@@ -2642,16 +2643,19 @@ export function createRouter(deps: RouterDeps) {
           answer: input.answer,
           clientNonce: input.clientNonce,
           username: input.username,
+          onSyncedRuns: (runIds) => (syncedRunIds = runIds),
         });
         if (!answered) {
           throw new ORPCError("CONFLICT", {
             message: "This prompt is no longer awaiting an answer",
           });
         }
-        await deps.jobs.enqueue(runContinueJob(input.runId)).catch((error) => {
-          // The answer and queued run are durable; the reconciler repairs a missed immediate wake.
-          getLogger().error("thread answer enqueue", error);
-        });
+        for (const runId of [input.runId, ...syncedRunIds]) {
+          await deps.jobs.enqueue(runContinueJob(runId)).catch((error) => {
+            // The answer and queued run are durable; the reconciler repairs a missed immediate wake.
+            getLogger().error("thread answer enqueue", error);
+          });
+        }
         return { ok: true as const };
       }),
       markRead: authed.threads.markRead.handler(async ({ context, input }) => {
