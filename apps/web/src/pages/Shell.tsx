@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { ChatMarkdown, LinkifiedText } from "@rakazo/chat-ui/web";
+import { ChatMarkdown, LinkifiedText, type MentionBot, MentionBotsContext } from "@rakazo/chat-ui/web";
 import type {
   AgentSkillCatalogEntry,
   Bot,
@@ -37,6 +37,7 @@ import {
 import type { ComposerMention, SlashActionId } from "@rakazo/core";
 import {
   attachmentsForThread,
+  botMentionTextColors,
   buildComposerMentionOptions,
   clampMentionHighlightIndex,
   cronFromPreset,
@@ -1972,6 +1973,16 @@ export function ShellPage() {
         connectors: mentionConnectors,
       }),
     [bots, groupId, groups, inGroup, mentionConnectors, mentionRoutines],
+  );
+  // `@Name` in message text takes the bot's avatar colour; the space's bots are the names known.
+  const mentionBots = useMemo<MentionBot[]>(
+    () =>
+      bots.map((bot) => ({
+        id: bot.id,
+        names: [bot.name],
+        color: botMentionTextColors(bot.id, bot.color),
+      })),
+    [bots],
   );
   const shellReady =
     initialBotsLoaded &&
@@ -5132,7 +5143,9 @@ export function ShellPage() {
   );
 
   return (
-    <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "organic"}>{shell}</AvatarStyleProvider>
+    <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "organic"}>
+      <MentionBotsContext.Provider value={mentionBots}>{shell}</MentionBotsContext.Provider>
+    </AvatarStyleProvider>
   );
 }
 

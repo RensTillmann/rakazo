@@ -10,6 +10,7 @@ import {
   ChatMarkdown,
   LinkFaviconsContext,
   LinkifiedText,
+  MentionBotsContext,
   RemoteImagesContext,
 } from "./markdown.web";
 
@@ -558,5 +559,43 @@ describe("web external link confirmation", () => {
     expect(open).not.toHaveBeenCalled();
     open.mockRestore();
     await view.cleanup();
+  });
+});
+
+describe("web markdown bot mentions", () => {
+  const quinn = { id: "quinn", names: ["Quinn"], color: { onLight: "#5B21B6", onDark: "#A97EFE" } };
+
+  function withBots(node: ReactNode) {
+    return renderToStaticMarkup(
+      <MentionBotsContext.Provider value={[quinn]}>{node}</MentionBotsContext.Provider>,
+    );
+  }
+
+  it("colours a known bot's mention but not code, links or email addresses", () => {
+    const html = withBots(
+      <ChatMarkdown>
+        {"Room test received. @Quinn, please confirm. `@Quinn` [@Quinn](https://example.test) a@quinn.com @Robin"}
+      </ChatMarkdown>,
+    );
+
+    expect(html.match(/class="rk-mention"/g)).toHaveLength(1);
+    expect(html).toContain(
+      '<span class="rk-mention" data-mention-bot="quinn" style="--rk-mention-on-light:#5B21B6;--rk-mention-on-dark:#A97EFE">@Quinn</span>, please confirm.',
+    );
+    expect(html).toContain("<code>@Quinn</code>");
+    expect(html).toContain("@Robin");
+  });
+
+  it("colours mentions in a person's plain-text message", () => {
+    const html = withBots(<LinkifiedText>{"@quinn can you check?"}</LinkifiedText>);
+
+    expect(html).toContain('data-mention-bot="quinn"');
+    expect(html).toContain(">@quinn</span> can you check?");
+  });
+
+  it("keeps mentions plain when no bots are known", () => {
+    expect(renderToStaticMarkup(<ChatMarkdown>{"@Quinn"}</ChatMarkdown>)).not.toContain(
+      "rk-mention",
+    );
   });
 });
