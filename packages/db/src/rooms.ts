@@ -1,5 +1,35 @@
-import { ACTIVE_RUN_STATUSES, isConversationalRun } from "@rakazo/core";
+import { ACTIVE_RUN_STATUSES, isConversationalRun, roomMaxRunsPerDay } from "@rakazo/core";
 import type { Prisma } from "./client.js";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The room brake. A paused room starts no bot-started runs. Otherwise the runs this group
+ * thread started in the last 24 hours (or since the last resume, if later) are counted
+ * against `RAKAZO_ROOM_MAX_RUNS_PER_DAY`; reaching it pauses the room. Runs from the
+ * user's own messages count but are never refused, so they do not call this.
+ */
+export async function roomRunAllowedInTransaction(
+  tx: Prisma.TransactionClient,
+  input: { groupId: string; threadId: string },
+  now = new Date(),
+): Promise<boolean> {
+  const group = await tx.chatGroup.findUnique({
+    where: { id: input.groupId },
+    select: { pausedAt: true, budgetResetAt: true },
+  });
+  if (!group || group.pausedAt) return false;
+  const max = roomMaxRunsPerDay();
+  if (max === undefined) return true;
+  const dayAgo = new Date(now.getTime() - DAY_MS);
+  const since = group.budgetResetAt && group.budgetResetAt > dayAgo ? group.budgetResetAt : dayAgo;
+  const started = await tx.run.count({
+    where: { threadId: input.threadId, createdAt: { gte: since } },
+  });
+  if (started < max) return true;
+  await tx.chatGroup.update({ where: { id: input.groupId }, data: { pausedAt: now } });
+  return false;
+}
 
 /** A busy bot's conversational turn that may take a new room message as steering. */
 const STEERABLE_RUN_STATUSES: Record<string, true> = {
@@ -9,7 +39,8 @@ const STEERABLE_RUN_STATUSES: Record<string, true> = {
   waiting_takeover: true,
 };
 
-export type RoomWake = { botId: string; runId: string | null; steered: boolean };
+/** `paused`: the room brake refused the run this wake needed. */
+export type RoomWake = { botId: string; runId: string | null; steered: boolean; paused?: true };
 
 /**
  * Wakes group members for a message a bot wrote in the shared thread (a room post, a
@@ -22,6 +53,7 @@ export type RoomWake = { botId: string; runId: string | null; steered: boolean }
 export async function wakeGroupMembersInTransaction(
   tx: Prisma.TransactionClient,
   input: {
+    groupId: string;
     spaceId: string;
     userId: string;
     threadId: string;
@@ -76,6 +108,10 @@ export async function wakeGroupMembersInTransaction(
         wakes.push({ botId, runId: replayed.id, steered: false });
         continue;
       }
+    }
+    if (!(await roomRunAllowedInTransaction(tx, input))) {
+      wakes.push({ botId, runId: null, steered: false, paused: true });
+      continue;
     }
     const task = await tx.task.create({
       data: {

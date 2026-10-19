@@ -2,6 +2,7 @@ import { runContinueJob } from "@rakazo/adapter-kit";
 import { MessageBlock } from "@rakazo/contracts";
 import {
   botMessageHopExhausted,
+  capRoomWakes,
   nextBotMessageHop,
   renderGroupMembersContext,
   resolveBotMentionedGroupBotIds,
@@ -213,7 +214,7 @@ export async function wakeMentionedGroupMembers(
       throw error;
     }
     const group = await tx.chatGroup.findFirst({
-      where: { id: groupId, archivedAt: null, thread: { id: run.threadId } },
+      where: { id: groupId, archivedAt: null, pausedAt: null, thread: { id: run.threadId } },
       select: {
         members: {
           where: { bot: { archivedAt: null } },
@@ -223,11 +224,13 @@ export async function wakeMentionedGroupMembers(
       },
     });
     if (!group) return [];
-    const targets = resolveBotMentionedGroupBotIds({
-      text,
-      members: group.members.map((member) => member.bot),
-      authorBotId: run.botId,
-    });
+    const targets = capRoomWakes(
+      resolveBotMentionedGroupBotIds({
+        text,
+        members: group.members.map((member) => member.bot),
+        authorBotId: run.botId,
+      }),
+    );
     if (targets.length === 0) return [];
     const reply = await tx.message.findFirst({
       where: { threadId: run.threadId, runId: run.id, role: "bot", botId: run.botId },
@@ -236,6 +239,7 @@ export async function wakeMentionedGroupMembers(
     });
     if (!reply) return [];
     const woken = await wakeGroupMembersInTransaction(tx, {
+      groupId,
       spaceId: run.spaceId,
       userId: run.userId,
       threadId: run.threadId,

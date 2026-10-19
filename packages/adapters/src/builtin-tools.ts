@@ -78,6 +78,7 @@ export const DELEGATION_TOOL_NAMES = new Set([
   "room_post",
   "room_archive",
   "room_list",
+  "room_resume",
 ]);
 
 const scheduleCreateProperties = {
@@ -1261,6 +1262,16 @@ export const builtinAgentTools: ConnectorTool[] = [
     description:
       "List open rooms with their members, leader first, and whether each member is busy (its newest active run may be in another chat).",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "room_resume",
+    description:
+      "Resume a room the daily run budget paused. Works once per room; after that only Rens can resume it, so ask Rens instead.",
+    inputSchema: {
+      type: "object",
+      properties: { roomId: { type: "string" } },
+      required: ["roomId"],
+    },
   },
 ];
 

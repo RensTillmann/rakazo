@@ -70,6 +70,7 @@ export const BUILTIN_TOOL_NAMES = [
   "room_post",
   "room_archive",
   "room_list",
+  "room_resume",
   "connect_agent",
   "respond_agent_connection",
   "message_agent",

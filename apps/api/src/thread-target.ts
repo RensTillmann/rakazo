@@ -17,6 +17,7 @@ import {
   BACKGROUND_RUN_TRIGGERS,
   blocksToAgentHistoryText,
   callIdFromClientNonce,
+  capRoomWakes,
   isActive,
   isConversationalRun,
   projectMessages,
@@ -857,11 +858,13 @@ export async function sendThreadMessage(
       const members = await lockAndLoadGroupMembers(tx, actor, target);
       const memberBotIds = members.map((member) => member.botId);
       const mentionTargets = splitMentionTargets(input.mentions);
-      const targetBotIds = resolveGroupTargetBotIds({
-        text: input.text ?? "",
-        members: members.map((member) => ({ id: member.botId, name: member.name })),
-        explicitMentions: mentionTargets.botMentionIds,
-      });
+      const targetBotIds = capRoomWakes(
+        resolveGroupTargetBotIds({
+          text: input.text ?? "",
+          members: members.map((member) => ({ id: member.botId, name: member.name })),
+          explicitMentions: mentionTargets.botMentionIds,
+        }),
+      );
       const { blocks: attachmentBlocks, artifacts } = await resolveGroupSendAttachments(
         { prisma: tx },
         actor,

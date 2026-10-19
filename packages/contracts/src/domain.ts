@@ -132,6 +132,8 @@ export const GroupSchema = z.object({
   pinned: z.boolean(),
   sectionId: Id.nullable(),
   archivedAt: z.string().nullable(),
+  /** Set while the room brake has paused bot-started runs. Optional for older clients. */
+  pausedAt: z.string().nullable().optional(),
   members: z.array(GroupMemberSchema),
   threadId: Id,
   preview: z.string(),

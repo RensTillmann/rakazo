@@ -1,6 +1,6 @@
 import { runContinueJob, runJobKey } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
-import { resolveBotMentionedGroupBotIds } from "@rakazo/core";
+import { capRoomWakes, resolveBotMentionedGroupBotIds } from "@rakazo/core";
 import {
   appendEventInTransaction,
   createGroupRepos,
@@ -24,6 +24,7 @@ export const ROOM_TOOL_NAMES: readonly string[] = [
   "room_post",
   "room_archive",
   "room_list",
+  "room_resume",
 ];
 
 export function isRoomToolName(name: string): boolean {
@@ -140,6 +141,18 @@ export async function roomArchive(deps: RoomDeps, run: RoomRun, args: { roomId?:
   }
 }
 
+export async function roomResume(deps: RoomDeps, run: RoomRun, args: { roomId?: unknown }) {
+  const roomId = String(args.roomId ?? "").trim();
+  if (!roomId) return { error: "roomId is required" };
+  try {
+    const result = await createGroupRepos(deps.prisma).resumeGroup(run, roomId, { byBot: true });
+    if (result.error) return { error: result.error };
+    return result.resumed ? { ok: true, roomId } : { ok: true, roomId, note: "room was not paused" };
+  } catch (error) {
+    return isolationMessage(error, "room is not available");
+  }
+}
+
 export async function roomList(deps: RoomDeps, run: RoomRun) {
   const groups = await createGroupRepos(deps.prisma).listGroups(run);
   return {
@@ -208,8 +221,9 @@ export async function roomPost(
       authorBotId: run.botId,
     });
     const leader = members[0];
-    const targets =
-      mentioned.length > 0 ? mentioned : leader && leader.id !== run.botId ? [leader.id] : [];
+    const targets = capRoomWakes(
+      mentioned.length > 0 ? mentioned : leader && leader.id !== run.botId ? [leader.id] : [],
+    );
     const blocks: MessageBlock[] = [{ kind: "text", text }];
     const message = await createThreadMessageInTransaction(tx, {
       threadId,
@@ -219,6 +233,7 @@ export async function roomPost(
       clientNonce,
     });
     const wakes = await wakeGroupMembersInTransaction(tx, {
+      groupId: roomId,
       spaceId: run.spaceId,
       userId: run.userId,
       threadId,
@@ -253,6 +268,14 @@ export async function roomPost(
     ok: true,
     roomId,
     messageId: committed.messageId,
-    woke: committed.wakes.map((wake) => ({ botId: wake.botId, steered: wake.steered })),
+    woke: committed.wakes
+      .filter((wake) => !wake.paused)
+      .map((wake) => ({ botId: wake.botId, steered: wake.steered })),
+    ...(committed.wakes.some((wake) => wake.paused)
+      ? {
+          paused:
+            "The room hit its daily run budget and is paused. Call room_resume once, or ask Rens to resume it.",
+        }
+      : {}),
   };
 }

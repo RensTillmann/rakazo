@@ -24,6 +24,7 @@ type GroupRecord = {
   pinned: boolean;
   sectionId: string | null;
   archivedAt: Date | null;
+  pausedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   thread: {
@@ -70,6 +71,7 @@ function mapGroup(group: GroupRecord): Group {
     pinned: group.pinned,
     sectionId: group.sectionId,
     archivedAt: group.archivedAt?.toISOString() ?? null,
+    pausedAt: group.pausedAt?.toISOString() ?? null,
     members: mapGroupMembers(group.members),
     threadId: group.thread.id,
     preview,
@@ -548,6 +550,43 @@ export function createGroupRepos(prisma: PrismaClient) {
         data: { archivedAt: null },
       });
       if (restored.count !== 1) throw new IsolationError();
+    },
+
+    /**
+     * Lifts the room brake and restarts the run budget. A bot may resume a room once; after
+     * that only the user can, which also gives the bot its one resume back.
+     */
+    async resumeGroup(
+      actor: GroupActor,
+      groupId: string,
+      options: { byBot?: boolean } = {},
+    ): Promise<{ resumed: boolean; error?: string }> {
+      return prisma.$transaction(async (tx) => {
+        await lockOwnedGroup(tx, actor, groupId);
+        const group = await tx.chatGroup.findFirst({
+          where: { id: groupId, archivedAt: null },
+          select: { pausedAt: true, budgetResumes: true },
+        });
+        if (!group) throw new IsolationError();
+        if (!group.pausedAt) return { resumed: false };
+        if (options.byBot && group.budgetResumes >= 1) {
+          return {
+            resumed: false,
+            error: "this room was already resumed once; only Rens can resume it now",
+          };
+        }
+        const now = new Date();
+        await tx.chatGroup.update({
+          where: { id: groupId },
+          data: {
+            pausedAt: null,
+            budgetResetAt: now,
+            budgetResumes: options.byBot ? { increment: 1 } : 0,
+            updatedAt: now,
+          },
+        });
+        return { resumed: true };
+      });
     },
 
     async removeGroup(actor: Actor, groupId: string) {

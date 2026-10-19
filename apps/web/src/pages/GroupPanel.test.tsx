@@ -72,6 +72,8 @@ async function render(
   options: {
     onSave?: () => Promise<void>;
     onRemove?: () => Promise<void>;
+    onResume?: () => Promise<void>;
+    group?: Group;
     covered?: boolean;
     instance?: string;
   } = {},
@@ -82,9 +84,10 @@ async function render(
     root.render(
       <GroupSettings
         key={options.instance}
-        group={group}
+        group={options.group ?? group}
         bots={[]}
         onSave={options.onSave ?? (async () => undefined)}
+        onResume={options.onResume}
         onRemove={onRemove}
         onClose={onClose}
         covered={options.covered}
@@ -216,5 +219,16 @@ describe("GroupSettings", () => {
     await click("Cancel");
     expect(container.querySelector('[role="alertdialog"]')).toBeNull();
     expect(onRemove).not.toHaveBeenCalled();
+  });
+});
+
+describe("room brake", () => {
+  it("shows Resume room only while the room is paused", async () => {
+    const onResume = vi.fn(async () => undefined);
+    await render({ onResume });
+    expect(container.textContent).not.toContain("Resume room");
+    await render({ onResume, group: { ...group, pausedAt: "2026-10-19T12:00:00.000Z" } });
+    await click("Resume room");
+    expect(onResume).toHaveBeenCalledTimes(1);
   });
 });

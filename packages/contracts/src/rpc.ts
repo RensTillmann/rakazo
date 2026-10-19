@@ -330,6 +330,8 @@ export const appContract = {
     update: oc.input(UpdateGroupInput).output(GroupSchema),
     archive: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
     restore: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
+    /** Lift the room brake (the user may always resume; `room_resume` only once). */
+    resume: oc.input(groupId).output(GroupSchema),
     remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
   },
   botSections: {

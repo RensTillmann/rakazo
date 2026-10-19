@@ -153,6 +153,7 @@ export function GroupSettings({
   group,
   bots,
   onSave,
+  onResume,
   onRemove,
   onClose,
   covered = false,
@@ -160,6 +161,8 @@ export function GroupSettings({
   group: Group;
   bots: Bot[];
   onSave: (input: { name?: string; botIds?: string[] }) => Promise<void>;
+  /** Lifts the room brake; shown only while the room is paused. */
+  onResume?: () => Promise<void>;
   onRemove: () => Promise<void>;
   onClose: () => void;
   /** A full-screen overlay is on top, so Escape belongs to it. */
@@ -221,6 +224,19 @@ export function GroupSettings({
     if (mounted.current) onClose();
   }
 
+  async function resume() {
+    if (saving || !onResume) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onResume();
+    } catch (cause) {
+      setError(errorText(cause, t`Could not resume room`));
+    } finally {
+      if (mounted.current) setSaving(false);
+    }
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -241,6 +257,16 @@ export function GroupSettings({
         <p role="alert" className="mb-3 text-[13px] text-destructive">
           {error}
         </p>
+      ) : null}
+      {group.pausedAt && onResume ? (
+        <div className="mb-4 rounded-md border border-border p-3 text-[13px]">
+          <p className="text-muted-foreground">
+            <Trans>This room reached its daily run budget. Bots cannot start new runs here.</Trans>
+          </p>
+          <Button className="mt-3 w-full" disabled={saving} onClick={() => void resume()}>
+            <Trans>Resume room</Trans>
+          </Button>
+        </div>
       ) : null}
       <label htmlFor={nameId} className="block text-sm text-muted-foreground">
         <Trans>Name</Trans>
