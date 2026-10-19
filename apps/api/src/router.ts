@@ -271,7 +271,7 @@ import {
   startOnboarding,
 } from "./onboarding.js";
 import { listRoutineRuns } from "./routine-runs.js";
-import { listSpaceRuns } from "./runs.js";
+import { listSpaceRuns, loadRunActivity } from "./runs.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { querySpaceSearch } from "./search.js";
 import { withSerializableRetry } from "./serializable-retry.js";
@@ -6207,6 +6207,12 @@ export function createRouter(deps: RouterDeps) {
       list: authed.runs.list.handler(async ({ context, input }) => ({
         runs: await listSpaceRuns(deps.prisma, context.actor, input.filter),
       })),
+      activity: authed.runs.activity.handler(async ({ context, input }) => {
+        const target = await resolveThreadTarget(deps.prisma, context.actor, input, {
+          includeArchived: true,
+        });
+        return loadRunActivity(deps.prisma, context.actor, target.threadId, input);
+      }),
     },
     voice: {
       catalog: authed.voice.catalog.handler(async () => listVoiceCatalog()),

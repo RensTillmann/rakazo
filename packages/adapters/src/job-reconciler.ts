@@ -107,6 +107,8 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileRoutineRetryNotices?: () => Promise<void>;
+    /** Fleet: strips expired activity previews (RAKAZO_ACTIVITY_DETAILS_DAYS). */
+    reconcileActivityDetails?: () => Promise<void>;
   },
   options: { intervalMs?: number; batchSize?: number } = {},
 ) {
@@ -130,6 +132,7 @@ export function createJobReconciler(
           deps.reconcileCloudAgents,
           deps.reconcileComputerUpdates,
           deps.reconcileRoutineRetryNotices,
+          deps.reconcileActivityDetails,
         ].map(async (reconcile) => reconcile?.()),
       );
       for (const result of auxiliary) {

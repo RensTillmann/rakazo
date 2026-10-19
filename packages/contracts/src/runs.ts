@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { ProductEventSchema } from "./events.js";
 import { Id, IsoDate, RunStatus } from "./ids.js";
 
 export const RUN_TRIGGERS = [
@@ -59,3 +60,31 @@ export const RunsListOutputSchema = z.object({
   runs: z.array(RunActivityRowSchema),
 });
 export type RunsListOutput = z.infer<typeof RunsListOutputSchema>;
+
+/** Fleet (RAKAZO_ACTIVITY_DETAILS): one run in the Live activity window's run picker. */
+export const RunActivitySummarySchema = z.object({
+  runId: Id,
+  botId: Id,
+  botName: z.string(),
+  status: RunStatus,
+  trigger: RunTriggerSchema,
+  promptSnippet: z.string(),
+  createdAt: IsoDate,
+  startedAt: IsoDate.nullable(),
+  completedAt: IsoDate.nullable(),
+});
+export type RunActivitySummary = z.infer<typeof RunActivitySummarySchema>;
+
+export const RUN_ACTIVITY_PAGE_MAX = 500;
+
+/** A page of one run's stored events (oldest first) plus the thread's recent runs. */
+export const RunActivityOutputSchema = z.object({
+  threadId: Id,
+  runs: z.array(RunActivitySummarySchema),
+  /** The run the events belong to: the requested one, else the latest; null when none. */
+  runId: Id.nullable(),
+  events: z.array(ProductEventSchema),
+  /** Pass as `afterSeq` for the next page; null once the page reached the end. */
+  nextAfterSeq: z.number().int().nullable(),
+});
+export type RunActivityOutput = z.infer<typeof RunActivityOutputSchema>;

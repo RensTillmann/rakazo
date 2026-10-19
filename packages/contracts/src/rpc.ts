@@ -106,7 +106,13 @@ import {
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
 import { MessageReactionSchema } from "./reactions.js";
-import { RoutineHistorySchema, RoutineRunCursorSchema, RunsListOutputSchema } from "./runs.js";
+import {
+  RUN_ACTIVITY_PAGE_MAX,
+  RoutineHistorySchema,
+  RoutineRunCursorSchema,
+  RunActivityOutputSchema,
+  RunsListOutputSchema,
+} from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { ThreadUsageSchema, UsageLimitsSchema } from "./usage-limits.js";
 
@@ -956,6 +962,16 @@ export const appContract = {
   },
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),
+    /** Fleet: one run's stored events for the Live activity window, paged by `afterSeq`. */
+    activity: oc
+      .input(
+        threadTarget.safeExtend({
+          runId: Id.optional(),
+          afterSeq: z.number().int().min(-1).optional(),
+          limit: z.number().int().min(1).max(RUN_ACTIVITY_PAGE_MAX).optional(),
+        }),
+      )
+      .output(RunActivityOutputSchema),
   },
   voice: {
     catalog: oc.output(z.array(VoiceCatalogEntrySchema)),

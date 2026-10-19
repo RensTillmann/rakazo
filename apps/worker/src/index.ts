@@ -8,6 +8,7 @@ loadRootEnv();
 import {
   ChatSdkMessagingSurface,
   CodexCatalogCache,
+  createActivityDetailsRetention,
   createBackgroundJobHandlers,
   createCloudAgentConnection,
   createConnectorStack,
@@ -291,6 +292,8 @@ async function main() {
       : createRoutineRetryNoticeReconciler(pool, (runId) =>
           executor.notifyRoutineRetryAttemptsExhausted(runId),
         ),
+    // Fleet: RAKAZO_ACTIVITY_DETAILS_DAYS. Runs even with details off, so old previews still go.
+    reconcileActivityDetails: createActivityDetailsRetention(prisma),
   });
   reconciler.start();
 

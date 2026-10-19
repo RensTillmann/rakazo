@@ -38,6 +38,7 @@ import {
 import { usableModelId } from "@rakazo/contracts";
 import { abortableDelay, MISSING_TOOL_FINAL_RESPONSE_ERROR } from "@rakazo/core";
 import { getLogger } from "@rakazo/logging";
+import { activityDetailsEnabled, sanitizeSensitiveText } from "./activity-details.js";
 import { isToolPauseResult } from "./approval-effect.js";
 import { connectionIdArgument, credentialArgument } from "./bot-secrets.js";
 import { DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
@@ -331,6 +332,7 @@ export class PiAgentRuntime implements AgentRuntime {
           nestedAgents,
           subagentGate: createGate(MAX_PARALLEL_SUBAGENTS),
           toolCallBudget: trackedBudget,
+          budgetUsage,
           toolCallSeq: { value: 0 },
           abortTurn: () => undefined,
           signal,
@@ -1337,6 +1339,8 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           host.queue.push({ type: "tool", name: tool.name, args, executionId });
           const startedAt = Date.now();
           let result: unknown;
+          // What the model is handed; differs from `result` only when this function bounds it.
+          let shown: unknown;
           let failure: unknown;
           try {
             result = await (async () => {
@@ -1452,9 +1456,11 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
               tool.name === READ_TOOL_RESULT_TOOL ||
               boundedToolResults.has(result as object)
             ) {
+              shown = result;
               return result as AgentToolResult<unknown>;
             }
-            return boundAgentToolResult(result as AgentToolResult<unknown>, keepOverflow(host));
+            shown = boundAgentToolResult(result as AgentToolResult<unknown>, keepOverflow(host));
+            return shown as AgentToolResult<unknown>;
           } catch (error) {
             failure = error;
             throw error;
@@ -1475,6 +1481,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
               ...(result === undefined ? {} : { result }),
               ...(failure === undefined ? {} : { error: failure }),
               ...(host.pausePending ? { paused: true } : {}),
+              ...(activityDetailsEnabled() ? activityCompletionDetails(host, shown) : {}),
             };
             try {
               void Promise.resolve(host.request.onToolCompleted?.(completion)).catch(
@@ -2233,6 +2240,34 @@ export function serializeToolResult(
 
 /** Results already clipped once; clipping again would cut into the cut-off line. */
 const boundedToolResults = new WeakSet<object>();
+/** Fleet (RAKAZO_ACTIVITY_DETAILS): a bounded result's full text length before clipping. */
+const toolResultFullChars = new WeakMap<object, number>();
+
+function toolResultText(result: unknown): string {
+  if (!result || typeof result !== "object" || !("content" in result)) return "";
+  if (!Array.isArray(result.content)) return "";
+  return result.content
+    .map((part: unknown) =>
+      part && typeof part === "object" && "type" in part && part.type === "text" && "text" in part
+        ? String(part.text ?? "")
+        : "",
+    )
+    .join("");
+}
+
+/** What the model saw of a tool result and the run-budget counters, for the activity window. */
+function activityCompletionDetails(
+  host: ToolHost,
+  shown: unknown,
+): Pick<AgentToolCompletion, "shown" | "budget"> {
+  const budget = host.budgetUsage?.();
+  if (shown === undefined) return budget ? { budget } : {};
+  const text = toolResultText(shown);
+  const resultChars =
+    (shown && typeof shown === "object" ? toolResultFullChars.get(shown) : undefined) ??
+    text.length;
+  return { shown: { text, resultChars }, ...(budget ? { budget } : {}) };
+}
 
 function boundAgentToolResult<T>(
   result: AgentToolResult<T>,
@@ -2244,6 +2279,7 @@ function boundAgentToolResult<T>(
     content: clipToolResultContent(result.content, TOOL_RESULT_TEXT_LIMIT, keep),
   };
   boundedToolResults.add(bounded);
+  if (activityDetailsEnabled()) toolResultFullChars.set(bounded, toolResultText(result).length);
   return bounded;
 }
 
@@ -2263,6 +2299,13 @@ function serializedToolResult(
   );
   const bounded = { content: [{ type: "text" as const, text }], details: result };
   boundedToolResults.add(bounded);
+  if (activityDetailsEnabled()) {
+    try {
+      toolResultFullChars.set(bounded, JSON.stringify(result)?.length ?? text.length);
+    } catch {
+      toolResultFullChars.set(bounded, text.length);
+    }
+  }
   return bounded;
 }
 
@@ -2329,20 +2372,6 @@ export function providerFailureText(message: unknown): string | undefined {
   }
   if (errorMessage && !text) return errorMessage;
   return undefined;
-}
-
-function sanitizeSensitiveText(message: string) {
-  return message
-    .replace(/sk-or-v1-[a-zA-Z0-9]+/g, "[redacted]")
-    .replace(/sk-[a-zA-Z0-9-]+/g, "[redacted]")
-    .replace(/Bearer\s+[^\s"',;&]+/gi, "Bearer [redacted]")
-    .replace(/eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g, "[redacted]")
-    .replace(/COMPOSIO_API_KEY[=:]?\s*\S+/gi, "COMPOSIO_API_KEY=[redacted]")
-    .replace(
-      /((?:api[_-]?key|access[_-]?token|password|secret)\s*[=:]\s*)[^\s"',;&]+/gi,
-      "$1[redacted]",
-    )
-    .replace(/((?:auth|authorization)\s*[=:]\s*)(?!Bearer\b)[^\s"',;&]+/gi, "$1[redacted]");
 }
 
 /** Origin + path only for activity chips; drop userinfo, query, and fragment. */
@@ -2415,6 +2444,8 @@ interface ToolHost {
   toolCallBudget: ToolCallBudget;
   /** Shared fallback uniqueness when the model omits toolCallId (nested hosts reuse this). */
   toolCallSeq: { value: number };
+  /** Run-budget counters (top-level model calls, active time) for activity details. */
+  budgetUsage?: () => { modelCalls: number; usedMs: number };
   abortTurn(): void;
   signal: AbortSignal;
   depth: number;
