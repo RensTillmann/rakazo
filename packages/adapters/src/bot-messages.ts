@@ -141,7 +141,7 @@ export async function messageBot(
   const loadedContext = await loadBotMessageContext(deps.prisma, run.sourceMessageId);
   // Fleet: a person's input during the run starts a fresh chain; the sender match stays.
   const sourceContext =
-    loadedContext && loadedContext.hop > 0 && (await runHadPersonInput(deps.prisma, run))
+    loadedContext && (loadedContext.hop ?? 0) > 0 && (await runHadPersonInput(deps.prisma, run))
       ? { ...loadedContext, hop: 0 }
       : loadedContext;
   const intent = input.intent ?? DEFAULT_BOT_MESSAGE_INTENT;

@@ -164,6 +164,8 @@ function createDeps(
           ? { blocks: [{ kind: "bot_message_received", hop: overrides.sourceHop }] }
           : null,
       ),
+      // The run had no person input, so the hop budget still counts from the source message.
+      findMany: vi.fn(async () => []),
     },
     user: { findUnique: vi.fn(async () => ({ id: "user-1", name: "Alice Owner" })) },
     thread: { findFirst: vi.fn(async () => ({ id: "thread-2" })) },
