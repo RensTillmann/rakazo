@@ -62,6 +62,15 @@ the bot has to ask again.
 
 `list_fleet`, `organize_bot` and `update_bot` need no card.
 
+## Complete approval details
+
+Approval cards retain the complete redacted resolved summary and the displayed argument values,
+including multiline messages and evidence links. The tool description, intention and safety reason
+are not cut off at presentation length limits. Secret-named arguments remain omitted and known
+secret values are redacted before display. Push notifications are still shortened; they are not a
+substitute for reviewing the full card. This does not change authorization or mark external setup
+complete.
+
 ## Obsolete ordinary questions
 
 An authenticated integration can call `decisions.withdraw` with `botId`, `messageId` and a nonempty
