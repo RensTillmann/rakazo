@@ -2376,6 +2376,10 @@ msgstr "Önce düzenle"
 msgid "Edit Profile"
 msgstr "Profili Düzenle"
 
+#: src/components/AskCard.tsx
+msgid "Edited before answering"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "E-posta"
@@ -4210,6 +4214,10 @@ msgstr "Yanıtla"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "Reply draft"
+msgstr ""
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/Shell.tsx
 msgid "Replying to {0}"
@@ -5022,6 +5030,10 @@ msgstr "Model sağlayıcısı bir hata döndürdü."
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "Sağlayıcı istek hızını sınırlıyor."
+
+#: src/components/AskCard.tsx
+msgid "The reply is empty"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."

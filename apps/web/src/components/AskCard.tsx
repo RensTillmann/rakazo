@@ -3,6 +3,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@rakazo/chat-ui/web";
 import type { ThreadMessage } from "@rakazo/contracts";
 import {
+  ASK_DRAFT_MAX_LENGTH,
   ATTACHMENT_MAX_COUNT,
   attachmentSizeLabel,
   BOT_INSTRUCTIONS_MAX_LENGTH,
@@ -16,7 +17,7 @@ import {
 } from "@rakazo/core";
 import { Button, Input, Textarea } from "@rakazo/ui-web";
 import { Paperclip, Plus, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { answeredByDeviceLabel } from "../lib/answered-by-label";
 import {
   ATTACHMENT_ACCEPT,
@@ -31,6 +32,10 @@ import { HoldToTalkControls, HoldToTalkStrip, useHoldToTalk } from "./composer/H
 
 /** `pendingAction` while a typed answer (with its files) is being sent; never an action id. */
 const TYPED_ANSWER_ACTION = "\u0000typed";
+
+/** Without it the reply draft box is sized from its scrollHeight (older Firefox and Safari). */
+const FIELD_SIZING_CONTENT =
+  typeof CSS !== "undefined" && CSS.supports?.("field-sizing", "content") === true;
 
 /** Hold-to-talk in a question card's answer box. */
 export type AskVoice = { transcribe?: boolean; disabled?: boolean };
@@ -105,8 +110,16 @@ export function AskCard({
 }: {
   block: AskBlock;
   canAnswer: boolean;
-  /** `files` only for a question card's typed answer, and only when `attachmentMaxBytes` is set. */
-  onAnswer: (text: string, username?: string, files?: readonly File[]) => Promise<void>;
+  /**
+   * `files` only for a question card's typed answer, and only when `attachmentMaxBytes` is set.
+   * `draftFinal`: a draft card's reply as edited on the card; undefined while unchanged.
+   */
+  onAnswer: (
+    text: string,
+    username?: string,
+    files?: readonly File[],
+    draftFinal?: string,
+  ) => Promise<void>;
   /** Dictation into a question card's answer box; omitted = no microphone. */
   voice?: AskVoice;
   /** The upload limit; set = a question card's answer can carry files ('+', paste). */
@@ -119,6 +132,21 @@ export function AskCard({
   const [username, setUsername] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Fleet: the bot's reply draft, edited in place; any answer carries the edit along.
+  const [draftText, setDraftText] = useState(block.draft ?? "");
+  const draftFinal = block.draft !== undefined && draftText !== block.draft ? draftText : undefined;
+  const draftEditable = canAnswer && block.status !== "answered";
+  // A cleared reply is never sent; any answer waits until it has text again.
+  const draftEmpty = draftFinal !== undefined && !draftFinal.trim();
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
+  // Browsers without `field-sizing: content` size the draft box through its inline height, after
+  // every render: a dock card measures 0 while hidden and sizes once it is shown.
+  useLayoutEffect(() => {
+    const element = draftRef.current;
+    if (FIELD_SIZING_CONTENT || !element?.scrollHeight) return;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  });
   const submitting = pendingAction !== null;
   const approvalActions = isApprovalAskBlock(block) ? block.actions : undefined;
   const askActions = block.actions;
@@ -133,6 +161,10 @@ export function AskCard({
 
   async function submitAnswer(value: string) {
     if (submitting) return;
+    if (draftEmpty) {
+      setError(t`The reply is empty`);
+      return;
+    }
     if (secretInput ? value.length === 0 : !value.trim()) return;
     const submitUsername = loginInput ? username.trim() : undefined;
     if (loginInput && !submitUsername) return;
@@ -144,7 +176,7 @@ export function AskCard({
       setUsername("");
     }
     try {
-      await onAnswer(submitValue, submitUsername);
+      await onAnswer(submitValue, submitUsername, undefined, draftFinal);
     } catch (err) {
       // A secret answer's failure may echo the secret, so never show its message.
       setError(
@@ -160,15 +192,19 @@ export function AskCard({
   /** A question card's typed answer. Files alone answer with a fixed line pointing at them. */
   async function submitTyped(text: string, files: readonly File[]): Promise<boolean> {
     if (submitting) return false;
+    if (draftEmpty) {
+      setError(t`The reply is empty`);
+      return false;
+    }
     const trimmed = text.trim();
     if (!trimmed && files.length === 0) return false;
     setPendingAction(TYPED_ANSWER_ACTION);
     setError(null);
     try {
       if (files.length > 0) {
-        await onAnswer(trimmed || t`See the attached file(s).`, undefined, files);
+        await onAnswer(trimmed || t`See the attached file(s).`, undefined, files, draftFinal);
       } else {
-        await onAnswer(trimmed);
+        await onAnswer(trimmed, undefined, undefined, draftFinal);
       }
       return true;
     } catch (err) {
@@ -265,6 +301,37 @@ export function AskCard({
           >
             {block.detail}
           </pre>
+        )
+      ) : null}
+      {block.draft !== undefined ? (
+        draftEditable ? (
+          <Textarea
+            data-testid="ask-draft"
+            aria-label={t`Reply draft`}
+            dir="auto"
+            maxLength={ASK_DRAFT_MAX_LENGTH}
+            disabled={submitting}
+            value={draftText}
+            ref={draftRef}
+            // Grows with the text (`field-sizing: content`); the dock body scrolls past that.
+            className="mt-3 min-h-24 resize-none bg-background text-[15.5px] leading-[1.5] md:text-[15.5px]"
+            onChange={(event) => setDraftText(event.target.value)}
+          />
+        ) : (
+          <div className="mt-3">
+            <div
+              data-testid="ask-draft"
+              dir="auto"
+              className="whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 text-[15.5px] leading-[1.5] text-foreground"
+            >
+              {block.draftFinal ?? block.draft}
+            </div>
+            {block.draftFinal !== undefined ? (
+              <div className="mt-1 text-[12px] text-muted-foreground">
+                <Trans>Edited before answering</Trans>
+              </div>
+            ) : null}
+          </div>
         )
       ) : null}
       {block.instructionUpdate && editing && canAnswer && block.status !== "answered" ? (

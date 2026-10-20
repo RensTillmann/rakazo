@@ -2376,6 +2376,10 @@ msgstr "수정 후 보내기"
 msgid "Edit Profile"
 msgstr "Bot 정보 수정"
 
+#: src/components/AskCard.tsx
+msgid "Edited before answering"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "이메일"
@@ -4210,6 +4214,10 @@ msgstr "답장"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "Reply draft"
+msgstr ""
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/Shell.tsx
 msgid "Replying to {0}"
@@ -5022,6 +5030,10 @@ msgstr "모델 제공업체에서 오류를 반환했습니다."
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "서비스가 요청 속도를 제한하고 있습니다."
+
+#: src/components/AskCard.tsx
+msgid "The reply is empty"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."

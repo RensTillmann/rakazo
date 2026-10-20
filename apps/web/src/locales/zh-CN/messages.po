@@ -2376,6 +2376,10 @@ msgstr "先编辑"
 msgid "Edit Profile"
 msgstr "编辑资料"
 
+#: src/components/AskCard.tsx
+msgid "Edited before answering"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "邮箱"
@@ -4210,6 +4214,10 @@ msgstr "回复"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "Reply draft"
+msgstr ""
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/Shell.tsx
 msgid "Replying to {0}"
@@ -5022,6 +5030,10 @@ msgstr "模型提供商返回了错误。"
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "提供方正在限制请求频率。"
+
+#: src/components/AskCard.tsx
+msgid "The reply is empty"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."

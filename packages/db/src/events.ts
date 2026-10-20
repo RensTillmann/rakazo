@@ -7,9 +7,11 @@ import {
   MessageBlock as MessageBlockSchema,
 } from "@rakazo/contracts";
 import {
+  askAnswerWithEditedDraft,
   batchedConnectorActions,
   blocksToAgentHistoryText,
   callIdFromClientNonce,
+  editedAskDraft,
   inboundDeliverySummary,
   inboundSourceFromClientNonce,
   instructionUpdateDiff,
@@ -225,6 +227,11 @@ export interface AnswerRunInput {
   username?: string;
   /** Fleet: the API session that answered; stored on the block and the approval effect. */
   answeredBy?: AskAnsweredBy;
+  /**
+   * Fleet: a draft card's reply as the user left it. Kept on the block as `draftFinal` and told
+   * to the bot only when it differs from the card's `draft`.
+   */
+  draftFinal?: string;
   /**
    * Question cards only: resolves, inside the answer's transaction, the files attached to the
    * answer. The answer then also lands in the thread as a user reply to the card carrying them,
@@ -701,7 +708,12 @@ function askLabelSet(actions: Array<{ label: string }> | undefined): string {
 async function syncDuplicateAsks(
   tx: Prisma.TransactionClient,
   input: AnswerRunInput,
-  source: { messageId: string; text: string; actions?: Array<{ id: string; label: string }> },
+  source: {
+    messageId: string;
+    text: string;
+    actions?: Array<{ id: string; label: string }>;
+    draft?: string;
+  },
   selectedLabel: string | undefined,
 ): Promise<{ runIds: string[]; seq: number }> {
   const waiting = await tx.run.findMany({
@@ -724,6 +736,8 @@ async function syncDuplicateAsks(
     // Any card tied to an approval effect is an approval decision, whatever its option ids.
     if (ask.approvalEffectId || isApprovalAskBlock(ask) || isSecretAskBlock(ask)) continue;
     if (normalizeAskText(ask.text) !== question || askLabelSet(ask.actions) !== labels) continue;
+    // A card with another reply draft is another reply, never answered by this one.
+    if (ask.draft !== source.draft) continue;
     let answer = input.answer;
     if (selectedLabel !== undefined) {
       const action = ask.actions?.find(
@@ -742,6 +756,7 @@ async function syncDuplicateAsks(
         answeredByUserId: input.answeredByUserId,
         answer,
         ...(input.answeredBy ? { answeredBy: input.answeredBy } : {}),
+        ...(input.draftFinal !== undefined ? { draftFinal: input.draftFinal } : {}),
       },
       undefined,
       source.messageId,
@@ -819,6 +834,9 @@ async function commitAnswerRunInput(
     ? LoginSecretValue.safeParse({ username: input.username!.trim(), password: input.answer })
     : undefined;
   if (login && !login.success) return null;
+  // Fleet: only a question card with a reply draft takes an edited reply.
+  const draftFinal =
+    approvalAsk || secretAsk ? undefined : editedAskDraft(pendingAsk.draft, input.draftFinal);
   let approvalEffect: { id: string; kind: string; request: Prisma.JsonValue } | null = null;
   let editedInstructions: string | undefined;
   let approvalAnswer = input.answer;
@@ -1000,7 +1018,10 @@ async function commitAnswerRunInput(
         prompt: resumePrompt(
           run,
           pendingAsk.text,
-          selectedChoice ? `Selected choice ${selectedChoice.id}: ${resumeLabel}` : input.answer,
+          askAnswerWithEditedDraft(
+            selectedChoice ? `Selected choice ${selectedChoice.id}: ${resumeLabel}` : input.answer,
+            draftFinal,
+          ),
         ),
       },
     });
@@ -1015,6 +1036,7 @@ async function commitAnswerRunInput(
           answer: recordedAnswer,
           ...(syncedFrom ? { syncedFrom } : {}),
           ...(input.answeredBy ? { answeredBy: input.answeredBy } : {}),
+          ...(draftFinal !== undefined ? { draftFinal } : {}),
           ...(editedInstructions !== undefined && pendingAsk.instructionUpdate
             ? {
                 instructionUpdate: { ...pendingAsk.instructionUpdate, after: editedInstructions },
@@ -1042,7 +1064,10 @@ async function commitAnswerRunInput(
   // its own and is never steering; the paused run resumes as with any answer.
   let repliedSeq = 0;
   if (attachmentBlocks.length) {
-    const text = (selectedChoice?.label ?? input.answer).trim();
+    const text = askAnswerWithEditedDraft(
+      (selectedChoice?.label ?? input.answer).trim(),
+      draftFinal,
+    );
     const replyBlocks: MessageBlock[] = [
       ...(text ? [{ kind: "text" as const, text }] : []),
       ...attachmentBlocks,
@@ -1083,7 +1108,12 @@ async function commitAnswerRunInput(
       ? await syncDuplicateAsks(
           tx,
           input,
-          { messageId: message.id, text: pendingAsk.text, actions: pendingAsk.actions },
+          {
+            messageId: message.id,
+            text: pendingAsk.text,
+            actions: pendingAsk.actions,
+            draft: pendingAsk.draft,
+          },
           selectedChoice?.label,
         )
       : { runIds: [], seq: 0 };

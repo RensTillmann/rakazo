@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fakeAgentState = vi.hoisted(() => ({
   options: ["Berlin", "Seoul", "Toronto"],
+  draft: undefined as unknown,
   tools: [] as Array<{
     name: string;
     execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -27,6 +28,7 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
       await askUser.execute("call-choice-1", {
         question: "Which city should I use?",
         options: fakeAgentState.options,
+        ...(fakeAgentState.draft === undefined ? {} : { draft: fakeAgentState.draft }),
       });
     }
 
@@ -56,6 +58,7 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
   registerOpenAiCompatibleRuntime: (models: unknown) => models,
 }));
 
+import { builtinAgentTools } from "./builtin-tools.js";
 import { PiAgentRuntime } from "./pi-runtime.js";
 
 const choiceTool: ConnectorTool = {
@@ -94,6 +97,7 @@ describe("Pi choice asks", () => {
   beforeEach(() => {
     fakeAgentState.tools = [];
     fakeAgentState.options = ["Berlin", "Seoul", "Toronto"];
+    fakeAgentState.draft = undefined;
   });
 
   it("emits a tappable ask and stops without a finished-work fallback", async () => {
@@ -124,6 +128,41 @@ describe("Pi choice asks", () => {
     await expect(async () => {
       for await (const event of runtime.run(runRequest, runContext)) events.push(event);
     }).rejects.toThrow("ask_user requires two to four unique, non-empty options");
+    expect(events.some((event) => event.type === "ask")).toBe(false);
+  });
+
+  it("offers an optional reply draft of at most 20,000 characters", () => {
+    const askUser = builtinAgentTools.find((tool) => tool.name === "ask_user");
+    expect(askUser?.inputSchema).toMatchObject({
+      properties: { draft: { type: "string", maxLength: 20_000 } },
+      required: ["question", "options"],
+    });
+  });
+
+  it("carries the reply draft onto the ask", async () => {
+    fakeAgentState.draft = "Hi Konstantin,\n\nYour licence is active again.\n\nRens";
+    const runtime = new PiAgentRuntime();
+    const events: AgentRuntimeEvent[] = [];
+
+    for await (const event of runtime.run(runRequest, runContext)) events.push(event);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "ask",
+        text: "Which city should I use?",
+        draft: "Hi Konstantin,\n\nYour licence is active again.\n\nRens",
+      }),
+    );
+  });
+
+  it("rejects a draft over 20,000 characters before emitting an ask", async () => {
+    fakeAgentState.draft = "x".repeat(20_001);
+    const runtime = new PiAgentRuntime();
+    const events: AgentRuntimeEvent[] = [];
+
+    await expect(async () => {
+      for await (const event of runtime.run(runRequest, runContext)) events.push(event);
+    }).rejects.toThrow("ask_user draft must be text of at most 20000 characters");
     expect(events.some((event) => event.type === "ask")).toBe(false);
   });
 });

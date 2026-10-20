@@ -3914,6 +3914,24 @@ const MessageBubble = memo(function MessageBubble({
                   {askBlock.detail}
                 </Text>
               ) : null}
+              {askBlock.draft !== undefined ? (
+                // Fleet: read-only here; the reply draft is edited on the web card.
+                <Text
+                  selectable
+                  style={{
+                    color: tokens.foreground,
+                    backgroundColor: tokens.muted,
+                    borderRadius: 12,
+                    marginTop: 8,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    fontSize: 15.5,
+                    lineHeight: 23,
+                  }}
+                >
+                  {askBlock.draftFinal ?? askBlock.draft}
+                </Text>
+              ) : null}
               {askBlock.status === "answered" ? (
                 <Text
                   {...actionProps}

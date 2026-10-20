@@ -1378,6 +1378,92 @@ describe("answerRunInput", () => {
     expect(publish).toHaveBeenCalledWith("thread:thread-1", JSON.stringify({ cursor: 9 }));
   });
 
+  describe("with a reply draft", () => {
+    const draft = "Hi Konstantin,\n\nYour licence is active again.\n\nRens";
+    const draftAsk = {
+      kind: "ask",
+      text: "Reply to Konstantin Grushko (#3529)?",
+      status: "pending",
+      draft,
+      actions: [
+        { id: "choice-1", label: "Approve and send" },
+        { id: "choice-2", label: "Don't reply" },
+      ],
+    };
+    const answerDraft = async (draftFinal: string | undefined) => {
+      const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+        message: {
+          findFirst: vi.fn().mockResolvedValue({ id: "message-1", blocks: [draftAsk] }),
+          update: vi.fn().mockResolvedValue({ id: "message-1" }),
+        },
+        run: {
+          findFirst: vi.fn().mockResolvedValue({ botId: "bot-2", trigger: "user" }),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findUnique: vi.fn().mockResolvedValue({
+            status: "queued",
+            createdAt: new Date("2026-08-16T12:00:00.000Z"),
+            threadId: "thread-1",
+          }),
+        },
+        task: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+        thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 10 }) },
+        event: {
+          create: vi.fn(async ({ data }: { data: { seq: number; type: string } }) => ({
+            ...event(data.seq),
+            type: data.type,
+          })),
+          findFirst: vi.fn().mockResolvedValue(null),
+        },
+      };
+      const prisma = {
+        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      } as unknown as PrismaClient;
+      await expect(
+        answerRunInput(prisma, {
+          spaceId: "workspace-1",
+          threadId: "thread-1",
+          runId: "run-1",
+          messageId: "message-1",
+          answeredByUserId: "user-1",
+          answer: "choice-1",
+          ...(draftFinal !== undefined ? { draftFinal } : {}),
+        }),
+      ).resolves.toBe(true);
+      return tx;
+    };
+
+    it("stores an edited draft as draftFinal and tells the bot to send exactly it", async () => {
+      const edited = "Hi Konstantin,\n\nYour licence is active again from today.\n\nRens";
+      const tx = await answerDraft(edited);
+      expect(tx.message.update).toHaveBeenCalledWith({
+        where: { id: "message-1" },
+        data: {
+          blocks: [{ ...draftAsk, status: "answered", answer: "choice-1", draftFinal: edited }],
+        },
+      });
+      expect(tx.task.updateMany).toHaveBeenCalledWith({
+        where: { runs: { some: { id: "run-1" } } },
+        data: {
+          prompt: `Selected choice choice-1: Approve and send\n\nEdited reply (send exactly this):\n${edited}`,
+        },
+      });
+    });
+
+    it("answers with the plain option when the draft is unchanged", async () => {
+      // A browser textarea turns `\r\n` into `\n`; that alone is no edit.
+      for (const unchanged of [undefined, draft, draft.replace(/\n/g, "\r\n")]) {
+        const tx = await answerDraft(unchanged);
+        const blocks = tx.message.update.mock.calls[0]![0].data.blocks;
+        expect(blocks).toEqual([{ ...draftAsk, status: "answered", answer: "choice-1" }]);
+        expect(tx.task.updateMany).toHaveBeenCalledWith({
+          where: { runs: { some: { id: "run-1" } } },
+          data: { prompt: "Selected choice choice-1: Approve and send" },
+        });
+      }
+    });
+  });
+
   describe("with files", () => {
     const fileBlock = {
       kind: "file" as const,

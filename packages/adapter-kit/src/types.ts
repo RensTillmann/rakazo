@@ -603,6 +603,8 @@ export type AgentRuntimeEvent =
       text: string;
       detail?: string;
       actions?: Array<{ id: string; label: string }>;
+      /** Fleet: a reply draft the card shows editable (`ask_user` `draft`). */
+      draft?: string;
     }
   | { type: "takeover"; reason: string }
   | ({

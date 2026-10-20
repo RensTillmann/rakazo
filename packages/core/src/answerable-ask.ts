@@ -100,3 +100,26 @@ export function resolveAskChoice(
   const lower = trimmed.toLowerCase();
   return actions.find((action) => action.label.trim().toLowerCase() === lower);
 }
+
+/**
+ * Fleet: the card's reply draft as the user left it, or undefined when unchanged. Line endings
+ * are compared as `\n`, since a browser textarea turns `\r\n` into `\n`.
+ */
+export function editedAskDraft(
+  draft: string | undefined,
+  draftFinal: string | undefined,
+): string | undefined {
+  if (draft === undefined || draftFinal === undefined) return undefined;
+  const normalize = (text: string) => text.replace(/\r\n?/g, "\n");
+  return normalize(draftFinal) === normalize(draft) ? undefined : draftFinal;
+}
+
+/**
+ * Fleet: what the bot is told for an answer to a draft card. An edited draft follows the answer
+ * (the tapped option, as the bot sees it today) as the exact text to send.
+ */
+export function askAnswerWithEditedDraft(answer: string, draftFinal: string | undefined): string {
+  return draftFinal === undefined
+    ? answer
+    : `${answer}\n\nEdited reply (send exactly this):\n${draftFinal}`;
+}

@@ -716,6 +716,27 @@ describe("thread answer delivery", () => {
     };
   }
 
+  it("passes an edited reply draft on and refuses an empty or over-long one", async () => {
+    const answerRunInput = vi.fn().mockResolvedValue(true);
+    const answer = answerHarness(answerRunInput);
+    const edited = "Hi Konstantin,\n\nYour licence is active again from today.\n\nRens";
+
+    expect((await answer({ answer: "choice-1", draftFinal: edited })).status).toBe(200);
+    expect(answerRunInput.mock.calls[0]![0]).toMatchObject({
+      answer: "choice-1",
+      draftFinal: edited,
+    });
+    expect((await answer({ answer: "choice-1" })).status).toBe(200);
+    expect(answerRunInput.mock.calls[1]![0]).not.toHaveProperty("draftFinal");
+    expect((await answer({ answer: "choice-1", draftFinal: "x".repeat(20_001) })).status).toBe(400);
+    for (const empty of ["", "  \n\t "]) {
+      const refused = await answer({ answer: "choice-1", draftFinal: empty });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({ json: { message: "The reply is empty" } });
+    }
+    expect(answerRunInput).toHaveBeenCalledTimes(2);
+  });
+
   it("validates answer files in the answer's transaction exactly as a send to the bot does", async () => {
     const findMany = vi
       .fn()

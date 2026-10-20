@@ -36,6 +36,7 @@ import {
   TransientModelError,
 } from "@rakazo/adapter-kit";
 import {
+  ASK_DRAFT_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   canonicalPiProviderId,
   FLEET_TOOL_NAMES,
@@ -1432,6 +1433,8 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           // Keep a missing/invalid options value as-is so schema minItems can reject it;
           // do not coerce to [] (that used to look like a valid empty list upstream).
           options,
+          // Same: an invalid draft stays as-is for the schema to reject.
+          ...(raw.draft == null ? {} : { draft: raw.draft }),
         };
       }
       if (tool.name === "request_secret") {
@@ -1552,6 +1555,15 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                 ) {
                   throw new Error("ask_user requires two to four unique, non-empty options");
                 }
+                const draft = args.draft;
+                if (
+                  draft !== undefined &&
+                  (typeof draft !== "string" || draft.length > ASK_DRAFT_MAX_LENGTH)
+                ) {
+                  throw new Error(
+                    `ask_user draft must be text of at most ${ASK_DRAFT_MAX_LENGTH} characters`,
+                  );
+                }
                 host.pausePending = true;
                 host.queue.push({
                   type: "ask",
@@ -1560,6 +1572,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     id: `choice-${index + 1}`,
                     label,
                   })),
+                  ...(typeof draft === "string" && draft.trim() ? { draft } : {}),
                 });
                 return {
                   content: [{ type: "text", text: "Waiting for the user's choice." }],
@@ -2065,6 +2078,7 @@ function builtinParameters(tool: ConnectorTool) {
         maxItems: 4,
         uniqueItems: true,
       }),
+      draft: Type.Optional(Type.String({ maxLength: ASK_DRAFT_MAX_LENGTH })),
     });
   }
   if (tool.name === "remember") {

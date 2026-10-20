@@ -104,7 +104,12 @@ describe("AskCard free-text option", () => {
     let container: HTMLDivElement;
     let root: Root;
     const onAnswer = vi.fn(
-      async (_text: string, _username?: string, _files?: readonly File[]) => {},
+      async (
+        _text: string,
+        _username?: string,
+        _files?: readonly File[],
+        _draftFinal?: string,
+      ) => {},
     );
 
     beforeEach(() => {
@@ -168,7 +173,12 @@ describe("AskCard free-text option", () => {
         press({ key: "Enter" });
       });
       expect(onAnswer).toHaveBeenCalledTimes(1);
-      expect(onAnswer).toHaveBeenCalledWith("Only on Monday, after 10");
+      expect(onAnswer).toHaveBeenCalledWith(
+        "Only on Monday, after 10",
+        undefined,
+        undefined,
+        undefined,
+      );
     });
 
     it("keeps Shift+Enter for a new line and sends both lines", async () => {
@@ -180,7 +190,12 @@ describe("AskCard free-text option", () => {
       await act(async () => {
         sendButton().click();
       });
-      expect(onAnswer).toHaveBeenCalledWith("First line\nSecond line");
+      expect(onAnswer).toHaveBeenCalledWith(
+        "First line\nSecond line",
+        undefined,
+        undefined,
+        undefined,
+      );
     });
 
     it("keeps Send disabled until there is text", async () => {
@@ -202,7 +217,7 @@ describe("AskCard free-text option", () => {
       await act(async () => {
         choice.click();
       });
-      expect(onAnswer).toHaveBeenCalledWith("skip", undefined);
+      expect(onAnswer).toHaveBeenCalledWith("skip", undefined, undefined, undefined);
     });
 
     it("puts dictated text into the box and never sends it", async () => {
@@ -232,7 +247,7 @@ describe("AskCard free-text option", () => {
       await act(async () => {
         sendButton().click();
       });
-      expect(onAnswer).toHaveBeenCalledWith("Here it is", undefined, [brief]);
+      expect(onAnswer).toHaveBeenCalledWith("Here it is", undefined, [brief], undefined);
     });
 
     it("answers with files alone", async () => {
@@ -243,7 +258,92 @@ describe("AskCard free-text option", () => {
       await act(async () => {
         sendButton().click();
       });
-      expect(onAnswer).toHaveBeenCalledWith("See the attached file(s).", undefined, [brief]);
+      expect(onAnswer).toHaveBeenCalledWith(
+        "See the attached file(s).",
+        undefined,
+        [brief],
+        undefined,
+      );
     });
+  });
+});
+
+describe("AskCard reply draft", () => {
+  const draft = "Hi Konstantin,\n\nYour licence is active again.\n\nRens";
+  const edited = "Hi Konstantin,\n\nYour licence is active again from today.\n\nRens";
+  const block = {
+    kind: "ask",
+    text: "Case 280 · licence: Reply to Konstantin Grushko (#3529)?",
+    status: "pending",
+    draft,
+    actions: [
+      { id: "choice-1", label: "Approve and send" },
+      { id: "choice-2", label: "Don't reply" },
+    ],
+  } as unknown as AskBlock;
+
+  it("shows the sent reply read-only once answered, marked when it was edited", () => {
+    const answered = {
+      ...block,
+      status: "answered",
+      answer: "choice-1",
+      draftFinal: edited,
+    } as unknown as AskBlock;
+    const html = renderToStaticMarkup(
+      <AskCard block={answered} canAnswer onAnswer={async () => {}} />,
+    );
+    expect(html).toContain('data-testid="ask-draft"');
+    expect(html).not.toContain("<textarea");
+    expect(html).toContain("active again from today");
+    expect(html).toContain("Edited before answering");
+    const unedited = renderToStaticMarkup(
+      <AskCard
+        block={{ ...answered, draftFinal: undefined } as AskBlock}
+        canAnswer
+        onAnswer={async () => {}}
+      />,
+    );
+    expect(unedited).toContain("Your licence is active again.");
+    expect(unedited).not.toContain("Edited before answering");
+  });
+
+  it("sends the edited reply with a typed answer too", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const onAnswer = vi.fn(
+      async (
+        _text: string,
+        _username?: string,
+        _files?: readonly File[],
+        _draftFinal?: string,
+      ) => {},
+    );
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(<AskCard block={block} canAnswer onAnswer={onAnswer} />));
+    const setValue = (element: HTMLTextAreaElement, value: string) =>
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+          element,
+          value,
+        );
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    const draftField = container.querySelector<HTMLTextAreaElement>('[data-testid="ask-draft"]')!;
+    expect(draftField.value).toBe(draft);
+    setValue(draftField, edited);
+    const answerField = container.querySelector<HTMLTextAreaElement>(
+      '[data-testid="ask-type-answer"]',
+    )!;
+    setValue(answerField, "Send it after 10");
+    await act(async () => {
+      answerField.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+      );
+    });
+    expect(onAnswer).toHaveBeenCalledWith("Send it after 10", undefined, undefined, edited);
+    act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
   });
 });

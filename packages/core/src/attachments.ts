@@ -5,6 +5,7 @@ import {
   isAllowedAttachmentMimeType,
   isAttachmentImageMimeType,
 } from "@rakazo/contracts";
+import { askAnswerWithEditedDraft } from "./answerable-ask.js";
 
 export class AttachmentValidationError extends Error {
   constructor(message: string) {
@@ -154,7 +155,10 @@ export function blocksToAgentHistoryText(
       if (block.kind === "ask") {
         if (block.status !== "answered" || !block.answer) return block.text;
         const choice = block.actions?.find((action) => action.id === block.answer);
-        return `${block.text}\nAnswer: ${choice?.label ?? block.answer}`;
+        return askAnswerWithEditedDraft(
+          `${block.text}\nAnswer: ${choice?.label ?? block.answer}`,
+          block.draftFinal,
+        );
       }
       // The bot needs the outcome of its own call: a missed call is its cue to follow up.
       if (block.kind === "call_request") {

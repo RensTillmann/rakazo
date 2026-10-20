@@ -155,7 +155,7 @@ describe("DecisionDock", () => {
     expect(query('[data-testid="decision-dock"]')?.textContent).toContain("Ops room");
   });
 
-  it("enlarges and shrinks, remembers it, and hides the toggle on small screens", async () => {
+  it("starts twice the first dock's size, enlarges further, remembers it, and hides the toggle on small screens", async () => {
     await render("t-josy");
     const dock = () => query('[data-testid="decision-dock"]')!;
     const body = () => query('[data-testid="decision-dock-body"]')!;
@@ -163,18 +163,99 @@ describe("DecisionDock", () => {
     // Below `sm` the dock is full width already, so the toggle only shows from `sm` up.
     expect(enlarge.className).toContain("hidden");
     expect(enlarge.className).toContain("sm:grid");
-    expect(dock().className).not.toContain("sm:w-[min(800px");
+    // Default: 800px wide (was 400px), body up to 56rem (was 28rem), both capped to the screen.
+    expect(dock().className).toContain("w-[min(800px,calc(100%-2rem))]");
+    expect(body().className).toContain("max-h-[min(70vh,56rem)]");
+    expect(dock().className).not.toContain("sm:w-[min(1200px");
     act(() => enlarge.click());
-    expect(dock().className).toContain("sm:w-[min(800px,calc(100%-2rem))]");
-    expect(body().className).toContain("sm:max-h-[min(85vh,56rem)]");
+    expect(dock().className).toContain("sm:w-[min(1200px,calc(100%-2rem))]");
+    expect(body().className).toContain("sm:max-h-[min(85vh,80rem)]");
     expect(localStorage.getItem("rk:decision-dock:large:user-1")).toBe("1");
     act(() => root.unmount());
     root = createRoot(container);
     await render("t-josy");
-    expect(dock().className).toContain("sm:w-[min(800px,calc(100%-2rem))]");
+    expect(dock().className).toContain("sm:w-[min(1200px,calc(100%-2rem))]");
     act(() => query('button[aria-label="Make decisions smaller"]')?.click());
-    expect(dock().className).not.toContain("sm:w-[min(800px");
+    expect(dock().className).not.toContain("sm:w-[min(1200px");
     expect(localStorage.getItem("rk:decision-dock:large:user-1")).toBe("0");
+  });
+
+  const draftCard = decision("draft-1", {
+    createdAt: "2026-10-20T09:30:00.000Z",
+    block: {
+      kind: "ask",
+      text: "Case 280 · licence: Reply to Konstantin Grushko (#3529)?",
+      status: "pending",
+      draft: "Hi Konstantin,\n\nYour licence is active again.\n\nRens",
+      actions: [
+        { id: "choice-1", label: "Approve and send" },
+        { id: "choice-2", label: "Don't reply" },
+      ],
+    },
+  });
+  const draftField = () =>
+    visibleCard()[0]!.querySelector<HTMLTextAreaElement>('[data-testid="ask-draft"]')!;
+
+  it("shows a card's reply draft editable and sends the edit with the tapped option", async () => {
+    vi.mocked(rpc.decisions.list).mockResolvedValue({ decisions: [draftCard] });
+    vi.mocked(rpc.threads.answer).mockResolvedValue({ ok: true } as never);
+    await render("t-josy");
+    expect(draftField().tagName).toBe("TEXTAREA");
+    expect(draftField().value).toBe("Hi Konstantin,\n\nYour licence is active again.\n\nRens");
+    // Above the options, and the typed-answer box stays.
+    const card = visibleCard()[0]!;
+    const firstOption = [...card.querySelectorAll("button")].find(
+      (button) => button.textContent === "Approve and send",
+    )!;
+    expect(
+      draftField().compareDocumentPosition(firstOption) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(card.querySelector('[data-testid="ask-type-answer"]')).not.toBeNull();
+    act(() => {
+      const value = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+      value?.set?.call(
+        draftField(),
+        "Hi Konstantin,\n\nYour licence is active again from today.\n\nRens",
+      );
+      draftField().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => clickButton("Approve and send"));
+    expect(rpc.threads.answer).toHaveBeenCalledWith({
+      botId: "josy",
+      runId: "run-draft-1",
+      messageId: "draft-1",
+      answer: "choice-1",
+      draftFinal: "Hi Konstantin,\n\nYour licence is active again from today.\n\nRens",
+    });
+  });
+
+  it("sends no draftFinal when the reply draft is unchanged", async () => {
+    vi.mocked(rpc.decisions.list).mockResolvedValue({ decisions: [draftCard] });
+    vi.mocked(rpc.threads.answer).mockResolvedValue({ ok: true } as never);
+    await render("t-josy");
+    await act(async () => clickButton("Approve and send"));
+    expect(rpc.threads.answer).toHaveBeenCalledWith({
+      botId: "josy",
+      runId: "run-draft-1",
+      messageId: "draft-1",
+      answer: "choice-1",
+    });
+  });
+
+  it("refuses a cleared reply on the card and keeps the card open", async () => {
+    vi.mocked(rpc.decisions.list).mockResolvedValue({ decisions: [draftCard] });
+    vi.mocked(rpc.threads.answer).mockResolvedValue({ ok: true } as never);
+    await render("t-josy");
+    act(() => {
+      const value = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+      value?.set?.call(draftField(), "  \n ");
+      draftField().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => clickButton("Approve and send"));
+    expect(rpc.threads.answer).not.toHaveBeenCalled();
+    expect(onAnswered).not.toHaveBeenCalled();
+    expect(visibleCard()[0]?.dataset.decisionId).toBe("draft-1");
+    expect(visibleCard()[0]?.textContent).toContain("The reply is empty");
   });
 
   it("uploads a card's files to its own chat and answers with their artifact ids", async () => {

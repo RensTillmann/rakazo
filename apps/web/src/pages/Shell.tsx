@@ -2412,7 +2412,7 @@ function SpaceShell() {
     if (botId) void jumpToMessageRef.current({ botId, messageId }).catch(() => undefined);
   }, []);
   const answerMessage = useCallback(
-    async (message: ThreadMessage, text: string, username?: string) => {
+    async (message: ThreadMessage, text: string, username?: string, draftFinal?: string) => {
       const botId = activeBotId.current;
       const groupId = activeGroupId.current;
       if (!botId && !groupId) return;
@@ -2422,6 +2422,7 @@ function SpaceShell() {
         messageId: message.id,
         answer: text,
         ...(username ? { username } : {}),
+        ...(draftFinal !== undefined ? { draftFinal } : {}),
       });
       if (groupId && activeGroupId.current === groupId) {
         await refreshGroupThreadRef.current(groupId);
@@ -5676,7 +5677,12 @@ const Transcript = memo(function Transcript({
   onCallBack?: () => void;
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
-  onAnswer: (message: ThreadMessage, text: string, username?: string) => Promise<void>;
+  onAnswer: (
+    message: ThreadMessage,
+    text: string,
+    username?: string,
+    draftFinal?: string,
+  ) => Promise<void>;
   onOpenDecision: (message: ThreadMessage) => void;
   onReply: (message: ThreadMessage) => void;
   onQuote: (message: ThreadMessage, quote: string) => void;
@@ -7620,7 +7626,12 @@ const MessageView = memo(function MessageView({
   artifactTarget: ArtifactTarget;
   canAnswer: boolean;
   message: ThreadMessage;
-  onAnswer: (message: ThreadMessage, text: string, username?: string) => Promise<void>;
+  onAnswer: (
+    message: ThreadMessage,
+    text: string,
+    username?: string,
+    draftFinal?: string,
+  ) => Promise<void>;
   /** Fleet: opens the decision dock on this message's waiting card. */
   onOpenDecision: (message: ThreadMessage) => void;
   onOpenBot: (botId: string) => void;
@@ -8128,7 +8139,9 @@ const MessageView = memo(function MessageView({
               key={i}
               block={block}
               canAnswer={canAnswer}
-              onAnswer={(text, username) => onAnswer(message, text, username)}
+              onAnswer={(text, username, _files, draftFinal) =>
+                onAnswer(message, text, username, draftFinal)
+              }
             />
           );
         }

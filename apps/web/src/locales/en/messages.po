@@ -2376,6 +2376,10 @@ msgstr "Edit first"
 msgid "Edit Profile"
 msgstr "Edit Profile"
 
+#: src/components/AskCard.tsx
+msgid "Edited before answering"
+msgstr "Edited before answering"
+
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "Email"
@@ -4210,6 +4214,10 @@ msgstr "Reply"
 msgid "Reply cancelled"
 msgstr "Reply cancelled"
 
+#: src/components/AskCard.tsx
+msgid "Reply draft"
+msgstr "Reply draft"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/Shell.tsx
 msgid "Replying to {0}"
@@ -5022,6 +5030,10 @@ msgstr "The model provider returned an error."
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "The provider is rate-limiting requests."
+
+#: src/components/AskCard.tsx
+msgid "The reply is empty"
+msgstr "The reply is empty"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."

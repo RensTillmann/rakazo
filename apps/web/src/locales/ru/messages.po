@@ -2376,6 +2376,10 @@ msgstr "Сначала отредактируйте"
 msgid "Edit Profile"
 msgstr "Редактировать профиль"
 
+#: src/components/AskCard.tsx
+msgid "Edited before answering"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "Электронная почта"
@@ -4210,6 +4214,10 @@ msgstr "Ответить"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "Reply draft"
+msgstr ""
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/Shell.tsx
 msgid "Replying to {0}"
@@ -5022,6 +5030,10 @@ msgstr "Поставщик моделей вернул ошибку."
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "Поставщик ограничивает частоту запросов."
+
+#: src/components/AskCard.tsx
+msgid "The reply is empty"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."

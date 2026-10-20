@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   answerableAskMessageIds,
+  askAnswerWithEditedDraft,
+  editedAskDraft,
   latestAnswerableAskMessageId,
   resolveAskChoice,
   selectedAskActionLabel,
   summarizeOpenAsk,
 } from "./answerable-ask.js";
+import { blocksToAgentHistoryText } from "./attachments.js";
 
 describe("latestAnswerableAskMessageId", () => {
   it("finds a waiting prompt even when a newer group run is active", () => {
@@ -135,5 +138,46 @@ describe("summarizeOpenAsk", () => {
     expect(
       summarizeOpenAsk({ id: "m3", blocks: [{ kind: "ask", text: "Q", status: "answered" }] }),
     ).toBeNull();
+  });
+});
+
+describe("reply drafts on ask cards", () => {
+  const draft = "Hi Konstantin,\n\nYour licence is active again.\n\nRens";
+  const edited = "Hi Konstantin,\n\nYour licence is active again from today.\n\nRens";
+
+  it("counts only a real change as an edit", () => {
+    expect(editedAskDraft(draft, edited)).toBe(edited);
+    expect(editedAskDraft(draft, draft)).toBeUndefined();
+    expect(editedAskDraft(draft, draft.replace(/\n/g, "\r\n"))).toBeUndefined();
+    expect(editedAskDraft(draft, undefined)).toBeUndefined();
+    // A card without a draft takes no edit.
+    expect(editedAskDraft(undefined, edited)).toBeUndefined();
+  });
+
+  it("tells the bot the option and, when edited, the exact reply to send", () => {
+    expect(askAnswerWithEditedDraft("Approve and send", undefined)).toBe("Approve and send");
+    expect(askAnswerWithEditedDraft("Approve and send", edited)).toBe(
+      `Approve and send\n\nEdited reply (send exactly this):\n${edited}`,
+    );
+  });
+
+  it("keeps the edited reply in the answered card's history text", () => {
+    const answered = {
+      kind: "ask" as const,
+      text: "Reply to Konstantin Grushko (#3529)?",
+      status: "answered" as const,
+      answer: "choice-1",
+      draft,
+      actions: [
+        { id: "choice-1", label: "Approve and send" },
+        { id: "choice-2", label: "Don't reply" },
+      ],
+    };
+    expect(blocksToAgentHistoryText([answered])).toBe(
+      "Reply to Konstantin Grushko (#3529)?\nAnswer: Approve and send",
+    );
+    expect(blocksToAgentHistoryText([{ ...answered, draftFinal: edited }])).toBe(
+      `Reply to Konstantin Grushko (#3529)?\nAnswer: Approve and send\n\nEdited reply (send exactly this):\n${edited}`,
+    );
   });
 });

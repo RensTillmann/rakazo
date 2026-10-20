@@ -98,6 +98,9 @@ export type SecretAskPurpose = z.infer<typeof SecretAskPurpose>;
 /** Longest stored `thinking` block; longer reasoning is cut and marked `truncated`. */
 export const THINKING_BLOCK_MAX_CHARS = 8_000;
 
+/** Longest reply draft an ask card shows editable (`ask_user` `draft`, `threads.answer` `draftFinal`). */
+export const ASK_DRAFT_MAX_LENGTH = 20_000;
+
 export const MessageBlock = z.discriminatedUnion("kind", [
   /** `narration`: text written mid-turn before a tool call; clients may hide it. */
   z.object({ kind: z.literal("text"), text: z.string(), narration: z.boolean().optional() }),
@@ -133,6 +136,13 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     input: z.enum(["text", "secret"]).optional(),
     /** Why the secret is needed; drives field label on the masked card. */
     purpose: SecretAskPurpose.optional(),
+    /** Fleet: a reply the bot drafted, shown editable on the card above its options. */
+    draft: z.string().optional(),
+    /**
+     * Fleet: the draft as the user sent it, set only when it differs from `draft`. The bot was
+     * told to send exactly this; the fleet service diffs it against `draft`.
+     */
+    draftFinal: z.string().optional(),
     // Records what the runtime could produce under either deployment mode, so
     // an ask persisted before an owner toggles the private-HTTP flag still
     // validates on replay.

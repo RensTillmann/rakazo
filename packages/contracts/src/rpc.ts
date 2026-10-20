@@ -102,7 +102,12 @@ import {
   VoiceInfoSchema,
   VoiceStatusSchema,
 } from "./domain.js";
-import { ComputerCommandSchema, MessageBlock, ProductEventSchema } from "./events.js";
+import {
+  ASK_DRAFT_MAX_LENGTH,
+  ComputerCommandSchema,
+  MessageBlock,
+  ProductEventSchema,
+} from "./events.js";
 import { Id, IsoDate } from "./ids.js";
 import {
   IntegrationProviderConfigSchema,
@@ -529,6 +534,11 @@ export const appContract = {
           username: z.string().min(1).max(512).optional(),
           /** Question cards only: uploaded files sent with the answer, validated like a send. */
           artifactIds: z.array(Id).max(ATTACHMENT_MAX_COUNT).optional(),
+          /**
+           * Fleet: a draft card's reply as the user left it. Stored and told to the bot only
+           * when it differs from the card's `draft`; ignored for a card without a draft.
+           */
+          draftFinal: z.string().max(ASK_DRAFT_MAX_LENGTH).optional(),
         }),
       )
       .output(z.object({ ok: z.literal(true) })),

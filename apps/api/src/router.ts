@@ -2648,6 +2648,10 @@ export function createRouter(deps: RouterDeps) {
         return { ok: true as const };
       }),
       answer: authed.threads.answer.handler(async ({ context, input }) => {
+        // Fleet: an edited reply draft that was cleared would tell the bot to send nothing.
+        if (input.draftFinal !== undefined && !input.draftFinal.trim()) {
+          throw new ORPCError("BAD_REQUEST", { message: "The reply is empty" });
+        }
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
         // Fleet: name the procedure and session on this log line only, to keep logs small.
         enrichLogContext({
@@ -2672,6 +2676,7 @@ export function createRouter(deps: RouterDeps) {
             }),
             clientNonce: input.clientNonce,
             username: input.username,
+            ...(input.draftFinal !== undefined ? { draftFinal: input.draftFinal } : {}),
             ...(artifactIds.length
               ? {
                   resolveAttachments: (tx) =>

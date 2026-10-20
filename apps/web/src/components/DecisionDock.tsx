@@ -196,6 +196,7 @@ export function DecisionDock({
     text: string,
     username?: string,
     files?: readonly File[],
+    draftFinal?: string,
   ) {
     const target = decision.groupId ? { groupId: decision.groupId } : { botId: decision.botId };
     // Files go up as artifacts of the card's own chat, like the composer's attachments.
@@ -219,6 +220,7 @@ export function DecisionDock({
         messageId: decision.messageId,
         answer: text,
         ...(username ? { username } : {}),
+        ...(draftFinal !== undefined ? { draftFinal } : {}),
         ...(artifactIds.length ? { artifactIds } : {}),
       });
     } catch (error) {
@@ -290,9 +292,11 @@ export function DecisionDock({
               step(event.key === "ArrowLeft" ? -1 : 1);
             }
           }}
-          // Enlarged is about twice the size; below `sm` the dock is full width either way.
-          className={`absolute bottom-4 end-4 z-30 flex w-[min(400px,calc(100%-2rem))] flex-col rounded-2xl border border-border bg-background shadow-xl ${
-            large ? "sm:w-[min(800px,calc(100%-2rem))]" : ""
+          // The default is twice the first dock (800px wide, body up to 56rem); enlarged goes to
+          // 1200px and 80rem. Width is capped by the chat and height by the viewport; below `sm`
+          // the dock is full width either way.
+          className={`absolute bottom-4 end-4 z-30 flex w-[min(800px,calc(100%-2rem))] flex-col rounded-2xl border border-border bg-background shadow-xl ${
+            large ? "sm:w-[min(1200px,calc(100%-2rem))]" : ""
           }`}
         >
           <header className="flex items-center gap-2 border-b border-border px-3 py-2">
@@ -354,8 +358,8 @@ export function DecisionDock({
           </header>
           <div
             data-testid="decision-dock-body"
-            className={`max-h-[min(60vh,28rem)] overflow-y-auto p-2 ${
-              large ? "sm:max-h-[min(85vh,56rem)]" : ""
+            className={`max-h-[min(70vh,56rem)] overflow-y-auto p-2 ${
+              large ? "sm:max-h-[min(85vh,80rem)]" : ""
             }`}
           >
             {/* Every card stays mounted while cycling so a half-typed answer survives. */}
@@ -370,7 +374,9 @@ export function DecisionDock({
                   <AskCard
                     block={decision.block}
                     canAnswer
-                    onAnswer={(text, username, files) => answer(decision, text, username, files)}
+                    onAnswer={(text, username, files, draftFinal) =>
+                      answer(decision, text, username, files, draftFinal)
+                    }
                     voice={voice}
                     attachmentMaxBytes={attachmentMaxBytes}
                   />

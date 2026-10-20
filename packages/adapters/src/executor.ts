@@ -7993,6 +7993,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 id: action.id,
                 label: redactSecrets(action.label, runSecrets),
               }));
+              const safeDraft = event.draft ? redactSecrets(event.draft, runSecrets) : undefined;
               await workspaceCheckpoint.flush();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
@@ -8009,6 +8010,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     detail: safeDetail,
                     status: "pending",
                     actions: safeActions,
+                    ...(safeDraft ? { draft: safeDraft } : {}),
                   },
                 ],
                 // Keep unredacted labels on the run for resume; message blocks stay redacted.

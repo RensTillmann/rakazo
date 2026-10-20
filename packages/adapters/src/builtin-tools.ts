@@ -1,5 +1,6 @@
 import type { ConnectorTool } from "@rakazo/adapter-kit";
 import {
+  ASK_DRAFT_MAX_LENGTH,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   BotSecretName,
@@ -444,7 +445,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "ask_user",
     description:
-      "Ask the user one short multiple-choice question with tappable options, then wait for their selection. Use this instead of asking them to type when two to four concise choices are enough.",
+      "Ask the user one short multiple-choice question with tappable options, then wait for their selection. Use this instead of asking them to type when two to four concise choices are enough. When the question is whether to send a reply you drafted, put the reply itself in `draft`: the user can edit it on the card before choosing, and if they do, their answer carries the edited reply to send exactly.",
     inputSchema: {
       type: "object",
       properties: {
@@ -455,6 +456,12 @@ export const builtinAgentTools: ConnectorTool[] = [
           minItems: 2,
           maxItems: 4,
           uniqueItems: true,
+        },
+        draft: {
+          type: "string",
+          maxLength: ASK_DRAFT_MAX_LENGTH,
+          description:
+            "Optional: the full reply you drafted, nothing else (no headers or notes). Shown editable on the card.",
         },
       },
       required: ["question", "options"],
