@@ -8,6 +8,8 @@ import {
   OAUTH_USAGE_URL,
   parseOAuthUsageResponse,
   parseRateLimitHeaders,
+  preferFallbackReason,
+  preferFallbackThreshold,
   SubscriptionUsageRefresher,
   subscriptionLimitsEnabled,
   subscriptionWindow,
@@ -306,5 +308,87 @@ describe("usage shapes", () => {
       runsToday: 0,
       apiEquivalentCostUsdToday: null,
     });
+  });
+});
+
+describe("prefer the backup near the Anthropic limit", () => {
+  const ENABLED = { RAKAZO_SUBSCRIPTION_LIMITS: "true" };
+  const WEEKLY_RESET = new Date("2026-10-21T08:00:00Z");
+  const reading = (
+    overrides: Partial<SubscriptionLimitReading> = {},
+  ): SubscriptionLimitReading => ({
+    provider: "anthropic",
+    fiveHourUtil: 0.3,
+    fiveHourResetAt: new Date("2026-10-19T12:00:00Z"),
+    sevenDayUtil: 0.98,
+    sevenDayResetAt: WEEKLY_RESET,
+    status: "allowed_warning",
+    observedAt: new Date("2026-10-19T09:00:00Z"),
+    ...overrides,
+  });
+  const reason = (
+    overrides: Partial<Parameters<typeof preferFallbackReason>[0]> = {},
+    latest: SubscriptionLimitReading | null = reading(),
+  ) =>
+    preferFallbackReason({
+      provider: "anthropic",
+      hasBackups: true,
+      loadReading: async () => latest,
+      now: NOW,
+      env: ENABLED,
+      ...overrides,
+    });
+
+  it("reads the threshold", () => {
+    expect(preferFallbackThreshold({})).toBe(0.98);
+    expect(preferFallbackThreshold({ RAKAZO_PREFER_FALLBACK_AT: "0.9" })).toBe(0.9);
+    expect(preferFallbackThreshold({ RAKAZO_PREFER_FALLBACK_AT: "nope" })).toBe(0.98);
+    expect(preferFallbackThreshold({ RAKAZO_PREFER_FALLBACK_AT: "1.5" })).toBe(0.98);
+    expect(preferFallbackThreshold({ RAKAZO_PREFER_FALLBACK_AT: " OFF " })).toBeNull();
+    expect(preferFallbackThreshold({ RAKAZO_PREFER_FALLBACK_AT: "0" })).toBeNull();
+  });
+
+  it("names the hot window while its reset is ahead", async () => {
+    await expect(reason()).resolves.toBe("Anthropic weekly limit 98% used (resets Wed 08:00 UTC)");
+    await expect(reason({}, reading({ fiveHourUtil: 0.99, sevenDayUtil: 0.5 }))).resolves.toBe(
+      "Anthropic 5-hour limit 99% used (resets Mon 12:00 UTC)",
+    );
+  });
+
+  it("names the window that resets last when both are hot", async () => {
+    await expect(reason({}, reading({ fiveHourUtil: 1 }))).resolves.toBe(
+      "Anthropic weekly limit 98% used (resets Wed 08:00 UTC)",
+    );
+  });
+
+  it("stays on Anthropic below the threshold or once the window reset", async () => {
+    await expect(reason({}, reading({ sevenDayUtil: 0.97 }))).resolves.toBeNull();
+    await expect(
+      reason({ now: new Date(WEEKLY_RESET.getTime() + 1) }, reading()),
+    ).resolves.toBeNull();
+    await expect(reason({ now: WEEKLY_RESET }, reading())).resolves.toBeNull();
+    await expect(reason({}, reading({ sevenDayResetAt: null }))).resolves.toBeNull();
+    await expect(reason({}, null)).resolves.toBeNull();
+  });
+
+  it("honours a custom threshold", async () => {
+    const env = { ...ENABLED, RAKAZO_PREFER_FALLBACK_AT: "0.95" };
+    await expect(reason({ env }, reading({ sevenDayUtil: 0.96 }))).resolves.toBe(
+      "Anthropic weekly limit 96% used (resets Wed 08:00 UTC)",
+    );
+  });
+
+  it("skips the reading for other providers, no backups, or a switch that is off", async () => {
+    const loadReading = vi.fn(async () => reading());
+    for (const overrides of [
+      { provider: "openai-codex" },
+      { hasBackups: false },
+      { env: {} },
+      { env: { ...ENABLED, RAKAZO_PREFER_FALLBACK_AT: "off" } },
+      { env: { ...ENABLED, RAKAZO_PREFER_FALLBACK_AT: "0" } },
+    ]) {
+      await expect(reason({ ...overrides, loadReading })).resolves.toBeNull();
+    }
+    expect(loadReading).not.toHaveBeenCalled();
   });
 });

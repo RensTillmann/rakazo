@@ -1681,6 +1681,92 @@ describe("Pi runtime ordered model fallback", () => {
     expect(requestKeys).toEqual(["backup-only-key"]);
     expect(JSON.stringify(events)).not.toContain("backup-only-key");
   });
+
+  it("starts on the first usable backup when the run prefers it and persists that model", async () => {
+    const input = request([
+      { provider: backupA.provider, id: backupA.id },
+      { provider: backupB.provider, id: backupB.id, apiKey: "backup-b-key" },
+    ]);
+    input.preferFallback = { reason: "Anthropic weekly limit 98% used (resets Wed 08:00 UTC)" };
+    let modelChangePersisted = false;
+    input.onModelChange = vi.fn(async () => {
+      await Promise.resolve();
+      modelChangePersisted = true;
+    });
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) => {
+      expect(modelChangePersisted).toBe(true);
+      return stream(target, message(target, [{ type: "text", text: "backup response" }], "stop"));
+    });
+
+    const events = await run(input);
+
+    // backup-a has no credential, so the first usable one is backup-b.
+    expect(
+      providerState.stream.mock.calls.map(([target]) => (target as Model<"openai-completions">).id),
+    ).toEqual([backupB.id]);
+    expect(input.onModelChange).toHaveBeenCalledExactlyOnceWith(backupB.provider, backupB.id);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "progress",
+        text: `Anthropic limit nearly used (Anthropic weekly limit 98% used (resets Wed 08:00 UTC)). Using backup model ${backupB.provider}/${backupB.id}.`,
+      }),
+    );
+    expect(events.at(-1)).toEqual({ type: "done", text: "backup response" });
+  });
+
+  it("stays on the primary without error when no backup is usable", async () => {
+    // No credential: the only backup is unusable.
+    const input = request([{ provider: backupA.provider, id: backupA.id }]);
+    input.preferFallback = { reason: "Anthropic 5-hour limit 99% used (resets Mon 12:00 UTC)" };
+    const onModelChange = vi.fn(async () => undefined);
+    input.onModelChange = onModelChange;
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+      stream(target, message(target, [{ type: "text", text: "primary response" }], "stop")),
+    );
+
+    const events = await run(input);
+
+    expect(events.at(-1)).toEqual({ type: "done", text: "primary response" });
+    expect(onModelChange).not.toHaveBeenCalled();
+    expect(events.some((event) => event.type === "progress" && /backup/.test(event.text))).toBe(
+      false,
+    );
+    expect(
+      providerState.stream.mock.calls.map(([target]) => (target as Model<"openai-completions">).id),
+    ).toEqual([primary.id]);
+  });
+
+  it("keeps a backup the preference could not use for a later provider failure", async () => {
+    const input = request([{ provider: backupA.provider, id: backupA.id }]);
+    input.preferFallback = { reason: "Anthropic 5-hour limit 99% used (resets Mon 12:00 UTC)" };
+    input.resolveFallbackModel = vi
+      .fn(async (provider: string, id: string) => ({ provider, id, apiKey: "backup-key" }))
+      .mockRejectedValueOnce(new Error("connected credential changed"));
+    const onModelChange = vi.fn(async () => undefined);
+    input.onModelChange = onModelChange;
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+      stream(
+        target,
+        target.provider === primary.provider
+          ? message(target, [], "error", "429 rate_limit_error")
+          : message(target, [{ type: "text", text: "backup response" }], "stop"),
+      ),
+    );
+
+    const events = await run(input);
+
+    expect(
+      providerState.stream.mock.calls.map(([target]) => (target as Model<"openai-completions">).id),
+    ).toEqual([primary.id, backupA.id]);
+    expect(onModelChange).toHaveBeenCalledExactlyOnceWith(backupA.provider, backupA.id);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "progress",
+        text: `Provider unavailable. Switched to backup model ${backupA.id}.`,
+      }),
+    );
+    expect(events.at(-1)).toEqual({ type: "done", text: "backup response" });
+  });
 });
 
 describe("Pi runtime thinking blocks bound to a different conversation", () => {

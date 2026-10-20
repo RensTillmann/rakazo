@@ -565,7 +565,7 @@ export class PiAgentRuntime implements AgentRuntime {
                 ),
               target.config.cacheCapabilities?.retentionMode,
             ),
-          onSwitch: async (target) => {
+          onSwitch: async (target, progressText) => {
             await request.onModelChange?.(target.config.provider, target.config.id);
             activeStreamTarget = target;
             contextPolicy = createRuntimeContextPolicy(
@@ -588,7 +588,9 @@ export class PiAgentRuntime implements AgentRuntime {
             host.apiKey = target.credentials?.accessToken ?? target.apiKey;
             queue.push({
               type: "progress",
-              text: `Provider unavailable. Switched to backup model ${target.config.id}.`,
+              text:
+                progressText ??
+                `Provider unavailable. Switched to backup model ${target.config.id}.`,
             });
           },
         };
@@ -2870,10 +2872,13 @@ interface FallbackStreamState {
   signal: AbortSignal;
   attempted: Set<string>;
   nextIndex: number;
-  onSwitch(target: RuntimeModelTarget): Promise<void>;
+  /** `progressText` replaces the default "Provider unavailable…" line. */
+  onSwitch(target: RuntimeModelTarget, progressText?: string): Promise<void>;
   isProviderFailure(message: AssistantMessage): boolean;
   /** Set once a provider rejected replayed thinking signatures; see thinking-signatures.ts. */
   dropThinkingBlocks?: boolean;
+  /** Set once `request.preferFallback` was applied (or found no usable backup) for this run. */
+  preferFallbackChecked?: boolean;
   stream(
     target: RuntimeModelTarget,
     context: TranscriptContext,
@@ -3067,6 +3072,26 @@ function fallbackAwareModelStream(
     return undefined;
   };
   const run = async () => {
+    const preferFallback = state.request.preferFallback;
+    if (preferFallback && !state.preferFallbackChecked) {
+      state.preferFallbackChecked = true;
+      const primary = state.getActive();
+      const nextIndex = state.nextIndex;
+      const attempted = new Set(state.attempted);
+      const next = await resolveNext(primary);
+      if (failIfAborted(primary)) return;
+      if (next) {
+        await state.onSwitch(
+          next,
+          `Anthropic limit nearly used (${preferFallback.reason}). Using backup model ${next.config.provider}/${next.config.id}.`,
+        );
+        if (failIfAborted(next)) return;
+      } else {
+        // Nothing fits: stay on the primary and keep every backup for a provider failure.
+        state.nextIndex = nextIndex;
+        state.attempted = attempted;
+      }
+    }
     let buffered: AssistantMessageEvent[] = [];
     let retries = 0;
     let firstRetryableError: Extract<AssistantMessageEvent, { type: "error" }> | undefined;

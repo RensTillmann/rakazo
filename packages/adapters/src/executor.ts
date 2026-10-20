@@ -123,6 +123,7 @@ import {
   InstructionConflictError,
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
+  latestSubscriptionLimitReading,
   loadRunHistoryMessages,
   Prisma,
   parseComputerMode,
@@ -431,7 +432,7 @@ import {
   skillReadFromTool,
   skillUpdateFromTool,
 } from "./skill-tools.js";
-import { subscriptionLimitsEnabled } from "./subscription-limits.js";
+import { preferFallbackReason, subscriptionLimitsEnabled } from "./subscription-limits.js";
 import type { TakeoverResumeCheckpoint } from "./takeover-resume.js";
 import {
   continueRunClaimFence,
@@ -7641,6 +7642,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             )
             .map((candidate) => JSON.stringify([candidate.provider, candidate.modelId])),
         );
+        let preferFallback: { reason: string } | undefined;
+        try {
+          const reason = await preferFallbackReason({
+            provider: runModelProvider,
+            hasBackups: fallbackModelKeys.size > 0,
+            loadReading: (provider) => latestSubscriptionLimitReading(deps.prisma, provider),
+            now: new Date(),
+          });
+          if (reason) preferFallback = { reason };
+        } catch (error) {
+          getLogger().warn("Subscription limit reading could not be loaded", { runId, error });
+        }
 
         try {
           const runtimeEvents = deps.runtime.run(
@@ -7795,6 +7808,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   throw new Error("Run lease was lost before the backup model could be used");
                 }
               },
+              ...(preferFallback ? { preferFallback } : {}),
               resumeFromCheckpoint: takeoverResume?.checkpoint,
               script,
               allowSilentEmpty: allowSilentEmptyRun,

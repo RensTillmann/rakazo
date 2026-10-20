@@ -510,6 +510,11 @@ export interface AgentRunRequest {
   resolveFallbackModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
   /** Persist the selected backup against the active run lease before requesting it. */
   onModelChange?: (provider: string, modelId: string) => Promise<void>;
+  /**
+   * Fleet: start on the first usable backup instead of the primary (e.g. the primary's
+   * subscription window is nearly used). `reason` names why in the progress line.
+   */
+  preferFallback?: { reason: string };
   /** Resolve an explicitly requested helper model within the active user and space scope. */
   resolveModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
   resumeFromCheckpoint?: string;

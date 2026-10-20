@@ -239,6 +239,64 @@ export function subscriptionWindow(
   };
 }
 
+const DEFAULT_PREFER_FALLBACK_AT = 0.98;
+const UTC_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/**
+ * RAKAZO_PREFER_FALLBACK_AT (fleet patch): the window utilization (fraction) from which an
+ * Anthropic run starts on its first backup model. Unset/invalid: 0.98; `off` or 0: never.
+ */
+export function preferFallbackThreshold(env: NodeJS.ProcessEnv = process.env): number | null {
+  const raw = env.RAKAZO_PREFER_FALLBACK_AT?.trim().toLowerCase();
+  if (raw === undefined || raw === "") return DEFAULT_PREFER_FALLBACK_AT;
+  if (raw === "off") return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) return DEFAULT_PREFER_FALLBACK_AT;
+  return value === 0 ? null : value;
+}
+
+function utcResetLabel(resetAt: Date): string {
+  const hours = String(resetAt.getUTCHours()).padStart(2, "0");
+  const minutes = String(resetAt.getUTCMinutes()).padStart(2, "0");
+  return `${UTC_WEEKDAYS[resetAt.getUTCDay()]} ${hours}:${minutes} UTC`;
+}
+
+/**
+ * Why an Anthropic run should start on its backup, or null. The newest reading is loaded only
+ * once every other condition holds. A window counts while its utilization is at the threshold
+ * and its reset time is still ahead (`subscriptionWindow` reads a passed reset as 0%); with
+ * both windows hot, the one resetting last is named.
+ */
+export async function preferFallbackReason(input: {
+  provider: string;
+  hasBackups: boolean;
+  loadReading: (provider: string) => Promise<SubscriptionLimitReading | null>;
+  now: Date;
+  env?: NodeJS.ProcessEnv;
+}): Promise<string | null> {
+  const env = input.env ?? process.env;
+  if (!subscriptionLimitsEnabled(env)) return null;
+  if (input.provider !== ANTHROPIC_OAUTH_PROVIDER || !input.hasBackups) return null;
+  const threshold = preferFallbackThreshold(env);
+  if (threshold === null) return null;
+  const reading = await input.loadReading(ANTHROPIC_OAUTH_PROVIDER);
+  if (!reading) return null;
+  const windows = [
+    { label: "5-hour", util: reading.fiveHourUtil, resetAt: reading.fiveHourResetAt },
+    { label: "weekly", util: reading.sevenDayUtil, resetAt: reading.sevenDayResetAt },
+  ];
+  let blocking: { label: string; util: number; resetAt: Date } | undefined;
+  for (const { label, util, resetAt } of windows) {
+    if (util === null || util < threshold) continue;
+    if (!resetAt || resetAt.getTime() <= input.now.getTime()) continue;
+    if (!blocking || resetAt.getTime() > blocking.resetAt.getTime()) {
+      blocking = { label, util, resetAt };
+    }
+  }
+  if (!blocking) return null;
+  return `Anthropic ${blocking.label} limit ${Math.round(blocking.util * 100)}% used (resets ${utcResetLabel(blocking.resetAt)})`;
+}
+
 export interface ThreadUsageRow {
   provider: string;
   model: string;

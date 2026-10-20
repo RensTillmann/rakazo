@@ -1,6 +1,6 @@
 import type { AgentRunRequest } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
 
@@ -35,6 +35,10 @@ type RunHooks = {
   computerLeaseRenewal?: () => Promise<boolean>;
   /** The model lists the computer's files before answering, which starts the computer. */
   useComputer?: boolean;
+  /** The deployment default provider; openrouter unless set. */
+  modelProvider?: string;
+  /** The newest stored subscription-window reading. */
+  subscriptionReading?: Record<string, unknown>;
 };
 
 function deferred<T>(): Deferred<T> {
@@ -201,10 +205,13 @@ async function runWithModel(
           : [];
       }),
     },
+    subscriptionLimitReading: {
+      findFirst: vi.fn(async () => hooks?.subscriptionReading ?? null),
+    },
 
     deploymentSettings: {
       findUnique: vi.fn(async () => ({
-        defaultModelProvider: "openrouter",
+        defaultModelProvider: hooks?.modelProvider ?? "openrouter",
         defaultModelId: modelId,
       })),
     },
@@ -398,6 +405,94 @@ describe("recent turn images follow model vision", () => {
         leaseFence: expect.any(Number),
       },
       data: { modelProvider: backup.provider, modelId: backup.modelId },
+    });
+  });
+
+  describe("prefers the backup near the Anthropic limit", () => {
+    const ANTHROPIC_MODEL = "claude-sonnet-5";
+    const backup = { provider: "openai-codex", modelId: "gpt-6.1-sol" };
+    const hotReading = (sevenDayUtil: number, sevenDayResetAt: Date) => ({
+      provider: "anthropic",
+      fiveHourUtil: 0.2,
+      fiveHourResetAt: new Date(Date.now() + 60 * 60_000),
+      sevenDayUtil,
+      sevenDayResetAt,
+      status: "allowed_warning",
+      observedAt: new Date(),
+    });
+    const inAnHour = () => new Date(Date.now() + 60 * 60_000);
+    const runAnthropic = (
+      env: Record<string, string>,
+      reading: Record<string, unknown>,
+      options: { provider?: string; modelId?: string; backups?: boolean } = {},
+    ) => {
+      vi.stubEnv("PI_DEFAULT_PROVIDER", options.provider ?? "anthropic");
+      for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+      return runWithModel(
+        options.modelId ?? ANTHROPIC_MODEL,
+        options.backups === false ? undefined : backup,
+        false,
+        false,
+        true,
+        { modelProvider: options.provider ?? "anthropic", subscriptionReading: reading },
+      );
+    };
+    const ENABLED = { RAKAZO_SUBSCRIPTION_LIMITS: "true" };
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("starts an Anthropic run on the backup at 98% before the window resets", async () => {
+      const { prisma, request } = await runAnthropic(ENABLED, hotReading(0.98, inAnHour()));
+      expect(request.model).toMatchObject({ provider: "anthropic", id: ANTHROPIC_MODEL });
+      expect(request.preferFallback).toEqual({
+        reason: expect.stringMatching(
+          /^Anthropic weekly limit 98% used \(resets (Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d{2}:\d{2} UTC\)$/,
+        ),
+      });
+      expect(prisma.subscriptionLimitReading.findFirst).toHaveBeenCalledExactlyOnceWith({
+        where: { provider: "anthropic" },
+        orderBy: { observedAt: "desc" },
+      });
+    });
+
+    it("stays on Anthropic at 97%", async () => {
+      const { request } = await runAnthropic(ENABLED, hotReading(0.97, inAnHour()));
+      expect(request.preferFallback).toBeUndefined();
+    });
+
+    it("stays on Anthropic once the hot window has reset", async () => {
+      const { request } = await runAnthropic(
+        ENABLED,
+        hotReading(0.99, new Date(Date.now() - 60_000)),
+      );
+      expect(request.preferFallback).toBeUndefined();
+    });
+
+    it("does not read limits for a non-Anthropic run", async () => {
+      const { prisma, request } = await runAnthropic(ENABLED, hotReading(0.99, inAnHour()), {
+        provider: "openrouter",
+        modelId: TEXT_ONLY_MODEL,
+      });
+      expect(request.preferFallback).toBeUndefined();
+      expect(prisma.subscriptionLimitReading.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("does not read limits without backups", async () => {
+      const { prisma, request } = await runAnthropic(ENABLED, hotReading(0.99, inAnHour()), {
+        backups: false,
+      });
+      expect(request.preferFallback).toBeUndefined();
+      expect(prisma.subscriptionLimitReading.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("does nothing when limits or the threshold are off", async () => {
+      for (const env of [{}, { ...ENABLED, RAKAZO_PREFER_FALLBACK_AT: "off" }]) {
+        const { prisma, request } = await runAnthropic(env, hotReading(0.99, inAnHour()));
+        expect(request.preferFallback).toBeUndefined();
+        expect(prisma.subscriptionLimitReading.findFirst).not.toHaveBeenCalled();
+      }
     });
   });
 });
