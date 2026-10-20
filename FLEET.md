@@ -5,17 +5,21 @@ This is Rens's fork of [elie222/rakazo](https://github.com/elie222/rakazo):
 
 - `main` follows upstream `main`. We never commit to it.
 - `fleet-next` (this branch) is a newer upstream plus our patches, one commit per patch. It is
-  **running** since 19 Oct 2026, 23:28 Amsterdam: image `rakazo-fleet/app:trial-a136e65` (`a136e65a`),
-  our patches replayed onto upstream `aa386688` (71 upstream commits incl. pi packages 1.3.0), computers
-  pinned to `rakazo-fleet/computer:7d5e64c`. Checked first on a restored copy of live (`rt-dress`):
-  all 5 upstream migrations applied (`20261017120000_computer_running_since` …
-  `20261019010000_call_recovery_index`), UI walk-through; in the image `pnpm check` 22/22, root vitest
-  with no new failures against `74a1b5c`, web 117 files and Postgres 30 files passed. Rollback: restore
-  `D:/rakazo/backups/pre-upstream-switch-*.dump` and run `rakazo-fleet/app:74a1b5c` (the old line is
-  tag `fleet-next-pre-upstream-20261019`). Settings: `RAKAZO_WEBHOOK_HONORS_RULES`,
-  `RAKAZO_APPROVAL_EVERY_RUN`, `RAKAZO_STUCK_*_HOURS`, `RAKAZO_ROOM_*`, `RAKAZO_MEMORY_RECALL_EVERY_RUN`,
-  `RAKAZO_SUBSCRIPTION_LIMITS`, `RAKAZO_RUN_BUDGET_*`, `RAKAZO_ACTIVITY_DETAILS*`, `RAKAZO_CASE_LINK_URL`
-  (see `D:/rakazo/.env`).
+  **running** since 20 Oct 2026, 02:57 Amsterdam: image `rakazo-fleet/app:4f5627d` (`4f5627db`), our
+  patches on upstream `aa386688` (71 upstream commits incl. pi packages 1.3.0) plus the four
+  `nonblocking-cards` patches; computers pinned to `rakazo-fleet/computer:7d5e64c`. The
+  `nonblocking-cards` patches were checked in the image (`pnpm check` 22/22, root vitest with no new
+  failures against `2eaa308`, Postgres 33 files / 136 tests) and on a restored copy of live
+  (`rt-dress`, removed afterwards): dock, answering across chats, typed answers with a file,
+  chatting while a card waits; then live (Josy answered a chat message while her card waited; an
+  approved Elena command ran with one model call instead of two). No migrations: rollback is
+  `D:/rakazo-wt/deploy.sh 2eaa308 <name>` (backup `D:/rakazo/backups/pre-nonblocking-cards-20261020-0255.dump`).
+  The upstream switch itself (19 Oct, 23:28) rolls back with `D:/rakazo/backups/pre-upstream-switch-*.dump`
+  and `rakazo-fleet/app:74a1b5c` (tag `fleet-next-pre-upstream-20261019`). Settings:
+  `RAKAZO_WEBHOOK_HONORS_RULES`, `RAKAZO_APPROVAL_EVERY_RUN`, `RAKAZO_APPROVAL_DIRECT`,
+  `RAKAZO_STUCK_*_HOURS`, `RAKAZO_ROOM_*`, `RAKAZO_MEMORY_RECALL_EVERY_RUN`,
+  `RAKAZO_SUBSCRIPTION_LIMITS`, `RAKAZO_RUN_BUDGET_*`, `RAKAZO_ACTIVITY_DETAILS*`, `RAKAZO_CASE_LINK_URL`,
+  `RAKAZO_ZENDESK_LINK_URL` (see `D:/rakazo/.env`).
 - `fleet` (`8896cd15`, image `rakazo-fleet/app:d93d461`) is the previous build. Adopt `fleet-next`
   as `fleet` once it has run well for a few days (see "Adopt `fleet-next`").
 
