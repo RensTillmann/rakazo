@@ -161,7 +161,7 @@ describe("runtime context policy", () => {
     expect(prepared.messages.at(-1)).toEqual(context.messages.at(-1));
     expect(policy.getDecision()!.estimatedInputTokens).toBeLessThanOrEqual(8192 - 1024);
   });
-  it("keeps an earlier skill read verbatim while shortening other old tool evidence", () => {
+  it("keeps earlier instruction sources intact after other tools run", () => {
     const { request, context } = fixture(2);
     const call = (id: string, name: string) =>
       ({
@@ -214,10 +214,48 @@ describe("runtime context policy", () => {
     expect(body("fleet")).toBe(
       JSON.stringify({ bot: { instructionsVersion: "v2", instructions: "x".repeat(20_000) } }),
     );
-    expect(skill.length).toBeGreaterThan(2500);
     expect(body("read")).toBe(skill);
-    expect(body("shell-1")).toContain("[Tool result truncated to fit context");
-    expect(body("shell-2")).toBe(shellOutput);
+  });
+  it("keeps a complete mail request and recovered pages available while the context fits", () => {
+    const { request, context } = fixture(2);
+    const mail = JSON.stringify({
+      stdout: `Invoice header\n${"forwarded receipt ".repeat(80)}\nPlease update the payment method, not the invoice address.\n${"invoice footer ".repeat(80)}`,
+      stderr: "",
+      code: 0,
+    });
+    const pages = [
+      `First page\n${"first-page evidence ".repeat(180)}\nFirst page ending`,
+      `Second page\n${"second-page evidence ".repeat(180)}\nSecond page ending`,
+    ];
+    for (const [index, [name, body]] of [
+      ["shell", mail],
+      ["read_tool_result", pages[0]!],
+      ["read_tool_result", pages[1]!],
+      ["shell", "A subsequent check completed."],
+    ].entries()) {
+      context.messages.push(
+        {
+          role: "assistant",
+          content: [{ type: "toolCall", id: `evidence-${index}`, name, arguments: {} }],
+          timestamp: 101 + index * 2,
+        } as Message,
+        {
+          role: "toolResult",
+          toolCallId: `evidence-${index}`,
+          toolName: name,
+          content: [{ type: "text", text: body }],
+          isError: false,
+          timestamp: 102 + index * 2,
+        } as Message,
+      );
+    }
+    const prepared = createRuntimeContextPolicy(request).prepareContext(context, model);
+    const results = prepared.messages
+      .filter((message) => message.role === "toolResult")
+      .map((message) =>
+        message.content.map((part) => (part.type === "text" ? part.text : "")).join(""),
+      );
+    expect(results.slice(0, 3)).toEqual([mail, ...pages]);
   });
   it("leaves the baseline provider payload untouched", () => {
     const { request, context } = fixture();
@@ -316,9 +354,8 @@ describe("runtime context policy", () => {
     );
     expect(after.messages.at(-1)).toEqual(steered.messages.at(-1));
     expect(after.messages.length).toBe(before.messages.length + 1);
-    // History is still bounded and old tool evidence is still shortened.
+    // History remains bounded without rewriting the fitting provider prefix.
     expect(after.messages.length).toBeLessThan(steered.messages.length);
-    expect(JSON.stringify(after.messages)).toContain("[Tool result truncated to fit context");
   });
   it.each(["snapshots", "cache-aware"] as const)(
     "retains already-short history without lookup navigation under %s",

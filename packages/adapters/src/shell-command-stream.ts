@@ -2,7 +2,7 @@ import type { ProcessEvent } from "@rakazo/adapter-kit";
 import { redactSecrets } from "@rakazo/core";
 import { redactShellStreams } from "./agent-environment.js";
 import { automated } from "./automated-messages.js";
-import { clipToolResultText } from "./pi-runtime-limits.js";
+import { clipToolResultText, TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
 
 /**
  * Device-code logins print a code and then wait. Once that output goes quiet,
@@ -39,12 +39,29 @@ export function isRunningShellCommand(result: unknown): result is RunningShellCo
   );
 }
 
-export function formatFinishedShellCommand(result: FinishedShellCommand): string {
+export function formatFinishedShellCommand(
+  result: FinishedShellCommand,
+  keep?: (fullText: string) => string | undefined,
+): string {
   // Delivered in the user's role after the turn, so marked as automated: models took
   // finished console output for the user replying.
   const parts = [automated("Shell command finished."), `exit code: ${result.code}`];
-  if (result.stdout) parts.push(`stdout:\n${clipToolResultText(result.stdout)}`);
-  if (result.stderr) parts.push(`stderr:\n${clipToolResultText(result.stderr)}`);
+  if (result.stdout)
+    parts.push(
+      `stdout:\n${clipToolResultText(
+        result.stdout,
+        TOOL_RESULT_TEXT_LIMIT,
+        result.stdout.length > TOOL_RESULT_TEXT_LIMIT ? keep?.(result.stdout) : undefined,
+      )}`,
+    );
+  if (result.stderr)
+    parts.push(
+      `stderr:\n${clipToolResultText(
+        result.stderr,
+        TOOL_RESULT_TEXT_LIMIT,
+        result.stderr.length > TOOL_RESULT_TEXT_LIMIT ? keep?.(result.stderr) : undefined,
+      )}`,
+    );
   return parts.join("\n");
 }
 
@@ -58,13 +75,14 @@ export async function deliverFinishedShells(
   pending: Array<Promise<FinishedShellCommand>>,
   turn: { toolResults: Array<{ toolName?: string; details?: unknown }> },
   signal?: AbortSignal,
+  keep?: (fullText: string) => string | undefined,
 ): Promise<void> {
   if (pending.length === 0 || turnReturnedRunningShell(turn)) return;
   const batch = pending.splice(0, pending.length);
   const results = await Promise.all(batch.map((completion) => finishOrAbort(completion, signal)));
   const texts = results.filter((result): result is FinishedShellCommand => result !== undefined);
   if (texts.length === 0) return;
-  followUp(texts.map((result) => formatFinishedShellCommand(result)).join("\n\n"));
+  followUp(texts.map((result) => formatFinishedShellCommand(result, keep)).join("\n\n"));
 }
 
 function turnReturnedRunningShell(turn: {

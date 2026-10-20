@@ -626,6 +626,7 @@ export class PiAgentRuntime implements AgentRuntime {
               host.pendingShells,
               turn,
               turnSignal,
+              host.pendingShells.length ? keepOverflow(host) : undefined,
             );
             return undefined;
           },
@@ -1882,6 +1883,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         nestedHost.pendingShells,
         turn,
         turnSignal,
+        nestedHost.pendingShells.length ? keepOverflow(nestedHost) : undefined,
       );
     },
     sessionId: conversationSessionId(host.request.threadId, host.request.botId, agentId),
@@ -2560,9 +2562,9 @@ export function serializeToolResult(
     if (!text) return "ok";
     // skill-tools.ts already bounds skill content; the context budget selector may still shorten it.
     if (text.length <= TOOL_RESULT_TEXT_LIMIT || VERBATIM_TOOL_RESULTS.has(name)) return text;
-    return (strategy ?? DEFAULT_CONTEXT_STRATEGY) === "current"
-      ? clipToolResultText(text, TOOL_RESULT_TEXT_LIMIT, keep?.(text))
-      : shortenToolResultText(text, TOOL_RESULT_TEXT_LIMIT, { name, arguments: args });
+    if (keep || (strategy ?? DEFAULT_CONTEXT_STRATEGY) === "current")
+      return clipToolResultText(text, TOOL_RESULT_TEXT_LIMIT, keep?.(text));
+    return shortenToolResultText(text, TOOL_RESULT_TEXT_LIMIT, { name, arguments: args });
   } catch {
     return "ok";
   }

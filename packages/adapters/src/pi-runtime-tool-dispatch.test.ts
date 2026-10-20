@@ -2321,6 +2321,56 @@ describe("Pi connector tool dispatch", () => {
     }
   });
 
+  it.each(["shell", "mcp"] as const)(
+    "recovers a full %s result under the production default context strategy",
+    async (kind) => {
+      vi.stubEnv("RAKAZO_TOOL_RESULT_OVERFLOW", "true");
+      try {
+        const body = `Beginning\n${"important customer details ".repeat(700)}\nComplete ending`;
+        const original =
+          kind === "shell"
+            ? { stdout: body, stderr: "", code: 0 }
+            : { content: [{ type: "text", text: body }], isError: false };
+        const runId = `serialized-overflow-${kind}`;
+        const runtime = new PiAgentRuntime();
+        for await (const _event of runtime.run(
+          {
+            botId: "b",
+            threadId: "t",
+            runId,
+            prompt: "Read the complete result.",
+            instructions: "Read the complete result before deciding.",
+            history: [],
+            tools: [destinationTool],
+            model: { provider: "test", id: "dispatch-test-model" },
+            executeTool: async () => original,
+          },
+          {
+            operationId: runId,
+            traceId: runId,
+            spaceId: "w",
+            userId: "u",
+            signal: new AbortController().signal,
+          },
+        )) {
+          // Exercise the production serialization path, not agent_tool_result.
+        }
+        const result = fakeAgentState.toolResult as { content: Array<{ text: string }> };
+        const shown = result.content[0]!.text;
+        expect(shown).toContain(`read_tool_result("r1", offset=${TOOL_RESULT_TEXT_LIMIT})`);
+        const recovered = toolResultOverflowStore.read(
+          runId,
+          "r1",
+          TOOL_RESULT_TEXT_LIMIT,
+          TOOL_RESULT_TEXT_LIMIT,
+        );
+        expect(JSON.parse(shown.slice(0, TOOL_RESULT_TEXT_LIMIT) + recovered)).toEqual(original);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it("delivers a skill read larger than the tool result bound verbatim", async () => {
     const skill = {
       name: "large-skill",

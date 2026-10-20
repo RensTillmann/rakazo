@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
 import {
   deliverFinishedShells,
-  formatFinishedShellCommand,
   isRunningShellCommand,
   observeShellCommand,
   SHELL_STILL_RUNNING_NOTICE,
 } from "./shell-command-stream.js";
+import { ToolResultOverflowStore } from "./tool-result-overflow.js";
 
 describe("observeShellCommand", () => {
   it("redacts provider errors before they reach the runtime", async () => {
@@ -245,11 +246,31 @@ describe("deliverFinishedShells", () => {
 
     release({ stdout: "logged in\n", stderr: "", code: 0 });
     await delivering;
-    expect(followUps).toEqual([
-      formatFinishedShellCommand({ stdout: "logged in\n", stderr: "", code: 0 }),
-    ]);
     expect(followUps[0]).toContain("exit code: 0");
     expect(followUps[0]).toContain("logged in");
+  });
+
+  it("lets the bot recover the unseen end of both completed background streams", async () => {
+    const stdout = `begin stdout\n${"x".repeat(13_000)}\nstdout complete`;
+    const stderr = `begin stderr\n${"y".repeat(13_000)}\nstderr complete`;
+    const store = new ToolResultOverflowStore();
+    const followUps: string[] = [];
+    await deliverFinishedShells(
+      (text) => followUps.push(text),
+      [Promise.resolve({ stdout, stderr, code: 0 })],
+      { toolResults: [] },
+      undefined,
+      (text) => store.keep("run-1", text),
+    );
+    const refs = [...followUps[0]!.matchAll(/read_tool_result\("([^"]+)", offset=(\d+)\)/g)];
+    expect(refs).toHaveLength(2);
+    for (const [index, original] of [stdout, stderr].entries()) {
+      const [, ref, offset] = refs[index]!;
+      expect(Number(offset)).toBe(TOOL_RESULT_TEXT_LIMIT);
+      expect(store.read("run-1", ref!, Number(offset), TOOL_RESULT_TEXT_LIMIT)).toBe(
+        original.slice(TOOL_RESULT_TEXT_LIMIT),
+      );
+    }
   });
 
   it("does not wait on the turn that first received the live output", async () => {
