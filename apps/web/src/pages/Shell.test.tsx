@@ -668,3 +668,25 @@ describe("inline mention integration", () => {
     expect(onSend).toHaveBeenCalledWith("@digest Ask @Bob", [bob, routine], expect.any(String));
   });
 });
+
+it("drops an extended mention across reload and failed-send retry", async () => {
+  const draftKey = "group:boundary";
+  const first = renderComposer(vi.fn(), { draftKey });
+  type(first, "Ask @Bo");
+  pressEnter(first);
+  expect(first.value).toBe("Ask @Bob ");
+  type(first, "Ask @Bobby ");
+  act(() => root?.unmount());
+  container?.remove();
+  const onSend = vi.fn().mockResolvedValue(false);
+  const restored = renderComposer(onSend, { draftKey });
+  expect(restored.value).toBe("Ask @Bobby ");
+  pressEnter(restored);
+  await act(async () => {});
+  expect(onSend.mock.calls[0]?.[0]).toBe("Ask @Bobby");
+  expect(onSend.mock.calls[0]?.[1]).toEqual([]);
+  expect(restored.value).toBe("Ask @Bobby ");
+  pressEnter(restored);
+  await act(async () => {});
+  expect(onSend.mock.calls[1]?.[1]).toEqual([]);
+});

@@ -6,6 +6,8 @@ import {
   insertComposerOccurrence,
 } from "./composer-occurrences.js";
 
+import { resolveGroupTargetBotIds } from "./group-mentions.js";
+
 const bot = { kind: "bot" as const, id: "bot-a", name: "Avery" };
 
 describe("inline composer occurrences", () => {
@@ -55,4 +57,45 @@ describe("inline composer occurrences", () => {
     expect(composerMentionQuery("person@Av", 9)).toBeNull();
     expect(insertComposerOccurrence("plain", 5, 5, bot, [])).toBeNull();
   });
+});
+
+describe("mention edit boundaries", () => {
+  const bob = { kind: "bot" as const, id: "bob", name: "Bob" };
+  it.each(["by", "é", "界", "2", "_", "-", "𐐀"])(
+    "drops an identity when %s joins either boundary",
+    (joined) => {
+      const first = insertComposerOccurrence("Ask @Bo", 7, 7, bob, [])!;
+      for (const text of [`Ask @Bob${joined} `, `Ask ${joined}@Bob `]) {
+        expect(editComposerOccurrences(first.text, text, first.occurrences)).toEqual([]);
+      }
+    },
+  );
+  it("routes an extended name only to its current recipient", () => {
+    const first = insertComposerOccurrence("Ask @Bo", 7, 7, bob, [])!;
+    const text = "Ask @Bobby ";
+    const occurrences = editComposerOccurrences(first.text, text, first.occurrences);
+    expect(
+      resolveGroupTargetBotIds({
+        text,
+        members: [
+          { id: "bob", name: "Bob" },
+          { id: "bobby", name: "Bobby" },
+        ],
+        explicitMentions: composerOccurrenceMentions(occurrences).map((m) => m.id),
+      }),
+    ).toEqual(["bobby"]);
+  });
+  it.each([";", ",", ".", "!", "🙂", "\n"])(
+    "preserves punctuation or delimiter %s and genuine repeats",
+    (delimiter) => {
+      const first = insertComposerOccurrence("Ask @Bo", 7, 7, bob, [])!;
+      const text = `Ask @Bob${delimiter} `;
+      const occurrences = editComposerOccurrences(first.text, text, first.occurrences);
+      expect(composerOccurrenceMentions(occurrences)).toEqual([bob]);
+      const next = `${text}again @Bo`;
+      const repeated = insertComposerOccurrence(next, next.length, next.length, bob, occurrences)!;
+      expect(repeated.occurrences).toHaveLength(2);
+      expect(composerOccurrenceMentions(repeated.occurrences)).toEqual([bob]);
+    },
+  );
 });

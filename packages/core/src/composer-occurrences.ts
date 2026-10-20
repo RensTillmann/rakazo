@@ -12,6 +12,15 @@ export function composerMentionQuery(text: string, caret: number) {
   return match ? { start: caret - match[1]!.length - 1, query: match[1]! } : null;
 }
 
+/** Match the same Unicode word boundaries as group recipient resolution. */
+export function isComposerOccurrenceIntact(text: string, occurrence: ComposerMentionOccurrence) {
+  return (
+    text.slice(occurrence.start, occurrence.end) === `@${occurrence.mention.name}` &&
+    !/[\p{L}\p{N}_-]$/u.test(text.slice(0, occurrence.start)) &&
+    !/^[\p{L}\p{N}_-]/u.test(text.slice(occurrence.end))
+  );
+}
+
 /** Preserve identities only while the selected occurrence itself is untouched. */
 export function editComposerOccurrences(
   previous: string,
@@ -33,7 +42,7 @@ export function editComposerOccurrences(
     else if (occurrence.start >= oldEnd) {
       updated = { ...occurrence, start: occurrence.start + delta, end: occurrence.end + delta };
     } else return [];
-    return next.slice(updated.start, updated.end) === `@${updated.mention.name}` ? [updated] : [];
+    return isComposerOccurrenceIntact(next, updated) ? [updated] : [];
   });
 }
 
@@ -63,10 +72,9 @@ export function insertComposerOccurrence(
   return {
     text: next,
     caret: query.start + inserted.length,
-    occurrences: [
-      ...retained,
-      { start: query.start, end: query.start + label.length, mention },
-    ].sort((a, b) => a.start - b.start),
+    occurrences: [...retained, { start: query.start, end: query.start + label.length, mention }]
+      .filter((occurrence) => isComposerOccurrenceIntact(next, occurrence))
+      .sort((a, b) => a.start - b.start),
   };
 }
 

@@ -1,4 +1,4 @@
-import type { ComposerMentionOccurrence } from "@rakazo/core";
+import { type ComposerMentionOccurrence, isComposerOccurrenceIntact } from "@rakazo/core";
 
 /** Per-thread composer draft persistence (survives tab reloads and discards). */
 
@@ -117,7 +117,7 @@ export function readComposerDraftOccurrences(
         !entry.mention.id ||
         typeof entry.mention.name !== "string" ||
         !entry.mention.name ||
-        text.slice(entry.start, entry.end) !== `@${entry.mention.name}`
+        !isComposerOccurrenceIntact(text, entry)
       )
         return [];
       result.push({

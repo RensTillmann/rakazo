@@ -77,3 +77,18 @@ describe("inline draft metadata", () => {
     expect(readComposerDraft("one", storage)).toBe("Ask @Ada");
   });
 });
+
+it.each(["by", "é", "-", "_", "𐐀"])("rejects stale boundary sidecars (%s)", (joined) => {
+  for (const text of [`Ask @Ada${joined}`, `Ask ${joined}@Ada`]) {
+    const start = text.indexOf("@");
+    const storage = memoryStorage({
+      "rakazo.composerDraft.one": text,
+      "rakazo.composerDraft.one.mentions": JSON.stringify({
+        text,
+        occurrences: [{ start, end: start + 4, mention: { kind: "bot", id: "a", name: "Ada" } }],
+      }),
+    });
+    expect(readComposerDraftOccurrences("one", storage)).toEqual([]);
+    expect(readComposerDraft("one", storage)).toBe(text);
+  }
+});
