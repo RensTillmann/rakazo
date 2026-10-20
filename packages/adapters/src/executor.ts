@@ -61,6 +61,7 @@ import {
   appendTextSegment,
   appendToolCallSegment,
   applyJudgeDecision,
+  askAnswerTurnMessageForRun,
   assertTransition,
   batchedConnectorActions,
   blocksToAgentHistoryText,
@@ -4069,14 +4070,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
           id: message.id,
           role: message.role,
           runId: message.runId,
+          replyToMessageId: message.replyToMessageId,
           blocks: message.blocks as MessageBlock[],
         }));
-        const currentTurnMessage = userTurnMessageForRun(
-          run.trigger,
-          runId,
-          historyMessages,
-          run.sourceMessageId,
-        );
+        // After a question answered with files, the answer is this attempt's turn: its files are
+        // copied onto the computer, and the request's own files stay among the earlier ones.
+        const currentTurnMessage =
+          askAnswerTurnMessageForRun(runId, historyMessages) ??
+          userTurnMessageForRun(run.trigger, runId, historyMessages, run.sourceMessageId);
         const turnBlocks = currentTurnMessage?.blocks;
         const allowSilentPeerMessage = botMessageAllowsSilence(
           peerMessage?.intent,

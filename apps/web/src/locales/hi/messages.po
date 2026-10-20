@@ -34,12 +34,15 @@ msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minu
 msgstr ""
 
 #. placeholder {0}: file.name
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
 msgstr "{0} (अधिकतम {ATTACHMENT_MAX_COUNT} अटैचमेंट)"
 
 #. placeholder {0}: file.name
 #. placeholder {1}: attachmentSizeLabel(attachmentMaxBytes(bootstrapMe))
+#. placeholder {1}: attachmentSizeLabel(attachmentMaxBytes)
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "{0} (over {1})"
 msgstr "{0} ({1} से अधिक)"
@@ -636,10 +639,6 @@ msgstr ""
 msgid "Android tablet"
 msgstr ""
 
-#: src/components/AskCard.tsx
-msgid "Answer"
-msgstr "उत्तर"
-
 #: src/components/call/IncomingCall.tsx
 msgctxt "incoming call"
 msgid "Answer"
@@ -792,6 +791,7 @@ msgstr "{0} बजे"
 msgid "at {timeSelect}"
 msgstr "{timeSelect} बजे"
 
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Attach file"
 msgstr "फ़ाइल संलग्न करें"
@@ -2396,6 +2396,10 @@ msgstr ""
 msgid "Engage when... Ignore..."
 msgstr ""
 
+#: src/components/DecisionDock.tsx
+msgid "Enlarge decisions"
+msgstr ""
+
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "पासवर्ड दर्ज करें"
@@ -2753,6 +2757,10 @@ msgstr ""
 msgid "Hold to talk"
 msgstr "बोलने के लिए दबाए रखें"
 
+#: src/components/AskCard.tsx
+msgid "Hold to talk, release to add the text"
+msgstr ""
+
 #: src/components/composer/HoldToTalk.tsx
 msgid "Hold to talk, release to send"
 msgstr "बोलने के लिए दबाए रखें, भेजने के लिए छोड़ें"
@@ -2773,10 +2781,6 @@ msgstr "कितनी बार"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "How to check"
 msgstr "जांच कैसे करें"
-
-#: src/components/AskCard.tsx
-msgid "I'll type it"
-msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "I’m done"
@@ -3093,6 +3097,10 @@ msgstr ""
 
 #: src/pages/shell/bot-credentials.tsx
 msgid "Lowercase letters, numbers, hyphens and underscores, starting with a letter."
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Make decisions smaller"
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
@@ -3774,6 +3782,10 @@ msgstr "या एक API कुंजी कनेक्ट करें"
 msgid "Or paste an API key"
 msgstr "या एक API कुंजी पेस्ट करें"
 
+#: src/components/AskCard.tsx
+msgid "Or type your own answer…"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Organic"
 msgstr ""
@@ -4106,6 +4118,8 @@ msgid "Remove"
 msgstr "हटाएं"
 
 #. placeholder {0}: attachment.file.name
+#. placeholder {0}: pending.file.name
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "{0} हटाएं"
@@ -4531,6 +4545,10 @@ msgstr ""
 msgid "Searching…"
 msgstr "खोजा जा रहा है…"
 
+#: src/components/AskCard.tsx
+msgid "See the attached file(s)."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "एक बॉट चुनें"
@@ -4539,6 +4557,7 @@ msgstr "एक बॉट चुनें"
 msgid "Select a connected model"
 msgstr "जुड़ा मॉडल चुनें"
 
+#: src/components/AskCard.tsx
 #: src/components/FlagMessageDialog.tsx
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -4769,6 +4788,7 @@ msgid "Skip or deploy key"
 msgstr "छोड़ें या डिप्लॉय कुंजी दें"
 
 #. placeholder {0}: skipped.join(", ")
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Skipped {0}"
 msgstr "{0} को छोड़ा गया"
@@ -5239,8 +5259,8 @@ msgid "Type without recording"
 msgstr ""
 
 #: src/components/AskCard.tsx
-msgid "Type your answer"
-msgstr "अपना उत्तर लिखें"
+msgid "Type your answer…"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Unassigned"
@@ -5278,7 +5298,9 @@ msgstr "अनम्यूट करें"
 msgid "Unpin"
 msgstr "पिन हटाएं"
 
+#. placeholder {0}: file.name
 #. placeholder {0}: pending.file.name
+#: src/components/DecisionDock.tsx
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
 msgstr "असमर्थित फ़ाइल प्रकार: {0}"
@@ -5579,6 +5601,10 @@ msgstr "आपने कॉल अस्वीकार की"
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "नियंत्रण आपके पास है"
+
+#: src/components/AskCard.tsx
+msgid "Your answer"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

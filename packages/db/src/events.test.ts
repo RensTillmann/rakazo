@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import {
+  AskAttachmentsNotAllowedError,
   answerRunInput,
   answerWaitingRunWithTextInTransaction,
   appendEvent,
@@ -1375,6 +1376,160 @@ describe("answerRunInput", () => {
       }),
     );
     expect(publish).toHaveBeenCalledWith("thread:thread-1", JSON.stringify({ cursor: 9 }));
+  });
+
+  describe("with files", () => {
+    const fileBlock = {
+      kind: "file" as const,
+      artifactId: "artifact-1",
+      mimeType: "application/pdf",
+      name: "invoice.pdf",
+      size: 12,
+    };
+    const answerTx = (ask: Record<string, unknown>) => ({
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      message: {
+        findFirst: vi.fn().mockResolvedValue({ id: "message-1", blocks: [ask] }),
+        update: vi.fn().mockResolvedValue({ id: "message-1" }),
+        create: vi.fn().mockResolvedValue({ id: "reply-1" }),
+      },
+      run: {
+        findFirst: vi.fn().mockResolvedValue({ botId: "bot-2", trigger: "user" }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUnique: vi.fn().mockResolvedValue({
+          status: "queued",
+          createdAt: new Date("2026-08-16T12:00:00.000Z"),
+          threadId: "thread-1",
+        }),
+      },
+      task: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 10, nextMessageSeq: 5 }) },
+      event: {
+        create: vi.fn(async ({ data }: { data: { seq: number; type: string } }) => ({
+          ...event(data.seq),
+          type: data.type,
+        })),
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+    });
+    const answerWithFiles = (ask: Record<string, unknown>, answer: string) => {
+      const tx = answerTx(ask);
+      const resolveAttachments = vi.fn().mockResolvedValue([fileBlock]);
+      const prisma = {
+        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      } as unknown as PrismaClient;
+      return {
+        tx,
+        resolveAttachments,
+        answered: answerRunInput(prisma, {
+          spaceId: "workspace-1",
+          threadId: "thread-1",
+          runId: "run-1",
+          messageId: "message-1",
+          answeredByUserId: "user-1",
+          answer,
+          resolveAttachments,
+        }),
+      };
+    };
+
+    it("adds the answer and its files as a reply to the question card, in the same transaction", async () => {
+      const { tx, resolveAttachments, answered } = answerWithFiles(
+        { kind: "ask", text: "Which invoice?", status: "pending" },
+        "This one",
+      );
+      await expect(answered).resolves.toBe(true);
+
+      expect(resolveAttachments).toHaveBeenCalledWith(tx);
+      const replyBlocks = [{ kind: "text", text: "This one" }, fileBlock];
+      expect(tx.message.create).toHaveBeenCalledOnce();
+      expect(tx.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          threadId: "thread-1",
+          role: "user",
+          blocks: replyBlocks,
+          replyToMessageId: "message-1",
+          runId: "run-1",
+        }),
+      });
+      expect(tx.event.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: "thread.message.created",
+            runId: "run-1",
+            payload: expect.objectContaining({
+              messageId: "reply-1",
+              role: "user",
+              blocks: replyBlocks,
+              replyToMessageId: "message-1",
+            }),
+          }),
+        }),
+      );
+      // The card is answered as without files, and the paused run itself resumes.
+      expect(tx.message.update).toHaveBeenCalledWith({
+        where: { id: "message-1" },
+        data: {
+          blocks: [{ kind: "ask", text: "Which invoice?", status: "answered", answer: "This one" }],
+        },
+      });
+      expect(tx.run.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: "queued" } }),
+      );
+      expect(tx.task.updateMany).toHaveBeenCalledWith({
+        where: { runs: { some: { id: "run-1" } } },
+        data: { prompt: "This one" },
+      });
+    });
+
+    it("labels a picked option in the reply with its visible label", async () => {
+      const { tx, answered } = answerWithFiles(
+        {
+          kind: "ask",
+          text: "Which invoice?",
+          status: "pending",
+          actions: [
+            { id: "choice-1", label: "March" },
+            { id: "choice-2", label: "April" },
+          ],
+        },
+        "choice-2",
+      );
+      await expect(answered).resolves.toBe(true);
+      expect(tx.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ blocks: [{ kind: "text", text: "April" }, fileBlock] }),
+      });
+    });
+
+    it.each([
+      [
+        "approval",
+        {
+          approvalEffectId: "effect-1",
+          actions: [
+            { id: "allow", label: "Allow once" },
+            { id: "deny", label: "Deny" },
+          ],
+        },
+      ],
+      ["secret", { input: "secret" }],
+      [
+        "instruction update",
+        {
+          instructionUpdate: { botId: "bot-2", before: "a", after: "b", reason: "c" },
+          approvalEffectId: "effect-1",
+        },
+      ],
+    ])("refuses files on a %s card before writing anything", async (_kind, fields) => {
+      const { tx, resolveAttachments, answered } = answerWithFiles(
+        { kind: "ask", text: "Card", status: "pending", ...fields },
+        "allow",
+      );
+      await expect(answered).rejects.toBeInstanceOf(AskAttachmentsNotAllowedError);
+      expect(resolveAttachments).not.toHaveBeenCalled();
+      expect(tx.run.updateMany).not.toHaveBeenCalled();
+      expect(tx.message.create).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps a routine's instructions and every earlier answer across choice resumes", async () => {

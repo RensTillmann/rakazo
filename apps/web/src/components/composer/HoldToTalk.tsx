@@ -22,12 +22,16 @@ export function useHoldToTalk({
   transcribe,
   disabled,
   onText,
+  releaseHint,
 }: {
   transcribe?: boolean;
   disabled?: boolean;
   onText: (text: string) => void;
+  /** What releasing does, for the tap hint and the button title. Default: it sends. */
+  releaseHint?: string;
 }) {
   const { t } = useLingui();
+  const hint = releaseHint ?? t`Hold to talk, release to send`;
   const [recording, setRecording] = useState<Recording>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -123,6 +127,7 @@ export function useHoldToTalk({
     transcript,
     lift,
     notice,
+    hint,
     submit,
     cancel,
     buttonProps: {
@@ -150,7 +155,7 @@ export function useHoldToTalk({
         if (!hold || !recordingRef.current || recordingRef.current.locked) return;
         if (Date.now() - hold.startedAt < TAP_MS) {
           cancel();
-          showNotice(t`Hold to talk, release to send`);
+          showNotice(hint);
           return;
         }
         submit();
@@ -170,20 +175,23 @@ export function useHoldToTalk({
   };
 }
 
-function useSeconds(since: number): number {
+/** Whole seconds since `since`, ticking only while there is a recording (`since` set). */
+function useSeconds(since: number | null): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (since === null) return;
+    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
-  }, []);
-  return Math.max(0, Math.floor((now - since) / 1000));
+  }, [since]);
+  return since === null ? 0 : Math.max(0, Math.floor((now - since) / 1000));
 }
 
 /** Takes the text field's place while recording: a live dot, the time, and what was heard. */
 export function HoldToTalkStrip({ talk }: { talk: ReturnType<typeof useHoldToTalk> }) {
   const { t } = useLingui();
-  const startedAt = talk.recording?.startedAt ?? Date.now();
-  const seconds = useSeconds(startedAt);
+  // The strip stays mounted next to every answer box and the composer; idle, it keeps no timer.
+  const seconds = useSeconds(talk.recording?.startedAt ?? null);
   if (!talk.recording) return null;
   const hint = talk.transcribing
     ? t`Transcribing…`
@@ -271,7 +279,7 @@ export function HoldToTalkControls({
         variant="outline"
         size="icon"
         aria-label={t`Hold to talk`}
-        title={t`Hold to talk, release to send`}
+        title={talk.hint}
         disabled={disabled}
         {...talk.buttonProps}
         className={cn(

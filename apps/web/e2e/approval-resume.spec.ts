@@ -20,7 +20,7 @@ test("approval input resumes durable work", async ({ page }, testInfo) => {
   await captureScreenshot(page, testInfo, "20-approval-input-request");
 
   await page.getByRole("button", { name: "Edit first" }).click();
-  const answer = page.getByRole("textbox", { name: "Answer" });
+  const answer = page.getByRole("textbox", { name: "Your answer" });
   await answer.fill("ask me which city to use again");
   await expect(page.getByRole("button", { name: "Send answer" })).toBeEnabled();
   await captureScreenshot(page, testInfo, "21-approval-custom-answer");

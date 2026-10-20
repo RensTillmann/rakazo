@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as PendingAttachmentsModule from "../lib/pending-attachments";
 import { rpc } from "../lib/rpc";
 import { DecisionDock } from "./DecisionDock";
 
@@ -28,9 +29,19 @@ vi.mock("@rakazo/ui-web", () => ({
   ),
   Input: (props: Record<string, unknown>) => <input {...props} />,
   Textarea: (props: Record<string, unknown>) => <textarea {...props} />,
+  cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
 }));
 vi.mock("../lib/rpc", () => ({
-  rpc: { decisions: { list: vi.fn() }, threads: { answer: vi.fn() }, bots: {} },
+  rpc: {
+    decisions: { list: vi.fn() },
+    threads: { answer: vi.fn() },
+    artifacts: { create: vi.fn() },
+    bots: {},
+  },
+}));
+vi.mock("../lib/pending-attachments", async (importOriginal) => ({
+  ...(await importOriginal<typeof PendingAttachmentsModule>()),
+  readFileAsBase64: async () => "YnJpZWY=",
 }));
 
 function decision(
@@ -91,6 +102,7 @@ async function render(
         groups={[{ id: "room", name: "Ops room" }]}
         onHeightChange={onHeightChange}
         onAnswered={onAnswered}
+        attachmentMaxBytes={10 * 1024 * 1024}
       />,
     );
   });
@@ -143,6 +155,58 @@ describe("DecisionDock", () => {
     expect(query('[data-testid="decision-dock"]')?.textContent).toContain("Ops room");
   });
 
+  it("enlarges and shrinks, remembers it, and hides the toggle on small screens", async () => {
+    await render("t-josy");
+    const dock = () => query('[data-testid="decision-dock"]')!;
+    const body = () => query('[data-testid="decision-dock-body"]')!;
+    const enlarge = query('button[aria-label="Enlarge decisions"]')!;
+    // Below `sm` the dock is full width already, so the toggle only shows from `sm` up.
+    expect(enlarge.className).toContain("hidden");
+    expect(enlarge.className).toContain("sm:grid");
+    expect(dock().className).not.toContain("sm:w-[min(800px");
+    act(() => enlarge.click());
+    expect(dock().className).toContain("sm:w-[min(800px,calc(100%-2rem))]");
+    expect(body().className).toContain("sm:max-h-[min(85vh,56rem)]");
+    expect(localStorage.getItem("rk:decision-dock:large:user-1")).toBe("1");
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render("t-josy");
+    expect(dock().className).toContain("sm:w-[min(800px,calc(100%-2rem))]");
+    act(() => query('button[aria-label="Make decisions smaller"]')?.click());
+    expect(dock().className).not.toContain("sm:w-[min(800px");
+    expect(localStorage.getItem("rk:decision-dock:large:user-1")).toBe("0");
+  });
+
+  it("uploads a card's files to its own chat and answers with their artifact ids", async () => {
+    vi.mocked(rpc.decisions.list).mockResolvedValue({ decisions: [josy] });
+    vi.mocked(rpc.artifacts.create).mockResolvedValue({ id: "art-1" } as never);
+    vi.mocked(rpc.threads.answer).mockResolvedValue({ ok: true } as never);
+    await render("t-josy");
+    const brief = new File(["brief"], "brief.pdf", { type: "application/pdf" });
+    act(() => {
+      const input = visibleCard()[0]!.querySelector<HTMLInputElement>(
+        '[data-testid="ask-attach-input"]',
+      )!;
+      Object.defineProperty(input, "files", { configurable: true, value: [brief] });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => clickButton("Send"));
+    await vi.waitFor(() => expect(rpc.threads.answer).toHaveBeenCalled());
+    expect(rpc.artifacts.create).toHaveBeenCalledWith({
+      botId: "josy",
+      name: "brief.pdf",
+      mimeType: "application/pdf",
+      contentBase64: "YnJpZWY=",
+    });
+    expect(rpc.threads.answer).toHaveBeenCalledWith({
+      botId: "josy",
+      runId: "run-josy-1",
+      messageId: "josy-1",
+      answer: "See the attached file(s).",
+      artifactIds: ["art-1"],
+    });
+  });
+
   it("starts at the open chat's first card once a fresh load knows the open chat", async () => {
     vi.mocked(rpc.decisions.list).mockResolvedValue({ decisions: [lilyOld, josy] });
     // The page loads before the route names the open chat: oldest card first.
@@ -180,12 +244,11 @@ describe("DecisionDock", () => {
   it("cycles with the arrow keys and keeps a half-typed answer while cycling", async () => {
     await render(null);
     expect(visibleCard()[0]?.dataset.decisionId).toBe("lily-old");
-    clickButton("I'll type it");
-    const input = visibleCard()[0]!.querySelector("input")!;
+    const field = visibleCard()[0]!.querySelector("textarea")!;
     act(() => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      setter.call(input, "Only on Monday");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
+      const value = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+      value?.set?.call(field, "Only on Monday");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const dock = query('[data-testid="decision-dock"]')!;
     act(() => {
@@ -196,7 +259,7 @@ describe("DecisionDock", () => {
       dock.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
     });
     expect(visibleCard()[0]?.dataset.decisionId).toBe("lily-old");
-    expect(visibleCard()[0]!.querySelector("input")?.value).toBe("Only on Monday");
+    expect(visibleCard()[0]!.querySelector("textarea")?.value).toBe("Only on Monday");
   });
 
   it("answers through the card's own chat, from any chat, and drops it", async () => {

@@ -2,14 +2,38 @@ import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@rakazo/chat-ui/web";
 import type { ThreadMessage } from "@rakazo/contracts";
-import { BOT_INSTRUCTIONS_MAX_LENGTH, commandVariableName } from "@rakazo/contracts";
-import { isApprovalAskBlock, isSecretAskBlock, selectedAskActionLabel } from "@rakazo/core";
+import {
+  ATTACHMENT_MAX_COUNT,
+  attachmentSizeLabel,
+  BOT_INSTRUCTIONS_MAX_LENGTH,
+  commandVariableName,
+} from "@rakazo/contracts";
+import {
+  inferAttachmentMimeType,
+  isApprovalAskBlock,
+  isSecretAskBlock,
+  selectedAskActionLabel,
+} from "@rakazo/core";
 import { Button, Input, Textarea } from "@rakazo/ui-web";
-import { useState } from "react";
+import { Paperclip, Plus, X } from "lucide-react";
+import { useRef, useState } from "react";
 import { answeredByDeviceLabel } from "../lib/answered-by-label";
+import {
+  ATTACHMENT_ACCEPT,
+  isFilePaste,
+  revokePendingAttachmentPreviews,
+  usePendingAttachmentPreviewCleanup,
+} from "../lib/pending-attachments";
 import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
 import { ApprovalDetail } from "./ApprovalDetail";
+import { HoldToTalkControls, HoldToTalkStrip, useHoldToTalk } from "./composer/HoldToTalk";
+
+/** `pendingAction` while a typed answer (with its files) is being sent; never an action id. */
+const TYPED_ANSWER_ACTION = "\u0000typed";
+
+/** Hold-to-talk in a question card's answer box. */
+export type AskVoice = { transcribe?: boolean; disabled?: boolean };
 
 export type AskBlock = Extract<ThreadMessage["blocks"][number], { kind: "ask" }>;
 
@@ -76,10 +100,17 @@ export function AskCard({
   block,
   canAnswer,
   onAnswer,
+  voice,
+  attachmentMaxBytes,
 }: {
   block: AskBlock;
   canAnswer: boolean;
-  onAnswer: (text: string, username?: string) => Promise<void>;
+  /** `files` only for a question card's typed answer, and only when `attachmentMaxBytes` is set. */
+  onAnswer: (text: string, username?: string, files?: readonly File[]) => Promise<void>;
+  /** Dictation into a question card's answer box; omitted = no microphone. */
+  voice?: AskVoice;
+  /** The upload limit; set = a question card's answer can carry files ('+', paste). */
+  attachmentMaxBytes?: number;
 }) {
   const { t } = useLingui();
   const [editing, setEditing] = useState(false);
@@ -125,6 +156,40 @@ export function AskCard({
       setPendingAction(null);
     }
   }
+
+  /** A question card's typed answer. Files alone answer with a fixed line pointing at them. */
+  async function submitTyped(text: string, files: readonly File[]): Promise<boolean> {
+    if (submitting) return false;
+    const trimmed = text.trim();
+    if (!trimmed && files.length === 0) return false;
+    setPendingAction(TYPED_ANSWER_ACTION);
+    setError(null);
+    try {
+      if (files.length > 0) {
+        await onAnswer(trimmed || t`See the attached file(s).`, undefined, files);
+      } else {
+        await onAnswer(trimmed);
+      }
+      return true;
+    } catch (err) {
+      setError(errorText(err, t`Could not submit this answer`));
+      return false;
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  const typedAnswer = (placeholder: string, onCancel?: () => void) => (
+    <TypedAnswer
+      placeholder={placeholder}
+      busy={submitting}
+      sending={pendingAction === TYPED_ANSWER_ACTION}
+      onSubmit={submitTyped}
+      onCancel={onCancel}
+      voice={voice}
+      attachmentMaxBytes={attachmentMaxBytes}
+    />
+  );
 
   if (block.instructionUpdate?.undoVersionId)
     return (
@@ -245,7 +310,7 @@ export function AskCard({
         <div className="mt-3.5 text-[13.5px] font-medium text-muted-foreground">
           <Trans>No longer active</Trans>
         </div>
-      ) : askActions?.length && !(editing && !approvalActions && !block.instructionUpdate) ? (
+      ) : askActions?.length ? (
         <div className={approvalActions ? "mt-3.5 flex flex-wrap gap-2" : "mt-3.5 space-y-1.5"}>
           {displayActions?.map((action) => (
             <Button
@@ -278,17 +343,9 @@ export function AskCard({
               )}
             </Button>
           ))}
-          {!approvalActions && !block.instructionUpdate ? (
-            <Button
-              variant="link"
-              data-testid="ask-type-answer"
-              className="h-auto px-0 text-[13.5px]"
-              disabled={submitting}
-              onClick={() => setEditing(true)}
-            >
-              <Trans>I'll type it</Trans>
-            </Button>
-          ) : null}
+          {!approvalActions && !block.instructionUpdate
+            ? typedAnswer(t`Or type your own answer…`)
+            : null}
         </div>
       ) : secretInput ? (
         <form
@@ -328,35 +385,7 @@ export function AskCard({
           </Button>
         </form>
       ) : editing ? (
-        <form
-          className="mt-3.5 flex flex-col gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitAnswer(answer);
-          }}
-        >
-          <Input
-            aria-label={t`Answer`}
-            value={answer}
-            onChange={(event) => setAnswer(event.target.value)}
-            placeholder={t`Type your answer`}
-          />
-          <div className="flex gap-2">
-            <Button type="submit" disabled={!answer.trim() || submitting}>
-              {submitting ? <Trans>Sending…</Trans> : <Trans>Send answer</Trans>}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={submitting}
-              onClick={() => {
-                setAnswer("");
-                setEditing(false);
-              }}
-            >
-              <Trans>Cancel</Trans>
-            </Button>
-          </div>
-        </form>
+        <div className="mt-3.5">{typedAnswer(t`Type your answer…`, () => setEditing(false))}</div>
       ) : (
         <div className="mt-3.5 flex gap-2">
           <Button disabled={submitting} onClick={() => void submitAnswer("approved")}>
@@ -368,6 +397,213 @@ export function AskCard({
         </div>
       )}
       {error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+type PendingAnswerFile = { id: string; file: File; previewUrl?: string };
+
+/**
+ * A question card's own answer box. Enter sends, Shift+Enter adds a line; it grows with the text
+ * up to about six lines. Its text and files stay while the decision dock cycles (cards stay
+ * mounted). Dictation lands in the box to check before sending; it is never sent on its own.
+ */
+function TypedAnswer({
+  placeholder,
+  busy,
+  sending,
+  onSubmit,
+  onCancel,
+  voice,
+  attachmentMaxBytes,
+}: {
+  placeholder: string;
+  /** Any answer of this card is being sent. */
+  busy: boolean;
+  /** This box's answer is being sent. */
+  sending: boolean;
+  onSubmit: (text: string, files: readonly File[]) => Promise<boolean>;
+  onCancel?: () => void;
+  voice?: AskVoice;
+  attachmentMaxBytes?: number;
+}) {
+  const { t } = useLingui();
+  const [text, setText] = useState("");
+  const [files, setFiles] = useState<PendingAnswerFile[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  usePendingAttachmentPreviewCleanup(files);
+  const talk = useHoldToTalk({
+    transcribe: voice?.transcribe,
+    disabled: !voice || voice.disabled,
+    // Releasing adds the words to the box; the user sends them.
+    releaseHint: t`Hold to talk, release to add the text`,
+    onText: (heard) =>
+      setText((current) =>
+        !current ? heard : /\s$/.test(current) ? `${current}${heard}` : `${current} ${heard}`,
+      ),
+  });
+  const canSend = !busy && (text.trim().length > 0 || files.length > 0);
+
+  function addFiles(list: FileList | null) {
+    if (!attachmentMaxBytes || !list?.length) return;
+    const next: PendingAnswerFile[] = [];
+    const skipped: string[] = [];
+    for (const file of Array.from(list)) {
+      if (files.length + next.length >= ATTACHMENT_MAX_COUNT) {
+        skipped.push(t`${file.name} (max ${ATTACHMENT_MAX_COUNT} attachments)`);
+        continue;
+      }
+      if (file.size > attachmentMaxBytes) {
+        skipped.push(t`${file.name} (over ${attachmentSizeLabel(attachmentMaxBytes)})`);
+        continue;
+      }
+      const mimeType = inferAttachmentMimeType(file.name, file.type);
+      if (!mimeType) {
+        skipped.push(file.name);
+        continue;
+      }
+      next.push({
+        id: `${file.name}-${file.size}-${file.lastModified}-${files.length + next.length}`,
+        file,
+        previewUrl: mimeType.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+      });
+    }
+    if (next.length) setFiles((current) => [...current, ...next]);
+    setNotice(skipped.length ? t`Skipped ${skipped.join(", ")}` : null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeFile(pending: PendingAnswerFile) {
+    revokePendingAttachmentPreviews([pending]);
+    setFiles((current) => current.filter((item) => item.id !== pending.id));
+  }
+
+  async function send() {
+    if (!canSend) return;
+    const sent = await onSubmit(
+      text,
+      files.map((pending) => pending.file),
+    );
+    if (!sent) return;
+    revokePendingAttachmentPreviews(files);
+    setText("");
+    setFiles([]);
+    setNotice(null);
+  }
+
+  return (
+    <div className="pt-1">
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void send();
+        }}
+      >
+        {attachmentMaxBytes ? (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ATTACHMENT_ACCEPT}
+              className="hidden"
+              data-testid="ask-attach-input"
+              onChange={(event) => addFiles(event.target.files)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={t`Attach file`}
+              disabled={busy}
+              onClick={() => fileInputRef.current?.click()}
+              className="size-9 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+            >
+              <Plus size={16} strokeWidth={2} />
+            </Button>
+          </>
+        ) : null}
+        <HoldToTalkStrip talk={talk} />
+        <Textarea
+          data-testid="ask-type-answer"
+          aria-label={t`Your answer`}
+          hidden={talk.recording !== null}
+          rows={1}
+          dir="auto"
+          className="max-h-36 min-h-9 resize-none overflow-y-auto"
+          placeholder={placeholder}
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            // Browsers without `field-sizing: content` grow through the inline height.
+            const element = event.currentTarget;
+            element.style.height = "auto";
+            element.style.height = `${element.scrollHeight}px`;
+          }}
+          onPaste={(event) => {
+            const clipboard = event.clipboardData;
+            if (!attachmentMaxBytes || !isFilePaste(clipboard)) return;
+            // Pasted files become attachments; any pasted text still lands at the cursor.
+            event.preventDefault();
+            addFiles(clipboard.files);
+            const pasted = clipboard.getData("text/plain");
+            if (!pasted) return;
+            const { selectionStart, selectionEnd } = event.currentTarget;
+            setText(`${text.slice(0, selectionStart)}${pasted}${text.slice(selectionEnd)}`);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            void send();
+          }}
+        />
+        {voice ? <HoldToTalkControls talk={talk} disabled={voice.disabled || busy} /> : null}
+        {talk.recording?.locked ? null : (
+          <Button type="submit" aria-label={t`Send answer`} disabled={!canSend}>
+            {sending ? <Trans>Sending…</Trans> : <Trans>Send</Trans>}
+          </Button>
+        )}
+        {onCancel ? (
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+            <Trans>Cancel</Trans>
+          </Button>
+        ) : null}
+      </form>
+      {files.length ? (
+        <div className="mt-2 flex flex-wrap gap-2" data-testid="ask-attachments">
+          {files.map((pending) => (
+            <div
+              key={pending.id}
+              className="flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1.5 text-[13px] text-foreground/75"
+            >
+              {pending.previewUrl ? (
+                <img
+                  src={pending.previewUrl}
+                  alt={pending.file.name}
+                  className="h-8 w-8 rounded object-cover"
+                />
+              ) : (
+                <Paperclip size={14} strokeWidth={1.8} />
+              )}
+              <span className="max-w-[180px] truncate" dir="auto">
+                {pending.file.name}
+              </span>
+              <button
+                type="button"
+                aria-label={t`Remove ${pending.file.name}`}
+                disabled={busy}
+                onClick={() => removeFile(pending)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X size={13} strokeWidth={2} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {notice ? <p className="mt-2 text-[12.5px] text-warning">{notice}</p> : null}
     </div>
   );
 }

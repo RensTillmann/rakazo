@@ -1,4 +1,8 @@
+import { ATTACHMENT_ALLOWED_MIME_TYPES } from "@rakazo/contracts";
 import { useEffect, useRef } from "react";
+
+/** The file picker's accept list for chat and card attachments. */
+export const ATTACHMENT_ACCEPT = [...ATTACHMENT_ALLOWED_MIME_TYPES, ".zip"].join(",");
 
 export type PendingAttachmentPreview = {
   previewUrl?: string;

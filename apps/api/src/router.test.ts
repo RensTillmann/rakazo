@@ -22,9 +22,10 @@ import {
   serializeModelSecret,
 } from "@rakazo/adapters";
 import type { Actor, Bot, ProductEvent } from "@rakazo/contracts";
-import { REPLY_QUOTE_MAX_LENGTH } from "@rakazo/contracts";
+import { ATTACHMENT_MAX_COUNT, REPLY_QUOTE_MAX_LENGTH } from "@rakazo/contracts";
 import { openScreenCapability } from "@rakazo/core/node/screen-capability";
 import type { PrismaClient } from "@rakazo/db";
+import { AskAttachmentsNotAllowedError } from "@rakazo/db";
 import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RouterDeps } from "./router.js";
@@ -668,6 +669,116 @@ describe("thread answer delivery", () => {
       at: expect.any(String),
     });
     expect(JSON.stringify(answeredBy)).not.toContain("fake-session-token");
+  });
+
+  function answerHarness(answerRunInput: unknown) {
+    const prisma = {
+      bot: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "bot-1",
+          thread: { id: "thread-1" },
+          computer: null,
+        }),
+      },
+    } as unknown as PrismaClient;
+    const deps = {
+      prisma,
+      events: { answerRunInput },
+      jobs: { enqueue: vi.fn().mockResolvedValue(undefined) },
+      env: {
+        defaultProvider: "fake",
+        defaultModel: "fake-model",
+        webOrigin: "http://127.0.0.1:5173",
+        screenProxySecret: "fake-test-secret",
+        sandboxProvider: "fake",
+      },
+      dataDir: "/tmp/rakazo-router-test",
+    } as unknown as RouterDeps;
+    const actor = {
+      spaceId: "workspace-1",
+      userId: "user-1",
+      email: "user@rakazo.test",
+      isDeploymentOwner: true,
+    } satisfies Actor;
+    const handler = new RPCHandler(createRouter(deps));
+    return async (input: Record<string, unknown>) => {
+      const { response } = await handler.handle(
+        new Request("http://127.0.0.1/rpc/threads/answer", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            json: { botId: "bot-1", runId: "run-1", messageId: "message-1", ...input },
+          }),
+        }),
+        { prefix: "/rpc", context: { actor } },
+      );
+      return response!;
+    };
+  }
+
+  it("validates answer files in the answer's transaction exactly as a send to the bot does", async () => {
+    const findMany = vi
+      .fn()
+      .mockResolvedValue([
+        { id: "artifact-1", name: "invoice.pdf", mimeType: "application/pdf", size: 12 },
+      ]);
+    let resolved: unknown;
+    const answerRunInput = vi.fn(
+      async (input: { resolveAttachments?: (tx: unknown) => Promise<unknown> }) => {
+        resolved = await input.resolveAttachments?.({ artifact: { findMany } });
+        return true;
+      },
+    );
+    const answer = answerHarness(answerRunInput);
+
+    expect((await answer({ answer: "Here", artifactIds: ["artifact-1"] })).status).toBe(200);
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["artifact-1"] },
+        botId: "bot-1",
+        groupId: null,
+        spaceId: "workspace-1",
+        userId: "user-1",
+      },
+    });
+    expect(resolved).toEqual([
+      {
+        kind: "file",
+        artifactId: "artifact-1",
+        mimeType: "application/pdf",
+        name: "invoice.pdf",
+        size: 12,
+      },
+    ]);
+
+    // Without files the answer is exactly as before: nothing to resolve.
+    expect((await answer({ answer: "Here" })).status).toBe(200);
+    expect((await answer({ answer: "Here", artifactIds: [] })).status).toBe(200);
+    for (const call of answerRunInput.mock.calls.slice(1)) {
+      expect(call[0]).not.toHaveProperty("resolveAttachments");
+    }
+  });
+
+  it("rejects files on a card that is not a question as a bad request", async () => {
+    const answer = answerHarness(vi.fn().mockRejectedValue(new AskAttachmentsNotAllowedError()));
+    const response = await answer({ answer: "allow", artifactIds: ["artifact-1"] });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      json: expect.objectContaining({
+        message: "Files can only be attached when answering a question.",
+      }),
+    });
+  });
+
+  it("caps answer files like a send", async () => {
+    const answerRunInput = vi.fn().mockResolvedValue(true);
+    const answer = answerHarness(answerRunInput);
+    const artifactIds = Array.from(
+      { length: ATTACHMENT_MAX_COUNT + 1 },
+      (_, index) => `artifact-${index}`,
+    );
+    expect((await answer({ answer: "Here", artifactIds })).status).toBe(400);
+    expect(answerRunInput).not.toHaveBeenCalled();
   });
 });
 

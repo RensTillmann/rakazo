@@ -185,6 +185,7 @@ import {
 } from "@rakazo/core";
 import type { BoardEvents, Board as BoardRow, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
+  AskAttachmentsNotAllowedError,
   appendEventInTransaction,
   BotSectionNameConflictError,
   botProfileLabelsChanged,
@@ -316,6 +317,7 @@ import {
   flagThreadMessage,
   reactToThreadMessage,
   resolveThreadTarget,
+  resolveThreadTargetAttachments,
   sendThreadMessage,
   setThreadUnreadState,
   stopThreadRuns,
@@ -2653,22 +2655,37 @@ export function createRouter(deps: RouterDeps) {
           ...(context.sessionId ? { "session.id": context.sessionId } : {}),
         });
         let syncedRunIds: string[] = [];
-        const answered = await deps.events.answerRunInput({
-          spaceId: context.actor.spaceId,
-          threadId: target.threadId,
-          runId: input.runId,
-          messageId: input.messageId,
-          answeredByUserId: context.actor.userId,
-          answer: input.answer,
-          answeredBy: answeredByFromRequest({
-            userId: context.actor.userId,
-            sessionId: context.sessionId,
-            userAgent: context.userAgent,
-          }),
-          clientNonce: input.clientNonce,
-          username: input.username,
-          onSyncedRuns: (runIds) => (syncedRunIds = runIds),
-        });
+        const artifactIds = input.artifactIds ?? [];
+        let answered: boolean;
+        try {
+          answered = await deps.events.answerRunInput({
+            spaceId: context.actor.spaceId,
+            threadId: target.threadId,
+            runId: input.runId,
+            messageId: input.messageId,
+            answeredByUserId: context.actor.userId,
+            answer: input.answer,
+            answeredBy: answeredByFromRequest({
+              userId: context.actor.userId,
+              sessionId: context.sessionId,
+              userAgent: context.userAgent,
+            }),
+            clientNonce: input.clientNonce,
+            username: input.username,
+            ...(artifactIds.length
+              ? {
+                  resolveAttachments: (tx) =>
+                    resolveThreadTargetAttachments(tx, context.actor, target, artifactIds),
+                }
+              : {}),
+            onSyncedRuns: (runIds) => (syncedRunIds = runIds),
+          });
+        } catch (error) {
+          if (error instanceof AskAttachmentsNotAllowedError) {
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          }
+          throw error;
+        }
         if (!answered) {
           throw new ORPCError("CONFLICT", {
             message: "This prompt is no longer awaiting an answer",

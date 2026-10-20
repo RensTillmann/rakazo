@@ -34,12 +34,15 @@ msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minu
 msgstr "{0, plural, one {ממתין להתחברות — הקישור יפוג בעוד כ-# דקה.} other {ממתין להתחברות — הקישור יפוג בעוד כ-# דקות.}}"
 
 #. placeholder {0}: file.name
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
 msgstr "{0} (עד {ATTACHMENT_MAX_COUNT} קבצים מצורפים)"
 
 #. placeholder {0}: file.name
 #. placeholder {1}: attachmentSizeLabel(attachmentMaxBytes(bootstrapMe))
+#. placeholder {1}: attachmentSizeLabel(attachmentMaxBytes)
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "{0} (over {1})"
 msgstr "{0} (מעל {1})"
@@ -636,10 +639,6 @@ msgstr ""
 msgid "Android tablet"
 msgstr ""
 
-#: src/components/AskCard.tsx
-msgid "Answer"
-msgstr "תשובה"
-
 #: src/components/call/IncomingCall.tsx
 msgctxt "incoming call"
 msgid "Answer"
@@ -792,6 +791,7 @@ msgstr "בשעה {0}"
 msgid "at {timeSelect}"
 msgstr "בשעה {timeSelect}"
 
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Attach file"
 msgstr "צירוף קובץ"
@@ -2396,6 +2396,10 @@ msgstr "מסתיים ב-{day}"
 msgid "Engage when... Ignore..."
 msgstr "להגיב כאשר... להתעלם מ..."
 
+#: src/components/DecisionDock.tsx
+msgid "Enlarge decisions"
+msgstr ""
+
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "יש להזין סיסמה"
@@ -2753,6 +2757,10 @@ msgstr "גבוה"
 msgid "Hold to talk"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "Hold to talk, release to add the text"
+msgstr ""
+
 #: src/components/composer/HoldToTalk.tsx
 msgid "Hold to talk, release to send"
 msgstr ""
@@ -2773,10 +2781,6 @@ msgstr "תדירות"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "How to check"
 msgstr "איך לבדוק"
-
-#: src/components/AskCard.tsx
-msgid "I'll type it"
-msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "I’m done"
@@ -3094,6 +3098,10 @@ msgstr "נמוך"
 #: src/pages/shell/bot-credentials.tsx
 msgid "Lowercase letters, numbers, hyphens and underscores, starting with a letter."
 msgstr "אותיות לטיניות קטנות, ספרות, מקפים וקווים תחתונים, ובהתחלה אות."
+
+#: src/components/DecisionDock.tsx
+msgid "Make decisions smaller"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Make sure nothing is still running on this computer."
@@ -3774,6 +3782,10 @@ msgstr "או חיבור עם מפתח API"
 msgid "Or paste an API key"
 msgstr "או הדבקת מפתח API"
 
+#: src/components/AskCard.tsx
+msgid "Or type your own answer…"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Organic"
 msgstr "אורגני"
@@ -4106,6 +4118,8 @@ msgid "Remove"
 msgstr "הסרה"
 
 #. placeholder {0}: attachment.file.name
+#. placeholder {0}: pending.file.name
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "הסרת {0}"
@@ -4531,6 +4545,10 @@ msgstr "חיפוש: {0}"
 msgid "Searching…"
 msgstr "מחפש…"
 
+#: src/components/AskCard.tsx
+msgid "See the attached file(s)."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "בחירת בוט"
@@ -4539,6 +4557,7 @@ msgstr "בחירת בוט"
 msgid "Select a connected model"
 msgstr "בחירת מודל מחובר"
 
+#: src/components/AskCard.tsx
 #: src/components/FlagMessageDialog.tsx
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -4769,6 +4788,7 @@ msgid "Skip or deploy key"
 msgstr "דילוג או מפתח התקנה"
 
 #. placeholder {0}: skipped.join(", ")
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Skipped {0}"
 msgstr "דולגו: {0}"
@@ -5239,8 +5259,8 @@ msgid "Type without recording"
 msgstr "הקלדה בלי הקלטה"
 
 #: src/components/AskCard.tsx
-msgid "Type your answer"
-msgstr "יש להקליד תשובה"
+msgid "Type your answer…"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Unassigned"
@@ -5278,7 +5298,9 @@ msgstr "ביטול השתקה"
 msgid "Unpin"
 msgstr "ביטול הצמדה"
 
+#. placeholder {0}: file.name
 #. placeholder {0}: pending.file.name
+#: src/components/DecisionDock.tsx
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
 msgstr "סוג קובץ לא נתמך: {0}"
@@ -5579,6 +5601,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "השליטה אצלך"
+
+#: src/components/AskCard.tsx
+msgid "Your answer"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

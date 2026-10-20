@@ -1,6 +1,8 @@
+import type { MessageBlock } from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   AttachmentValidationError,
+  askAnswerTurnMessageForRun,
   attachmentExtensionForMimeType,
   attachmentsForBot,
   blocksToAgentHistoryText,
@@ -186,6 +188,64 @@ describe("attachment helpers", () => {
     expect(userTurnMessageForRun("user", "run-new", messages)).toEqual(messages[1]);
     expect(userTurnMessageForRun("user", "run-fanout", messages, "message-old")).toEqual(
       messages[0],
+    );
+  });
+
+  it("takes a question answered with files as a resumed run's turn", () => {
+    type Turn = {
+      id: string;
+      role: string;
+      runId: string;
+      replyToMessageId?: string;
+      blocks: MessageBlock[];
+    };
+    const file: MessageBlock = {
+      kind: "file",
+      artifactId: "art_answer",
+      mimeType: "application/pdf",
+      name: "invoice.pdf",
+      size: 12,
+    };
+    const answeredCard: Turn = {
+      id: "card",
+      role: "bot",
+      runId: "run-1",
+      blocks: [{ kind: "ask", text: "Which invoice?", status: "answered", answer: "This one" }],
+    };
+    const pendingCard: Turn = {
+      ...answeredCard,
+      blocks: [{ kind: "ask", text: "Which invoice?" }],
+    };
+    const answer: Turn = {
+      id: "answer",
+      role: "user",
+      runId: "run-1",
+      replyToMessageId: "card",
+      blocks: [{ kind: "text", text: "This one" }, file],
+    };
+    const textOnlyAnswer: Turn = { ...answer, blocks: [{ kind: "text", text: "This one" }] };
+    const source: Turn = {
+      id: "source",
+      role: "user",
+      runId: "run-1",
+      blocks: [{ kind: "text", text: "Check my invoice" }],
+    };
+    const progress: Turn = {
+      id: "progress",
+      role: "bot",
+      runId: "run-1",
+      blocks: [{ kind: "text", text: "On it" }],
+    };
+    const steeredReply: Turn = { ...answer, replyToMessageId: "progress" };
+    // Newest first, as the executor loads history.
+    expect(askAnswerTurnMessageForRun("run-1", [answer, answeredCard, source])).toBe(answer);
+    // Another run's answer, a reply without files, and a still-pending card are not this turn.
+    expect(askAnswerTurnMessageForRun("run-2", [answer, answeredCard, source])).toBeUndefined();
+    expect(askAnswerTurnMessageForRun("run-1", [textOnlyAnswer, answeredCard])).toBeUndefined();
+    expect(askAnswerTurnMessageForRun("run-1", [answer, pendingCard])).toBeUndefined();
+    // A reply with files to an ordinary bot message is not an answer.
+    expect(askAnswerTurnMessageForRun("run-1", [steeredReply, answeredCard, progress])).toBe(
+      undefined,
     );
   });
 

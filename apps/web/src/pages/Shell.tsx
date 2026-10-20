@@ -33,7 +33,6 @@ import type {
   VoiceStatus,
 } from "@rakazo/contracts";
 import {
-  ATTACHMENT_ALLOWED_MIME_TYPES,
   ATTACHMENT_MAX_COUNT,
   attachmentMaxBytes,
   attachmentSizeLabel,
@@ -256,6 +255,7 @@ import { messageProviderLabel } from "../lib/messaging";
 import { parseModelOptionKey } from "../lib/model-catalog";
 import { type PeerRoomView, peerRoomView } from "../lib/peer-messages";
 import {
+  ATTACHMENT_ACCEPT,
   isFileDrag,
   isFilePaste,
   readFileAsBase64,
@@ -411,7 +411,6 @@ type PendingBrowserNotification = {
   groupNotification: boolean;
 };
 
-const ATTACHMENT_ACCEPT = [...ATTACHMENT_ALLOWED_MIME_TYPES, ".zip"].join(",");
 /** Identity colour for bots the roster no longer knows about. */
 const FALLBACK_BOT_COLOR = "#85858A";
 const THREAD_SNAPSHOT_TIMEOUT_MS = 2_000;
@@ -4396,6 +4395,16 @@ function SpaceShell() {
               bots={bots}
               onHeightChange={setDecisionDockInset}
               onAnswered={refreshAfterDecision}
+              // Same dictation as the composer, but it fills the card's answer box.
+              voice={
+                bootstrapMe?.phoneCallsEnabled === true
+                  ? {
+                      transcribe: voiceStatus ? Boolean(voiceStatus.transcribe) : undefined,
+                      disabled: call !== null,
+                    }
+                  : undefined
+              }
+              attachmentMaxBytes={attachmentMaxBytes(bootstrapMe)}
             />
           </div>
         )}

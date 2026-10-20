@@ -34,12 +34,15 @@ msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minu
 msgstr ""
 
 #. placeholder {0}: file.name
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
 msgstr "{0} (maximal {ATTACHMENT_MAX_COUNT} Anhänge)"
 
 #. placeholder {0}: file.name
 #. placeholder {1}: attachmentSizeLabel(attachmentMaxBytes(bootstrapMe))
+#. placeholder {1}: attachmentSizeLabel(attachmentMaxBytes)
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "{0} (over {1})"
 msgstr "{0} (über {1})"
@@ -636,10 +639,6 @@ msgstr ""
 msgid "Android tablet"
 msgstr ""
 
-#: src/components/AskCard.tsx
-msgid "Answer"
-msgstr "Antwort"
-
 #: src/components/call/IncomingCall.tsx
 msgctxt "incoming call"
 msgid "Answer"
@@ -792,6 +791,7 @@ msgstr "um {0}"
 msgid "at {timeSelect}"
 msgstr "um {timeSelect}"
 
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Attach file"
 msgstr "Datei anhängen"
@@ -2396,6 +2396,10 @@ msgstr ""
 msgid "Engage when... Ignore..."
 msgstr ""
 
+#: src/components/DecisionDock.tsx
+msgid "Enlarge decisions"
+msgstr ""
+
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "Gib ein Passwort ein"
@@ -2753,6 +2757,10 @@ msgstr ""
 msgid "Hold to talk"
 msgstr "Zum Sprechen gedrückt halten"
 
+#: src/components/AskCard.tsx
+msgid "Hold to talk, release to add the text"
+msgstr ""
+
 #: src/components/composer/HoldToTalk.tsx
 msgid "Hold to talk, release to send"
 msgstr "Zum Sprechen halten, zum Senden loslassen"
@@ -2773,10 +2781,6 @@ msgstr "Wie oft"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "How to check"
 msgstr "So wird geprüft"
-
-#: src/components/AskCard.tsx
-msgid "I'll type it"
-msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "I’m done"
@@ -3093,6 +3097,10 @@ msgstr ""
 
 #: src/pages/shell/bot-credentials.tsx
 msgid "Lowercase letters, numbers, hyphens and underscores, starting with a letter."
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "Make decisions smaller"
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
@@ -3774,6 +3782,10 @@ msgstr "Oder einen API-Schlüssel verbinden"
 msgid "Or paste an API key"
 msgstr "Oder einen API-Schlüssel einfügen"
 
+#: src/components/AskCard.tsx
+msgid "Or type your own answer…"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Organic"
 msgstr ""
@@ -4106,6 +4118,8 @@ msgid "Remove"
 msgstr "Entfernen"
 
 #. placeholder {0}: attachment.file.name
+#. placeholder {0}: pending.file.name
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "{0} entfernen"
@@ -4531,6 +4545,10 @@ msgstr ""
 msgid "Searching…"
 msgstr "Suche…"
 
+#: src/components/AskCard.tsx
+msgid "See the attached file(s)."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "Bot auswählen"
@@ -4539,6 +4557,7 @@ msgstr "Bot auswählen"
 msgid "Select a connected model"
 msgstr "Verbundenes Modell auswählen"
 
+#: src/components/AskCard.tsx
 #: src/components/FlagMessageDialog.tsx
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -4769,6 +4788,7 @@ msgid "Skip or deploy key"
 msgstr "Überspringen oder Deploy-Key"
 
 #. placeholder {0}: skipped.join(", ")
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Skipped {0}"
 msgstr "{0} übersprungen"
@@ -5239,8 +5259,8 @@ msgid "Type without recording"
 msgstr ""
 
 #: src/components/AskCard.tsx
-msgid "Type your answer"
-msgstr "Gib deine Antwort ein"
+msgid "Type your answer…"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Unassigned"
@@ -5278,7 +5298,9 @@ msgstr "Stummschaltung aufheben"
 msgid "Unpin"
 msgstr "Lösen"
 
+#. placeholder {0}: file.name
 #. placeholder {0}: pending.file.name
+#: src/components/DecisionDock.tsx
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
 msgstr "Nicht unterstützter Dateityp: {0}"
@@ -5579,6 +5601,10 @@ msgstr "Du hast abgelehnt"
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "Du hast die Kontrolle"
+
+#: src/components/AskCard.tsx
+msgid "Your answer"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

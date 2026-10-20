@@ -278,3 +278,38 @@ export function userTurnMessageForRun<
       (sourceMessageId ? message.id === sourceMessageId : message.runId === runId),
   );
 }
+
+/**
+ * The newest user reply that answered one of this run's question cards with files, in
+ * newest-first `messages`. A resumed attempt takes it as its turn, so the answer's files land
+ * on the computer as current-turn files, whatever started the run.
+ */
+export function askAnswerTurnMessageForRun<
+  T extends {
+    id?: string;
+    role: string;
+    runId?: string | null;
+    replyToMessageId?: string | null;
+    blocks: MessageBlock[];
+  },
+>(runId: string, messages: T[]): T | undefined {
+  const answeredCardIds = new Set(
+    messages
+      .filter(
+        (message) =>
+          message.role === "bot" &&
+          message.runId === runId &&
+          message.blocks.some((block) => block.kind === "ask" && block.status === "answered"),
+      )
+      .map((message) => message.id),
+  );
+  if (!answeredCardIds.size) return undefined;
+  return messages.find(
+    (message) =>
+      message.role === "user" &&
+      message.runId === runId &&
+      message.replyToMessageId != null &&
+      answeredCardIds.has(message.replyToMessageId) &&
+      message.blocks.some((block) => block.kind === "file" || block.kind === "image"),
+  );
+}

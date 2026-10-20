@@ -34,12 +34,15 @@ msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minu
 msgstr "{0, plural, one {Waiting for sign-in — the link expires in about # minute.} other {Waiting for sign-in — the link expires in about # minutes.}}"
 
 #. placeholder {0}: file.name
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
 msgstr "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
 
 #. placeholder {0}: file.name
 #. placeholder {1}: attachmentSizeLabel(attachmentMaxBytes(bootstrapMe))
+#. placeholder {1}: attachmentSizeLabel(attachmentMaxBytes)
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "{0} (over {1})"
 msgstr "{0} (over {1})"
@@ -636,10 +639,6 @@ msgstr "Android phone"
 msgid "Android tablet"
 msgstr "Android tablet"
 
-#: src/components/AskCard.tsx
-msgid "Answer"
-msgstr "Answer"
-
 #: src/components/call/IncomingCall.tsx
 msgctxt "incoming call"
 msgid "Answer"
@@ -792,6 +791,7 @@ msgstr "at {0}"
 msgid "at {timeSelect}"
 msgstr "at {timeSelect}"
 
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Attach file"
 msgstr "Attach file"
@@ -2396,6 +2396,10 @@ msgstr "Ends {day}"
 msgid "Engage when... Ignore..."
 msgstr "Engage when... Ignore..."
 
+#: src/components/DecisionDock.tsx
+msgid "Enlarge decisions"
+msgstr "Enlarge decisions"
+
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "Enter a password"
@@ -2753,6 +2757,10 @@ msgstr "High"
 msgid "Hold to talk"
 msgstr "Hold to talk"
 
+#: src/components/AskCard.tsx
+msgid "Hold to talk, release to add the text"
+msgstr "Hold to talk, release to add the text"
+
 #: src/components/composer/HoldToTalk.tsx
 msgid "Hold to talk, release to send"
 msgstr "Hold to talk, release to send"
@@ -2773,10 +2781,6 @@ msgstr "How often"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "How to check"
 msgstr "How to check"
-
-#: src/components/AskCard.tsx
-msgid "I'll type it"
-msgstr "I'll type it"
 
 #: src/pages/Shell.tsx
 msgid "I’m done"
@@ -3094,6 +3098,10 @@ msgstr "Low"
 #: src/pages/shell/bot-credentials.tsx
 msgid "Lowercase letters, numbers, hyphens and underscores, starting with a letter."
 msgstr "Lowercase letters, numbers, hyphens and underscores, starting with a letter."
+
+#: src/components/DecisionDock.tsx
+msgid "Make decisions smaller"
+msgstr "Make decisions smaller"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Make sure nothing is still running on this computer."
@@ -3774,6 +3782,10 @@ msgstr "Or connect an API key"
 msgid "Or paste an API key"
 msgstr "Or paste an API key"
 
+#: src/components/AskCard.tsx
+msgid "Or type your own answer…"
+msgstr "Or type your own answer…"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Organic"
 msgstr "Organic"
@@ -4106,6 +4118,8 @@ msgid "Remove"
 msgstr "Remove"
 
 #. placeholder {0}: attachment.file.name
+#. placeholder {0}: pending.file.name
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "Remove {0}"
@@ -4531,6 +4545,10 @@ msgstr "Search: {0}"
 msgid "Searching…"
 msgstr "Searching…"
 
+#: src/components/AskCard.tsx
+msgid "See the attached file(s)."
+msgstr "See the attached file(s)."
+
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "Select a bot"
@@ -4539,6 +4557,7 @@ msgstr "Select a bot"
 msgid "Select a connected model"
 msgstr "Select a connected model"
 
+#: src/components/AskCard.tsx
 #: src/components/FlagMessageDialog.tsx
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -4769,6 +4788,7 @@ msgid "Skip or deploy key"
 msgstr "Skip or deploy key"
 
 #. placeholder {0}: skipped.join(", ")
+#: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
 msgid "Skipped {0}"
 msgstr "Skipped {0}"
@@ -5239,8 +5259,8 @@ msgid "Type without recording"
 msgstr "Type without recording"
 
 #: src/components/AskCard.tsx
-msgid "Type your answer"
-msgstr "Type your answer"
+msgid "Type your answer…"
+msgstr "Type your answer…"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Unassigned"
@@ -5278,7 +5298,9 @@ msgstr "Unmute"
 msgid "Unpin"
 msgstr "Unpin"
 
+#. placeholder {0}: file.name
 #. placeholder {0}: pending.file.name
+#: src/components/DecisionDock.tsx
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
 msgstr "Unsupported file type: {0}"
@@ -5579,6 +5601,10 @@ msgstr "You declined"
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "You have control"
+
+#: src/components/AskCard.tsx
+msgid "Your answer"
+msgstr "Your answer"
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

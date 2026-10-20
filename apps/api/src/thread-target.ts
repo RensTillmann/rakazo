@@ -330,6 +330,26 @@ export async function resolveThreadTarget(
   throw new IsolationError();
 }
 
+/** The message blocks for files sent to this chat, validated as a send to it validates them. */
+export async function resolveThreadTargetAttachments(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  target: ThreadTarget,
+  artifactIds: string[],
+): Promise<MessageBlock[]> {
+  const { blocks } =
+    target.kind === "bot"
+      ? await resolveSendAttachments({ prisma: tx }, actor, target.botId, artifactIds)
+      : await resolveGroupSendAttachments(
+          { prisma: tx },
+          actor,
+          target.groupId,
+          target.memberBotIds,
+          artifactIds,
+        );
+  return blocks;
+}
+
 export async function threadHead(prisma: PrismaClient, target: ThreadTarget) {
   const latest = await prisma.event.findFirst({
     where: { threadId: target.threadId },

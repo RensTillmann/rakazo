@@ -1,7 +1,8 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { PendingDecision } from "@rakazo/contracts";
+import { inferAttachmentMimeType } from "@rakazo/core";
 import { BotAvatar } from "@rakazo/ui-web";
-import { ChevronLeft, ChevronRight, Minus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Minus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   newDecisionIds,
@@ -9,8 +10,9 @@ import {
   stableDecisionIndex,
   stepDecisionIndex,
 } from "../lib/decision-queue";
+import { readFileAsBase64 } from "../lib/pending-attachments";
 import { rpc } from "../lib/rpc";
-import { AskCard } from "./AskCard";
+import { AskCard, type AskVoice } from "./AskCard";
 
 const FALLBACK_COLOR = "#8b5cf6";
 const REFETCH_DELAY_MS = 250;
@@ -18,6 +20,18 @@ const BUMP_MS = 1_200;
 
 function minimizedStorageKey(userId: string | null): string {
   return `rk:decision-dock:minimized:${userId ?? "anon"}`;
+}
+
+function largeStorageKey(userId: string | null): string {
+  return `rk:decision-dock:large:${userId ?? "anon"}`;
+}
+
+function readLarge(userId: string | null): boolean {
+  try {
+    return window.localStorage.getItem(largeStorageKey(userId)) === "1";
+  } catch {
+    return false;
+  }
 }
 
 function readMinimized(userId: string | null): boolean {
@@ -45,6 +59,8 @@ export function DecisionDock({
   groups,
   onHeightChange,
   onAnswered,
+  voice,
+  attachmentMaxBytes,
 }: {
   userId: string | null;
   currentThreadId: string | null;
@@ -56,6 +72,10 @@ export function DecisionDock({
   groups: ReadonlyArray<{ id: string; name: string }>;
   onHeightChange: (height: number) => void;
   onAnswered: (decision: PendingDecision) => void;
+  /** Hold-to-talk into a question card's answer box (it never sends on its own). */
+  voice?: AskVoice;
+  /** The chat's upload limit; set = a question card's answer can carry files. */
+  attachmentMaxBytes?: number;
 }) {
   const { t } = useLingui();
   const [decisions, setDecisions] = useState<PendingDecision[]>([]);
@@ -71,6 +91,7 @@ export function DecisionDock({
     setCurrentId(null);
   }
   const [minimized, setMinimized] = useState(() => readMinimized(userId));
+  const [large, setLarge] = useState(() => readLarge(userId));
   const [bump, setBump] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const loaded = useRef(false);
@@ -136,6 +157,7 @@ export function DecisionDock({
 
   useEffect(() => {
     void minimized;
+    void large;
     const element = rootRef.current;
     if (!element || ordered.length === 0) {
       onHeightChange(0);
@@ -147,7 +169,7 @@ export function DecisionDock({
     const observer = new ResizeObserver(report);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [onHeightChange, ordered.length, minimized]);
+  }, [onHeightChange, ordered.length, minimized, large]);
   useEffect(() => () => onHeightChange(0), [onHeightChange]);
 
   function setMinimizedRemembered(next: boolean) {
@@ -157,19 +179,47 @@ export function DecisionDock({
     } catch {}
   }
 
+  function setLargeRemembered(next: boolean) {
+    setLarge(next);
+    try {
+      window.localStorage.setItem(largeStorageKey(userId), next ? "1" : "0");
+    } catch {}
+  }
+
   function step(by: number) {
     const next = ordered[stepDecisionIndex(index, by, ordered.length)];
     if (next) setCurrentId(next.messageId);
   }
 
-  async function answer(decision: PendingDecision, text: string, username?: string) {
+  async function answer(
+    decision: PendingDecision,
+    text: string,
+    username?: string,
+    files?: readonly File[],
+  ) {
+    const target = decision.groupId ? { groupId: decision.groupId } : { botId: decision.botId };
+    // Files go up as artifacts of the card's own chat, like the composer's attachments.
+    const artifactIds: string[] = [];
+    for (const file of files ?? []) {
+      const mimeType = inferAttachmentMimeType(file.name, file.type);
+      if (!mimeType) throw new Error(t`Unsupported file type: ${file.name}`);
+      const contentBase64 = await readFileAsBase64(file);
+      const artifact = await rpc.artifacts.create({
+        ...target,
+        name: file.name,
+        mimeType,
+        contentBase64,
+      });
+      artifactIds.push(artifact.id);
+    }
     try {
       await rpc.threads.answer({
-        ...(decision.groupId ? { groupId: decision.groupId } : { botId: decision.botId }),
+        ...target,
         runId: decision.runId,
         messageId: decision.messageId,
         answer: text,
         ...(username ? { username } : {}),
+        ...(artifactIds.length ? { artifactIds } : {}),
       });
     } catch (error) {
       // Answered elsewhere or its run moved on: the card is gone, so drop it quietly.
@@ -240,7 +290,10 @@ export function DecisionDock({
               step(event.key === "ArrowLeft" ? -1 : 1);
             }
           }}
-          className="absolute bottom-4 end-4 z-30 flex w-[min(400px,calc(100%-2rem))] flex-col rounded-2xl border border-border bg-background shadow-xl"
+          // Enlarged is about twice the size; below `sm` the dock is full width either way.
+          className={`absolute bottom-4 end-4 z-30 flex w-[min(400px,calc(100%-2rem))] flex-col rounded-2xl border border-border bg-background shadow-xl ${
+            large ? "sm:w-[min(800px,calc(100%-2rem))]" : ""
+          }`}
         >
           <header className="flex items-center gap-2 border-b border-border px-3 py-2">
             <BotAvatar color={color} identity={current.botId} size={24} />
@@ -280,6 +333,18 @@ export function DecisionDock({
             </button>
             <button
               type="button"
+              aria-label={large ? t`Make decisions smaller` : t`Enlarge decisions`}
+              onClick={() => setLargeRemembered(!large)}
+              className="hidden size-7 place-items-center rounded-md hover:bg-accent sm:grid"
+            >
+              {large ? (
+                <Minimize2 size={15} aria-hidden="true" />
+              ) : (
+                <Maximize2 size={15} aria-hidden="true" />
+              )}
+            </button>
+            <button
+              type="button"
               aria-label={t`Minimize decisions`}
               onClick={() => setMinimizedRemembered(true)}
               className="grid size-7 place-items-center rounded-md hover:bg-accent"
@@ -287,7 +352,12 @@ export function DecisionDock({
               <Minus size={16} aria-hidden="true" />
             </button>
           </header>
-          <div className="max-h-[min(60vh,28rem)] overflow-y-auto p-2">
+          <div
+            data-testid="decision-dock-body"
+            className={`max-h-[min(60vh,28rem)] overflow-y-auto p-2 ${
+              large ? "sm:max-h-[min(85vh,56rem)]" : ""
+            }`}
+          >
             {/* Every card stays mounted while cycling so a half-typed answer survives. */}
             {ordered.map((decision) =>
               decision.block.kind === "ask" ? (
@@ -295,11 +365,14 @@ export function DecisionDock({
                   key={decision.messageId}
                   hidden={decision.messageId !== current.messageId}
                   data-decision-id={decision.messageId}
+                  className="[&>div]:max-w-none"
                 >
                   <AskCard
                     block={decision.block}
                     canAnswer
-                    onAnswer={(text, username) => answer(decision, text, username)}
+                    onAnswer={(text, username, files) => answer(decision, text, username, files)}
+                    voice={voice}
+                    attachmentMaxBytes={attachmentMaxBytes}
                   />
                 </div>
               ) : null,

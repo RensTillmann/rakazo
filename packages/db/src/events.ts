@@ -22,6 +22,7 @@ import {
   resolveAskChoice,
   sanitizeJsonValue,
 } from "@rakazo/core";
+import { messageReplyPreview } from "@rakazo/core/message-quote";
 import { approvalEffectKey } from "@rakazo/core/node/approval-effect-key";
 import { getLogger } from "@rakazo/logging";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
@@ -224,6 +225,12 @@ export interface AnswerRunInput {
   username?: string;
   /** Fleet: the API session that answered; stored on the block and the approval effect. */
   answeredBy?: AskAnsweredBy;
+  /**
+   * Question cards only: resolves, inside the answer's transaction, the files attached to the
+   * answer. The answer then also lands in the thread as a user reply to the card carrying them,
+   * which the resumed attempt takes as its turn. Any other card refuses it.
+   */
+  resolveAttachments?: (tx: Prisma.TransactionClient) => Promise<MessageBlock[]>;
 }
 
 /** Fleet: who answered an ask card. Holds the session id, never the session token. */
@@ -232,6 +239,14 @@ export interface AskAnsweredBy {
   sessionId?: string;
   userAgent?: string;
   at: string;
+}
+
+/** Files were attached to an answer for a card that is not a plain question. */
+export class AskAttachmentsNotAllowedError extends Error {
+  constructor() {
+    super("Files can only be attached when answering a question.");
+    this.name = "AskAttachmentsNotAllowedError";
+  }
 }
 
 export interface SendUserMessageInput {
@@ -784,6 +799,17 @@ async function commitAnswerRunInput(
   const secretAsk = isSecretAskBlock(pendingAsk);
   const choiceAsk = !approvalAsk && !secretAsk && Boolean(pendingAsk.actions?.length);
   const selectedChoice = choiceAsk ? resolveAskChoice(input.answer, pendingAsk.actions) : undefined;
+  if (
+    input.resolveAttachments &&
+    (approvalAsk ||
+      secretAsk ||
+      pendingAsk.approvalEffectId ||
+      pendingAsk.credential ||
+      pendingAsk.instructionUpdate)
+  )
+    throw new AskAttachmentsNotAllowedError();
+  // Resolved before anything is written: a refused file rolls the whole answer back.
+  const attachmentBlocks = (await input.resolveAttachments?.(tx)) ?? [];
   if (secretAsk && !runSecretWriter) return null;
   if (secretAsk && pendingAsk.credential && run.userId !== input.answeredByUserId) return null;
   const loginAsk = secretAsk && pendingAsk.credential?.auth.type === "login";
@@ -855,7 +881,8 @@ async function commitAnswerRunInput(
 
   const recordedAnswer = secretAsk ? "" : (selectedChoice?.id ?? approvalAnswer);
   const callId = callIdFromClientNonce(input.clientNonce);
-  const recordsCallUtterance = Boolean(callId && !secretAsk);
+  // An answer with files is recorded once, as the reply below, which carries the call id too.
+  const recordsCallUtterance = Boolean(callId && !secretAsk && !attachmentBlocks.length);
 
   // Give spoken answers the same durable, call-scoped user utterance as other voice turns.
   // Secret asks stay out of message history; the call UI requires those answers on screen.
@@ -1010,6 +1037,41 @@ async function commitAnswerRunInput(
     runId: input.runId,
     payload: { messageId: message.id, role: "bot", blocks },
   });
+  // The answer's files reach the thread like files sent in chat: a user reply to the card,
+  // linked to the paused run so its resumed attempt takes it as the turn. It starts no run of
+  // its own and is never steering; the paused run resumes as with any answer.
+  let repliedSeq = 0;
+  if (attachmentBlocks.length) {
+    const text = (selectedChoice?.label ?? input.answer).trim();
+    const replyBlocks: MessageBlock[] = [
+      ...(text ? [{ kind: "text" as const, text }] : []),
+      ...attachmentBlocks,
+    ];
+    const reply = await createThreadMessageInTransaction(tx, {
+      threadId: input.threadId,
+      role: "user",
+      blocks: replyBlocks,
+      replyToMessageId: message.id,
+      runId: input.runId,
+      clientNonce: input.clientNonce,
+    });
+    const replied = await appendEventInTransaction(tx, {
+      spaceId: input.spaceId,
+      threadId: input.threadId,
+      botId: run.botId,
+      type: "thread.message.created",
+      runId: input.runId,
+      payload: {
+        messageId: reply.id,
+        role: "user",
+        blocks: replyBlocks,
+        callId,
+        replyToMessageId: message.id,
+        replyPreview: messageReplyPreview(parsed.data, "bot", run.botId),
+      },
+    });
+    repliedSeq = replied.seq;
+  }
   // Fleet: RAKAZO_SYNC_DUPLICATE_ASKS=true answers identical open question cards in the thread too.
   const synced =
     !approvalAsk &&
@@ -1027,7 +1089,7 @@ async function commitAnswerRunInput(
       : { runIds: [], seq: 0 };
   return {
     threadId: updated.threadId,
-    seq: Math.max(updated.seq, synced.seq),
+    seq: Math.max(updated.seq, repliedSeq, synced.seq),
     syncedRunIds: synced.runIds,
   };
 }
