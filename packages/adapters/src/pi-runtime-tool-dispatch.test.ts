@@ -10,6 +10,7 @@ const fakeAgentState = vi.hoisted(() => ({
     | "two-boundaries"
     | "silent-continuation"
     | "subagent-limit"
+    | "subagent-evidence"
     | "parent-limit"
     | "parent-parallel"
     | "ask-pause"
@@ -340,7 +341,20 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
           toolName: delegation.name,
           args,
         });
-        await delegation.execute("delegate-1", args);
+        fakeAgentState.toolResult = await delegation.execute("delegate-1", args);
+        return;
+      }
+
+      if (fakeAgentState.mode === "subagent-evidence") {
+        this.state.messages.push({
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: `START${"a".repeat(15000)}MIDDLE${"b".repeat(15000)}FINAL-Z password=hunter2`,
+            },
+          ],
+        });
         return;
       }
 
@@ -2268,12 +2282,50 @@ describe("Pi connector tool dispatch", () => {
     expect(result.content).toHaveLength(3);
     expect(result.content[0]).toEqual({ type: "text", text: first });
     expect(result.content[1]).toEqual(image);
-    expect(result.content[2]).toEqual({
-      type: "text",
-      text: "bbbbb\n[cut off: showed 12,000 of 12,012 characters. Ask a narrower question.]",
-    });
+    expect(result.content[2]?.type).toBe("text");
+    expect(result.content[2]?.text?.split("\n", 1)[0]).toBe("bbbbb");
   });
 
+  it("recovers the middle and ending of a long helper result without leaking unseen credentials", async () => {
+    vi.stubEnv("RAKAZO_TOOL_RESULT_OVERFLOW", "true");
+    fakeAgentState.mode = "subagent-evidence";
+    const runId = "subagent-evidence-run";
+    try {
+      for await (const _event of new PiAgentRuntime().run(
+        {
+          botId: "b",
+          threadId: "t",
+          runId,
+          prompt: "Delegate the evidence read.",
+          instructions: "Use run_subagent.",
+          history: [],
+          tools: [
+            { name: "run_subagent", description: "Delegate", inputSchema: { type: "object" } },
+          ],
+          model: { provider: "test", id: "dispatch-test-model" },
+        },
+        {
+          operationId: runId,
+          traceId: runId,
+          spaceId: "w",
+          userId: "u",
+          signal: new AbortController().signal,
+        },
+      )) {
+        /* Exhaust the runtime. */
+      }
+      const result = fakeAgentState.toolResult as { content: Array<{ text: string }> };
+      expect(result.content[0]!.text).toContain('read_tool_result("r1", offset=12000)');
+      const recovered = toolResultOverflowStore.read(runId, "r1", 12000, 100000);
+      expect(recovered).toContain("MIDDLE");
+      expect(recovered).toContain("FINAL-Z");
+      expect(recovered).not.toContain("hunter2");
+      expect(toolResultOverflowStore.read("other-run", "r1", 12000, 100000)).toContain("No kept");
+    } finally {
+      toolResultOverflowStore.clear(runId);
+      vi.unstubAllEnvs();
+    }
+  });
   it("keeps a cut-off result for read_tool_result with RAKAZO_TOOL_RESULT_OVERFLOW", async () => {
     vi.stubEnv("RAKAZO_TOOL_RESULT_OVERFLOW", "true");
     try {

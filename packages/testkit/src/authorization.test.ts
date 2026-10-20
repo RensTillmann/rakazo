@@ -177,6 +177,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
         { effect: "require_approval", matchKind: "category", matchValue: "email" },
       ],
       ["approvalRules/remove", { id: "missing-rule" }],
+      ["approvals/review", { effectId: "missing-effect" }],
       ["artifacts/list", { botId: "missing-bot" }],
       ["usage/list"],
       ["usage/summary"],

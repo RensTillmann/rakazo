@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentContextStrategy, CacheCapabilities } from "@rakazo/adapter-kit";
+import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
 
 export type ContextStrategy = AgentContextStrategy;
 export interface ContextMessage {
@@ -30,6 +31,8 @@ export interface ContextSelectionOptions {
   cacheWarmth?: "likely-warm" | "likely-cold" | "unknown";
   /** Keep tool protocol intact while shortening oversized result bodies. */
   truncateToolResults?: boolean;
+  /** Retain complete sanitized text before context-budget shortening. Run scoped by the caller. */
+  keepToolResult?: (source: string) => string;
 }
 export class ContextBudgetError extends Error {
   constructor(
@@ -223,7 +226,7 @@ function shortenStructuredResult(source: string, size: number): string | undefin
     if (!largest) break; // Required metadata alone may still need explicit budget failure.
     const value = (largest.parent as Record<string, unknown>)[largest.key] as string;
     const keep = Math.max(8, Math.floor(value.length / 4));
-    const shortened = `${value.slice(0, keep)}\n[Tool result truncated to fit context; omitted evidence is unavailable.]\n${value.slice(-keep)}`;
+    const shortened = `${value.slice(0, keep)}\n[truncated; re-read source]\n${value.slice(-keep)}`;
     if (shortened.length >= value.length) break;
     (largest.parent as Record<string, unknown>)[largest.key] = shortened;
     encoded = JSON.stringify(holder.payload);
@@ -482,11 +485,19 @@ export function selectContext<T extends ContextMessage>(
               (part) => part?.type === "toolCall" && part.id === message.toolCallId,
             )
           : undefined;
-        const text = shortenToolResultText(
-          serialized,
-          size,
-          nativeCall ?? { name: message.toolName },
-        );
+        const ref = options.keepToolResult?.(serialized);
+        const text = ref
+          ? JSON.stringify({
+              contextTruncated: true,
+              recovery: {
+                tool: "read_tool_result",
+                ref,
+                offset: 0,
+                length: Math.min(size, TOOL_RESULT_TEXT_LIMIT),
+              },
+              instruction: "Read the retained original before claiming omitted evidence.",
+            })
+          : shortenToolResultText(serialized, size, nativeCall ?? { name: message.toolName });
         if (text.length >= serialized.length) return message;
         shortenedCount += 1;
         return { ...message, content: [{ type: "text", text }, ...images] } as T;

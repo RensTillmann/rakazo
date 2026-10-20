@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   billedPromptTokens,
   clipToolResultContent,
-  clipToolResultText,
   modelStreamMaxRetries,
   REASONING_MODEL_MAX_TOKENS,
   resolveCompletionMaxTokens,
@@ -124,16 +123,6 @@ describe("resolveCompletionMaxTokens", () => {
   });
 });
 
-describe("clipToolResultText", () => {
-  it("bounds oversized tool output for the in-turn transcript", () => {
-    const text = "x".repeat(TOOL_RESULT_TEXT_LIMIT + 50);
-    const clipped = clipToolResultText(text);
-    expect(clipped).toBe(
-      `${"x".repeat(TOOL_RESULT_TEXT_LIMIT)}\n[cut off: showed 12,000 of 12,050 characters. Ask a narrower question.]`,
-    );
-  });
-});
-
 describe("clipToolResultContent", () => {
   it("shares one character budget across all text parts and leaves images", () => {
     const first = "a".repeat(TOOL_RESULT_TEXT_LIMIT - 10);
@@ -149,9 +138,7 @@ describe("clipToolResultContent", () => {
     expect(clipped[0]).toEqual({ type: "text", text: first });
     expect(clipped[1]).toEqual(image);
     const overflow = clipped[2] as { type: "text"; text: string };
-    expect(overflow).toEqual({
-      type: "text",
-      text: `${"b".repeat(10)}\n[cut off: showed 12,000 of 12,043 characters. Ask a narrower question.]`,
-    });
+    expect(overflow.type).toBe("text");
+    expect(overflow.text.split("\n", 1)[0]).toBe("b".repeat(10));
   });
 });

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { Api, Context, Message, Model } from "@earendil-works/pi-ai";
 import type { AdapterContext, AgentRunRequest, AgentUsage } from "@rakazo/adapter-kit";
 import { DEFAULT_CONTEXT_STRATEGY } from "@rakazo/adapter-kit";
+import { sanitizeSensitiveText } from "./activity-details.js";
 import type { CacheRequest, ContextBudget } from "./context-selection.js";
 import {
   ContextCacheTracker,
@@ -9,6 +10,7 @@ import {
   providerContextPrefix,
   selectContext,
 } from "./context-selection.js";
+import { toolResultOverflowEnabled, toolResultOverflowStore } from "./tool-result-overflow.js";
 
 const accountSalt = randomBytes(32);
 const sharedCacheTracker = new ContextCacheTracker();
@@ -363,6 +365,9 @@ export function createRuntimeContextPolicy(
         cacheWarmth: predictedCache,
         recentExchanges:
           retainShortHistory || standaloneHistoryFallback ? messages.length : 8 + laterUserMessages,
+        keepToolResult: toolResultOverflowEnabled()
+          ? (source) => toolResultOverflowStore.keep(request.runId, sanitizeSensitiveText(source))
+          : undefined,
       });
       const shortenedStructuredResults = selected.messages.filter((message) => {
         if (message.role !== "toolResult") return false;

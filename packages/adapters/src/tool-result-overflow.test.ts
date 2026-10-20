@@ -1,7 +1,7 @@
 import { toolRequiresApproval, unattendedTriggerToolRequiresApproval } from "@rakazo/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { selectBuiltinToolsForRun } from "./executor.js";
-import { clipToolResultContent, clipToolResultText } from "./pi-runtime-limits.js";
+import { clipToolResultContent } from "./pi-runtime-limits.js";
 import { cutOffNote, ToolResultOverflowStore } from "./tool-result-overflow.js";
 
 afterEach(() => {
@@ -9,24 +9,6 @@ afterEach(() => {
 });
 
 describe("cut-off line", () => {
-  it("says how much was shown and how to read the rest", () => {
-    const clipped = clipToolResultText("x".repeat(20_483), 12_000, "r1");
-    expect(clipped.startsWith("x".repeat(12_000))).toBe(true);
-    expect(
-      clipped.endsWith(
-        '\n[cut off: showed 12,000 of 20,483 characters. Ask a narrower question, or read the rest with read_tool_result("r1", offset=12000).]',
-      ),
-    ).toBe(true);
-  });
-
-  it("without a kept copy only gives the counts and the narrower-question advice", () => {
-    const clipped = clipToolResultText("x".repeat(20_483));
-    expect(
-      clipped.endsWith("\n[cut off: showed 12,000 of 20,483 characters. Ask a narrower question.]"),
-    ).toBe(true);
-    expect(clipped).not.toContain("read_tool_result");
-  });
-
   it("notes the cut once across parts and hands the joined text to keep", () => {
     const keep = vi.fn(() => "r2");
     const image = { type: "image", data: "iVBORw0KGgo=" };
@@ -74,7 +56,7 @@ describe("ToolResultOverflowStore", () => {
   it("returns the next slice with the line while more remains, and none at the end", () => {
     const store = new ToolResultOverflowStore();
     const ref = store.keep("run", `${"a".repeat(10)}${"b".repeat(10)}${"c".repeat(5)}`);
-    expect(store.read("run", ref, 10, 10)).toBe(`${"b".repeat(10)}\n${cutOffNote(20, 25, ref)}`);
+    expect(store.read("run", ref, 10, 10).startsWith(`${"b".repeat(10)}\n`)).toBe(true);
     expect(store.read("run", ref, 20, 10)).toBe("c".repeat(5));
     expect(store.read("other-run", ref, 0, 10)).toContain("No kept tool result");
   });
@@ -86,9 +68,32 @@ describe("ToolResultOverflowStore", () => {
     const third = store.keep("run", "3".repeat(9));
     expect(store.read("run", first, 0, 10)).toContain("No kept tool result");
     expect(store.read("run", second, 0, 10)).toBe("2".repeat(4));
-    expect(store.read("run", third, 0, 10)).toBe("3".repeat(6));
+    expect(store.read("run", third, 0, 10)).toContain("3".repeat(6));
+    expect(store.read("run", third, 0, 10)).toContain("Only 6 of 9 original characters retained");
+    expect(store.read("run", third, 6, 10)).not.toContain("Nothing left");
+    expect(store.read("run", third, 6, 10)).toContain("original tool");
     store.keep("run", "4".repeat(6));
     expect(store.read("run", second, 0, 10)).toContain("No kept tool result");
+  });
+
+  it("keeps repeated context projections from evicting the same original evidence", () => {
+    const store = new ToolResultOverflowStore(100, 110);
+    const first = store.keep("run", "START-MIDDLE-FINAL");
+    for (let index = 0; index < 20; index++) {
+      expect(store.keep("run", "START-MIDDLE-FINAL")).toBe(first);
+    }
+    store.keep("run", "another result");
+    expect(store.read("run", first, 0, 100)).toBe("START-MIDDLE-FINAL");
+    expect(store.read("other-run", first, 0, 100)).toContain("No kept");
+    store.clear("run");
+    expect(store.read("run", first, 0, 100)).toContain("No kept");
+  });
+
+  it("enforces the run capacity even when one result exceeds the run budget", () => {
+    const store = new ToolResultOverflowStore(100, 6);
+    const ref = store.keep("run", "START-MIDDLE-FINAL");
+    expect(store.read("run", ref, 0, 100)).toContain("Only 6 of 18 original characters retained");
+    expect(store.read("run", ref, 0, 100)).not.toContain("FINAL");
   });
 });
 

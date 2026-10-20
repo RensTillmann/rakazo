@@ -1,9 +1,10 @@
 import type { Api, Context, Message, Model } from "@earendil-works/pi-ai";
 import type { AgentRunRequest } from "@rakazo/adapter-kit";
 import { DEFAULT_CONTEXT_STRATEGY } from "@rakazo/adapter-kit";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ContextBudgetError, ContextCacheTracker } from "./context-selection.js";
 import { createRuntimeContextPolicy } from "./runtime-context.js";
+import { toolResultOverflowStore } from "./tool-result-overflow.js";
 
 const model = {
   id: "synthetic-model",
@@ -49,6 +50,98 @@ function enableHistoryRetrieval(request: AgentRunRequest) {
   request.executeTool = async () => ({});
 }
 describe("runtime context policy", () => {
+  it.each(["read_file", "skill_read", "read_history", "read_tool_result"])(
+    "retains complete %s evidence under actual budget pressure and after another tool call",
+    (toolName) => {
+      vi.stubEnv("RAKAZO_TOOL_RESULT_OVERFLOW", "true");
+      const { request, context } = fixture(0);
+      request.contextStrategy = "retrieval";
+      request.runId = `budget-recovery-${toolName}`;
+      const evidence = `START${"a".repeat(18000)}IMPORTANT-MIDDLE${"b".repeat(18000)}FINAL-Z password=hunter2`;
+      const usage = {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      };
+      const assistant = (id: string, name: string): Message => ({
+        role: "assistant",
+        content: [{ type: "toolCall", id, name, arguments: {} }],
+        api: "test",
+        provider: "test",
+        model: "test",
+        usage,
+        stopReason: "toolUse",
+        timestamp: 101,
+      });
+      const resultText = (messages: Message[], id: string) => {
+        const result = messages.find(
+          (message) => message.role === "toolResult" && message.toolCallId === id,
+        );
+        if (result?.role !== "toolResult") throw new Error("Required tool result disappeared");
+        return result.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n");
+      };
+      context.messages.push(assistant("evidence", toolName), {
+        role: "toolResult",
+        toolCallId: "evidence",
+        toolName,
+        content: [{ type: "text", text: evidence }],
+        isError: false,
+        timestamp: 102,
+      });
+      try {
+        const policy = createRuntimeContextPolicy(request);
+        const boundedModel = { ...model, contextWindow: 10000 };
+        const prepared = policy.prepareContext(context, boundedModel);
+        const recovery = JSON.parse(resultText(prepared.messages, "evidence")).recovery;
+        const original = toolResultOverflowStore.read(request.runId, recovery.ref, 0, 100000);
+        expect(original).toContain("IMPORTANT-MIDDLE");
+        expect(original).toContain("FINAL-Z");
+        expect(original).not.toContain("hunter2");
+        expect(toolResultOverflowStore.read("another-run", recovery.ref, 0, 100000)).toContain(
+          "No kept",
+        );
+        const length = recovery.length ?? 12000;
+        let observed = "";
+        for (let offset = 0; offset < original.length; offset += length) {
+          const id = `page-${offset}`;
+          const page = toolResultOverflowStore.read(request.runId, recovery.ref, offset, length);
+          const expected = original.slice(offset, offset + length);
+          context.messages.push(assistant(id, "read_tool_result"), {
+            role: "toolResult",
+            toolCallId: id,
+            toolName: "read_tool_result",
+            content: [{ type: "text", text: page }],
+            isError: false,
+            timestamp: 103 + offset,
+          });
+          const continued = policy.prepareContext(context, boundedModel);
+          const visible = resultText(continued.messages, id);
+          expect(visible.startsWith(expected)).toBe(true);
+          context.messages.push(assistant(`next-${offset}`, "shell"), {
+            role: "toolResult",
+            toolCallId: `next-${offset}`,
+            toolName: "shell",
+            content: [{ type: "text", text: "ok" }],
+            isError: false,
+            timestamp: 104 + offset,
+          });
+          const afterTool = policy.prepareContext(context, boundedModel);
+          expect(resultText(afterTool.messages, id).startsWith(expected)).toBe(true);
+          observed += visible.slice(0, expected.length);
+        }
+        expect(observed).toBe(original);
+      } finally {
+        toolResultOverflowStore.clear(request.runId);
+        vi.unstubAllEnvs();
+      }
+    },
+  );
   it("preserves a selected prefix across turns with a declared cache window", () => {
     const { request, context } = fixture(30);
     request.threadId = "declared-cache-thread";

@@ -5653,6 +5653,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 return {
                   error: "file is too large for model context",
                   path: filePath,
+                  maxBytes: MAX_MODEL_FILE_BYTES,
+                  recovery: {
+                    tool: "shell",
+                    instruction:
+                      "Read consecutive bounded UTF-8 text ranges from this same path. Track the offset and EOF; inspect all required ranges before claiming a complete read.",
+                  },
                 };
               }
               throw error;
@@ -5662,6 +5668,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 error: "file is too large for model context",
                 path: filePath,
                 size: bytes.byteLength,
+                maxBytes: MAX_MODEL_FILE_BYTES,
+                recovery: {
+                  tool: "shell",
+                  instruction:
+                    "Read consecutive bounded UTF-8 text ranges from this same path. Track the offset and EOF; inspect all required ranges before claiming a complete read.",
+                },
               };
             }
             try {

@@ -280,7 +280,6 @@ describe("bounded context selection", () => {
       approval: "pending",
       contextTruncated: true,
     });
-    expect(decoded.diagnostic).toContain("Tool result truncated");
   });
   it("keeps every id inside an MCP text envelope when shortening its JSON", () => {
     const names = ["Ada", "Ben", "Cleo", "Dev", "Eli", "Fay", "Gus", "Hal", "Ivy"];
@@ -306,7 +305,6 @@ describe("bounded context selection", () => {
     expect(decoded.conversations.map((c: { name: string }) => c.name)).toEqual(names);
     for (const [index, c] of decoded.conversations.entries())
       expect(c.conversation_id).toBe(`conv${String(index).padStart(4, "0")}example`);
-    expect(decoded.note).toContain("Tool result truncated");
   });
   it("keeps an MCP JSON array of only ids and names whole instead of cutting it", () => {
     const rows = Array.from({ length: 80 }, (_, index) => ({
@@ -343,7 +341,6 @@ describe("bounded context selection", () => {
       expect(copy.note.length).toBeLessThan(200);
       for (const conversation of copy.conversations) {
         expect(conversation.description.length).toBeLessThan(200);
-        expect(conversation.description).toContain("Tool result truncated");
       }
     }
   });

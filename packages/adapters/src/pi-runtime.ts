@@ -2007,7 +2007,11 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
       budgetMessage && streamed.trim()
         ? `${streamed.trim()}\n\n${budgetMessage}`
         : budgetMessage || streamed || assistantText(nested.state.messages.at(-1)) || "done.";
-    const clipped = clipToolResultText(result, 12_000);
+    const clipped = clipToolResultText(
+      result,
+      TOOL_RESULT_TEXT_LIMIT,
+      result.length > TOOL_RESULT_TEXT_LIMIT ? keepOverflow(host)?.(result) : undefined,
+    );
     host.queue.push({
       type: "subagent",
       agentId,
@@ -2560,7 +2564,7 @@ export function serializeToolResult(
   try {
     const text = JSON.stringify(result);
     if (!text) return "ok";
-    // skill-tools.ts already bounds skill content; the context budget selector may still shorten it.
+    // Skill reads return the complete editable source; only the context-window budget may shorten it.
     if (text.length <= TOOL_RESULT_TEXT_LIMIT || VERBATIM_TOOL_RESULTS.has(name)) return text;
     if (keep || (strategy ?? DEFAULT_CONTEXT_STRATEGY) === "current")
       return clipToolResultText(text, TOOL_RESULT_TEXT_LIMIT, keep?.(text));

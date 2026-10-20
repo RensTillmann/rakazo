@@ -77,7 +77,8 @@ export async function reviewApproval(
       where: {
         botId: effect.run.botId,
         serverId: route.resourceId,
-        ...actor,
+        userId: actor.userId,
+        spaceId: actor.spaceId,
         server: { enabled: true },
       },
       include: { server: true },
@@ -85,7 +86,8 @@ export async function reviewApproval(
     if (!assignment || assignment.server.revision !== route.resourceRevision) return review;
     const operationId = `approval-review:${effectId}`;
     const context: AdapterContext = {
-      ...actor,
+      userId: actor.userId,
+      spaceId: actor.spaceId,
       botId: effect.run.botId,
       operationId,
       traceId: operationId,
