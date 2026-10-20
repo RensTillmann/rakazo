@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withoutRecipientSalutation } from "./peer-message-text.js";
+import { withoutRecipientSalutation, withRecipientMention } from "./peer-message-text.js";
 
 describe("withoutRecipientSalutation", () => {
   it("drops a leading recipient name with a comma and capitalises the rest", () => {
@@ -33,5 +33,33 @@ describe("withoutRecipientSalutation", () => {
 
   it("keeps the text when the recipient name is empty", () => {
     expect(withoutRecipientSalutation(", hi", "")).toBe(", hi");
+  });
+});
+
+describe("withRecipientMention", () => {
+  it("starts the body with an @mention of the recipient", () => {
+    expect(withRecipientMention("Draft is ready.", "Josy")).toBe("@Josy Draft is ready.");
+    expect(withRecipientMention("  hi", "Super Forms Bot")).toBe("@Super Forms Bot hi");
+  });
+
+  it("adds the mention once when the body already starts with it", () => {
+    expect(withRecipientMention("@Josy please check", "Josy")).toBe("@Josy please check");
+    expect(withRecipientMention("@josy, please check", "Josy")).toBe("@josy, please check");
+    expect(withRecipientMention("@Josy", "Josy")).toBe("@Josy");
+  });
+
+  it("still adds it when the body starts with another name", () => {
+    expect(withRecipientMention("@Josyanne hi", "Josy")).toBe("@Josy @Josyanne hi");
+    expect(withRecipientMention("@Lily hi", "Josy")).toBe("@Josy @Lily hi");
+  });
+
+  it("puts the mention on its own line before line-level Markdown", () => {
+    expect(withRecipientMention("```\ncode\n```", "Josy")).toBe("@Josy\n\n```\ncode\n```");
+    expect(withRecipientMention("- one\n- two", "Josy")).toBe("@Josy\n\n- one\n- two");
+    expect(withRecipientMention("# Title", "Josy")).toBe("@Josy\n\n# Title");
+  });
+
+  it("keeps the text when the recipient name is empty", () => {
+    expect(withRecipientMention("hi", " ")).toBe("hi");
   });
 });

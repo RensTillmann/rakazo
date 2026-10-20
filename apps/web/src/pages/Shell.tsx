@@ -7617,7 +7617,7 @@ const MessageView = memo(function MessageView({
   speakerName?: string;
   memberName?: (botId: string | undefined) => string | undefined;
   peerBot: (botId: string) => { name?: string; color: string; status?: string } | undefined;
-  /** A bot-to-bot message drawn as a room message: who it went to, and its peer chat. */
+  /** A bot-to-bot message drawn as a room message starting "@<recipient>", and its peer chat. */
   peerRoute?: PeerRoomView;
   replyParent?: ThreadMessage;
   onJumpToMessage?: (messageId: string) => void;
@@ -7651,14 +7651,6 @@ const MessageView = memo(function MessageView({
     () => resolvePersonaColorDef(message.botId ?? "bot", speakerBot?.color),
     [message.botId, speakerBot?.color],
   );
-  const peerIntentLabel = (intent: NonNullable<PeerRoomView["intent"]>) =>
-    ({
-      request: t`request`,
-      result: t`result`,
-      question: t`question`,
-      status: t`status`,
-      fyi: t`fyi`,
-    })[intent];
   const messageContext = (
     <>
       {speakerName ? (
@@ -7681,22 +7673,13 @@ const MessageView = memo(function MessageView({
             />
             {speakerName}
           </button>
-          {peerRoute ? (
-            <div
-              data-testid="peer-route"
-              className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted-foreground"
-            >
-              <span dir="auto">
-                → {peerRoute.recipientName}
-                {peerRoute.intent ? ` · ${peerIntentLabel(peerRoute.intent)}` : ""}
-              </span>
-              {peerReplies ? (
-                <PeerRouteRepliesToggle
-                  peer={peerRoute.peerBotName}
-                  expanded={peerReplies === "expanded"}
-                  onToggle={() => onTogglePeerReplies(message.id)}
-                />
-              ) : null}
+          {peerRoute && peerReplies ? (
+            <div className="mt-0.5 flex items-center">
+              <PeerRouteRepliesToggle
+                peer={peerRoute.peerBotName}
+                expanded={peerReplies === "expanded"}
+                onToggle={() => onTogglePeerReplies(message.id)}
+              />
             </div>
           ) : null}
         </div>

@@ -2646,10 +2646,6 @@ msgstr "מ-{0}"
 msgid "Fullscreen"
 msgstr "מסך מלא"
 
-#: src/pages/Shell.tsx
-msgid "fyi"
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Gateway ID"
@@ -3957,10 +3953,6 @@ msgstr "ספקים"
 msgid "Pull request"
 msgstr "Pull request"
 
-#: src/pages/Shell.tsx
-msgid "question"
-msgstr ""
-
 #: src/pages/GroupPanel.tsx
 msgid "Questions and takeovers always notify you"
 msgstr ""
@@ -4219,10 +4211,6 @@ msgstr "התשובה בוטלה"
 msgid "Replying to {0}"
 msgstr "תשובה ל-{0}"
 
-#: src/pages/Shell.tsx
-msgid "request"
-msgstr ""
-
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr "מחקר וכתיבה"
@@ -4292,10 +4280,6 @@ msgstr "שוחזר"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
 msgstr "משחזר את סביבת העבודה"
-
-#: src/pages/Shell.tsx
-msgid "result"
-msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Resume room"
@@ -4876,10 +4860,6 @@ msgstr "מתחיל"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "מתחיל…"
-
-#: src/pages/Shell.tsx
-msgid "status"
-msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx

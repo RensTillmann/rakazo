@@ -1,5 +1,5 @@
 import type { MessageBlock, ThreadMessage } from "@rakazo/contracts";
-import { withoutRecipientSalutation } from "./peer-message-text";
+import { withoutRecipientSalutation, withRecipientMention } from "./peer-message-text";
 
 export interface PeerMessage {
   messageId: string;
@@ -81,15 +81,14 @@ export interface PeerRoomView {
   /** Display copy of the stored message, shaped like the speaker's message in a room. */
   message: ThreadMessage;
   speakerName: string;
-  recipientName: string;
-  intent?: PeerBlock["intent"];
   peerBotId: string;
   peerBotName: string;
 }
 
 /**
  * A bot-to-bot message in `threadBot`'s 1:1 chat, recast as the speaker's room message so the
- * reader sees the exchange inline. Display only; undefined (keep the compact row) without text.
+ * reader sees the exchange inline; the body starts with an @mention of the recipient. Display
+ * only; undefined (keep the compact row) without text.
  */
 export function peerRoomView(
   message: ThreadMessage,
@@ -102,16 +101,18 @@ export function peerRoomView(
   const peerBotId = sent ? block.toBotId : block.fromBotId;
   const peerBotName = sent ? block.toBotName : block.fromBotName;
   const recipientName = sent ? peerBotName : threadBot.name;
+  const text = withRecipientMention(
+    withoutRecipientSalutation(block.text, recipientName),
+    recipientName,
+  );
   return {
     message: {
       ...message,
       role: "bot",
       botId: sent ? threadBot.id : peerBotId,
-      blocks: [{ kind: "text", text: withoutRecipientSalutation(block.text, recipientName) }],
+      blocks: [{ kind: "text", text }],
     },
     speakerName: sent ? threadBot.name : peerBotName,
-    recipientName,
-    intent: block.intent,
     peerBotId,
     peerBotName,
   };

@@ -11,7 +11,7 @@ function message(role: ThreadMessage["role"], blocks: ThreadMessage["blocks"]): 
 }
 
 describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
-  it("shows an incoming message as the sender's room message, to this bot, with its intent", () => {
+  it("shows an incoming message as the sender's room message, mentioning this bot", () => {
     const stored = message("user", [
       {
         kind: "bot_message_received",
@@ -27,18 +27,12 @@ describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
       id: "m_1",
       role: "bot",
       botId: "lily",
-      blocks: [{ kind: "text", text: "Draft is ready." }],
+      blocks: [{ kind: "text", text: "@Quinn Draft is ready." }],
     });
-    expect(view).toMatchObject({
-      speakerName: "Lily",
-      recipientName: "Quinn",
-      intent: "result",
-      peerBotId: "lily",
-      peerBotName: "Lily",
-    });
+    expect(view).toMatchObject({ speakerName: "Lily", peerBotId: "lily", peerBotName: "Lily" });
   });
 
-  it("shows a sent message as this bot's own room message, to the recipient", () => {
+  it("shows a sent message as this bot's own room message, mentioning the recipient", () => {
     const stored = message("bot", [
       {
         kind: "bot_message_sent",
@@ -50,8 +44,12 @@ describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
     ]);
     const view = peerRoomView(stored, quinn);
 
-    expect(view?.message).toMatchObject({ role: "bot", botId: "quinn" });
-    expect(view).toMatchObject({ speakerName: "Quinn", recipientName: "Lily", intent: "request" });
+    expect(view?.message).toMatchObject({
+      role: "bot",
+      botId: "quinn",
+      blocks: [{ kind: "text", text: "@Lily Please check the copy." }],
+    });
+    expect(view).toMatchObject({ speakerName: "Quinn", peerBotId: "lily" });
   });
 
   it("keeps mentions coloured in the body through the chat Markdown renderer", () => {
@@ -80,6 +78,49 @@ describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
     expect(html).toContain('data-mention-bot="quinn"');
   });
 
+  it("renders the recipient as a mention chip in both chats, once, like a typed @mention", () => {
+    const color = { onLight: "#5B21B6", onDark: "#A97EFE" };
+    const bots = [
+      { id: "quinn", names: ["Quinn"], color },
+      { id: "josy", names: ["Josy"], color },
+    ];
+    const sentToJosy = peerRoomView(
+      message("bot", [
+        {
+          kind: "bot_message_sent",
+          toBotId: "josy",
+          toBotName: "Josy",
+          text: "fyi: #282 is done",
+        },
+      ]),
+      quinn,
+    )?.message.blocks[0];
+    const alreadyMentioned = peerRoomView(
+      message("user", [
+        {
+          kind: "bot_message_received",
+          fromBotId: "josy",
+          fromBotName: "Josy",
+          text: "@Quinn ok",
+        },
+      ]),
+      quinn,
+    )?.message.blocks[0];
+    const render = (block: typeof sentToJosy) =>
+      renderToStaticMarkup(
+        <MentionBotsContext.Provider value={bots}>
+          <ChatMarkdown>{block?.kind === "text" ? block.text : ""}</ChatMarkdown>
+        </MentionBotsContext.Provider>,
+      );
+
+    expect(sentToJosy).toEqual({ kind: "text", text: "@Josy fyi: #282 is done" });
+    expect(render(sentToJosy)).toMatch(
+      /<span class="rk-mention" data-mention-bot="josy"[^>]*>@Josy<\/span>/,
+    );
+    expect(alreadyMentioned).toEqual({ kind: "text", text: "@Quinn ok" });
+    expect(render(alreadyMentioned).match(/data-mention-bot="quinn"/g)).toHaveLength(1);
+  });
+
   it("falls back to the compact row when the text is missing or the message is not a lone peer block", () => {
     expect(
       peerRoomView(
@@ -101,7 +142,7 @@ describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
     expect(stored).toEqual(before);
   });
 
-  it("drops a leading recipient salutation from the shown body in both chats, stored text unchanged", () => {
+  it("drops a leading recipient salutation before the mention in both chats, stored text unchanged", () => {
     const received = message("user", [
       {
         kind: "bot_message_received",
@@ -120,8 +161,8 @@ describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
       <ChatMarkdown>{sentBlock?.kind === "text" ? sentBlock.text : ""}</ChatMarkdown>,
     );
 
-    expect(receivedBlock).toEqual({ kind: "text", text: "QA #285 ready" });
-    expect(html).toContain("Hold the docs");
+    expect(receivedBlock).toEqual({ kind: "text", text: "@Quinn QA #285 ready" });
+    expect(html).toContain("@Lily Hold the docs");
     expect(html).not.toContain("Lily,");
     expect(sent).toEqual(before);
   });
