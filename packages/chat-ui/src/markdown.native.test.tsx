@@ -1340,13 +1340,14 @@ describe("native reference links", () => {
     const view = await render(
       <ChatMarkdown>
         {
-          "**Case 174** and case #12. `case 5` [case 6](https://example.test) #3536 showcase 7\n\n```\ncase 9\n```"
+          "**Case 174** and case #12. `case 5` [case 6](https://example.test) PR #3536 showcase 7 and #176\n\n```\ncase 9\n```"
         }
       </ChatMarkdown>,
     );
     const texts = view.links.map((link) => link.textContent);
     expect(texts).toContain("Case 174");
     expect(texts).toContain("case #12");
+    expect(texts).toContain("#176");
     expect(texts.filter((text) => /case (5|9)|#3536|showcase/.test(text ?? ""))).toEqual([]);
     expect(view.links.filter((link) => link.textContent?.includes("case 6"))).toHaveLength(1);
 

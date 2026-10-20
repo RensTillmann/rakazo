@@ -434,7 +434,6 @@ describe("referenceLinkParts", () => {
     "case_5",
     "case 174abc",
     "case 1.5",
-    "#174",
     "ticket #3536",
     "PR #246",
     "ZDs 12",
@@ -448,6 +447,74 @@ describe("referenceLinkParts", () => {
     "``a `case 174` b``",
   ])("leaves %j as text", (text) => {
     expect(referenceLinkParts(text, links)).toEqual([{ type: "text", value: text }]);
+  });
+
+  it.each([
+    ["#176 and #178", ["#176", "#178"]],
+    ["I've only half-finished the docs checks on #176 and #178", ["#176", "#178"]],
+    ["(#176)", ["#176"]],
+    ["Fixed in #176.", ["#176"]],
+    ["Status on #176: done", ["#176"]],
+    ["#176 is done", ["#176"]],
+    ["done\n#176", ["#176"]],
+  ])("links the bare case numbers in %j", (text, values) => {
+    expect(linked(text)).toEqual(
+      values.map((value) => ({ type: "reference", value, href: caseHref(Number(value.slice(1))) })),
+    );
+  });
+
+  it.each([
+    "PR #12",
+    "pr #12",
+    "PRs #12",
+    "pull #12",
+    "pull request #12",
+    "MR #12",
+    "ticket #12",
+    "super-forms#12",
+    "owner/repo#12",
+    "step #2",
+    "Option #3",
+    "item #4",
+    "line #5",
+    "No. #6",
+    "nr #7",
+    "number #8",
+    "page #9",
+    "comment #10",
+    "version #11",
+    "v #12",
+    "`#12`",
+    "https://github.com/x/y/issues/12#issuecomment-5",
+    "see https://x.test/a/#12",
+    "#12a",
+    "#1.5",
+    "#1234567",
+    "# 12",
+  ])("leaves the bare %j as text", (text) => {
+    expect(referenceLinkParts(text, links)).toEqual([{ type: "text", value: text }]);
+  });
+
+  it("links a bare number after a list word on an earlier line", () => {
+    expect(linked("step 1\n#176")).toEqual([
+      { type: "reference", value: "#176", href: caseHref(176) },
+    ]);
+  });
+
+  it("keeps ZD #3529 a Zendesk link and case #174 one reference", () => {
+    expect(referenceLinkParts("case #174, ZD #3529 and #175", links)).toEqual([
+      { type: "reference", value: "case #174", href: caseHref(174) },
+      { type: "text", value: ", " },
+      { type: "reference", value: "ZD #3529", href: ticketHref(3529) },
+      { type: "text", value: " and " },
+      { type: "reference", value: "#175", href: caseHref(175) },
+    ]);
+  });
+
+  it("leaves a bare number as text without a case address", () => {
+    expect(referenceLinkParts("#176 and #178", { zendesk: links.zendesk })).toEqual([
+      { type: "text", value: "#176 and #178" },
+    ]);
   });
 
   it("links a case and a Zendesk ticket in one sentence, each to its own address", () => {

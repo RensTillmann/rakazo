@@ -553,8 +553,17 @@ export type ReferenceLinkPart =
   | { type: "text"; value: string }
   | { type: "reference"; value: string; href: string };
 
-// "case 174", "Case #174", "ZD 3529", "zd #3529", "Zendesk #3529", "Zendesk ticket #3529".
-const REFERENCE = /(case|zd|zendesk(?:[^\S\r\n]+ticket)?)[^\S\r\n]+#?(\d+)/giu;
+// "case 174", "Case #174", "ZD 3529", "zd #3529", "Zendesk #3529", "Zendesk ticket #3529", or a
+// bare "#174" (group 3). Left to right, so the "#174" of "case #174" is part of that one match.
+const REFERENCE = /(case|zd|zendesk(?:[^\S\r\n]+ticket)?)[^\S\r\n]+#?(\d+)|#(\d+)/giu;
+
+// A bare "#N" right after one of these words (same line, spaces between) is a pull request, a
+// Zendesk ticket or a position in a list, not a case: "PR #12", "pull request #12", "step #2".
+const NOT_A_CASE_BEFORE =
+  /(?<![\p{L}\p{N}_])(?:pull[^\S\r\n]+requests?|pulls?|prs?|mrs?|zd|zendesk|tickets?|step|option|item|line|no|nr|number|page|comment|version|v)\.?[^\S\r\n]*$/iu;
+
+// The text before a bare "#N" ends inside a URL: "https://x.test/issues/1#12", "www.x.test/#3".
+const URL_BEFORE = /(?:\/\/|www\.)\S*$/iu;
 
 /** Code spans in `text` as [start, end) ranges; a run of backticks that never closes is text. */
 function codeSpanRanges(text: string): [number, number][] {
@@ -582,11 +591,15 @@ export function referenceLinkHref(template: string, number: string): string | un
 
 /**
  * Split message text into literal runs and "case 174" / "ZD #3529" references linked through
- * the deployment's templates. Only whole words before a number count: "cases 12", "showcase 5",
- * a bare "#174" and code spans stay text, and so does a reference whose template is not set.
+ * the deployment's templates. Only whole words before a number count: "cases 12", "showcase 5"
+ * and code spans stay text, and so does a reference whose template is not set. A bare "#174"
+ * links through the case template too, except after "PR", "pull (request)", "MR", "ZD",
+ * "Zendesk", "ticket" or a list word such as "step", "option", "no", "v" on the same line, when
+ * glued to a word or "/" ("super-forms#12", "owner/repo#12"), inside a URL, or with more than
+ * six digits.
  */
 export function referenceLinkParts(text: string, links: ReferenceLinks): ReferenceLinkPart[] {
-  if ((!links.case && !links.zendesk) || !/case|zd|zendesk/i.test(text)) {
+  if ((!links.case && !links.zendesk) || !/case|zd|zendesk|#\d/i.test(text)) {
     return [{ type: "text", value: text }];
   }
   const code = text.includes("`") ? codeSpanRanges(text) : [];
@@ -595,12 +608,18 @@ export function referenceLinkParts(text: string, links: ReferenceLinks): Referen
   for (const match of text.matchAll(REFERENCE)) {
     const start = match.index;
     const end = start + match[0].length;
-    const template = match[1]?.toLowerCase() === "case" ? links.case : links.zendesk;
+    const bare = match[3];
+    const template = bare || match[1]?.toLowerCase() === "case" ? links.case : links.zendesk;
     // "case 1.5" is a decimal, not case 1.
     const decimal = /^[.,]\d/.test(text.slice(end, end + 2));
     if (isWordChar(text[start - 1]) || isWordChar(text[end]) || decimal) continue;
+    if (bare) {
+      if (!template || bare.length > 6 || text[start - 1] === "/") continue;
+      const before = text.slice(text.lastIndexOf("\n", start - 1) + 1, start);
+      if (NOT_A_CASE_BEFORE.test(before) || URL_BEFORE.test(before)) continue;
+    }
     if (code.some(([from, to]) => start >= from && start < to)) continue;
-    const href = template ? referenceLinkHref(template, match[2] ?? "") : undefined;
+    const href = template ? referenceLinkHref(template, match[2] ?? bare ?? "") : undefined;
     if (!href) continue;
     if (start > last) parts.push({ type: "text", value: text.slice(last, start) });
     parts.push({ type: "reference", value: match[0], href });

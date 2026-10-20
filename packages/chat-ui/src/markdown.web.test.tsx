@@ -696,20 +696,21 @@ describe("web markdown reference links", () => {
   const ticketAnchor = (number: number, label: string) =>
     anchor(`https://help.example.test/agent/tickets/${number}`, label);
 
-  it("links case numbers in bot markdown, not in code, links or bare numbers", () => {
+  it("links case numbers in bot markdown, not in code, links or pull requests", () => {
     const html = withLinks(
       <ChatMarkdown>
         {
-          "**Case 174** and case #12 wait. `case 5` [case 6](https://example.test) #3536 showcase 7 cases 8\n\n```\ncase 9\n```"
+          "**Case 174** and case #12 wait. `case 5` [case 6](https://example.test) PR #3536 showcase 7 cases 8 and #176.\n\n```\ncase 9\n```"
         }
       </ChatMarkdown>,
     );
 
     expect(html).toContain(`<strong>${caseAnchor(174, "Case 174")}</strong>`);
     expect(html).toContain(`${caseAnchor(12, "case #12")} wait.`);
-    expect(html.match(/tracker\.example\.test/g)).toHaveLength(2);
+    expect(html).toContain(`and ${caseAnchor(176, "#176")}.`);
+    expect(html.match(/tracker\.example\.test/g)).toHaveLength(3);
     expect(html).toContain("<code>case 5</code>");
-    expect(html).toContain("#3536 showcase 7 cases 8");
+    expect(html).toContain("PR #3536 showcase 7 cases 8");
     expect(html).toContain("case 9");
   });
 
@@ -717,7 +718,7 @@ describe("web markdown reference links", () => {
     const html = withLinks(
       <ChatMarkdown>
         {
-          "## [ZD #3536] Checkout broken\n\nCase 174 tracks Zendesk ticket #3529 and zd 3530. `ZD #1` [ZD #2](https://example.test) #3537"
+          "## [ZD #3536] Checkout broken\n\nCase 174 tracks Zendesk ticket #3529 and zd 3530. `ZD #1` [ZD #2](https://example.test) PR #3537"
         }
       </ChatMarkdown>,
     );
@@ -728,7 +729,7 @@ describe("web markdown reference links", () => {
     );
     expect(html.match(/help\.example\.test/g)).toHaveLength(3);
     expect(html).toContain("<code>ZD #1</code>");
-    expect(html).toContain("#3537");
+    expect(html).toContain("PR #3537");
   });
 
   it("links references next to a mention and in a person's plain text", () => {
