@@ -127,8 +127,24 @@ msgstr ""
 msgid "{count} decisions"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "{count} issues"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "{count} months"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} not yet asked"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} paused routines"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} waiting items"
 msgstr ""
 
 #: src/lib/billing.ts
@@ -155,6 +171,10 @@ msgstr "{hours} घंटे पहले"
 msgid "{minutes}m ago"
 msgstr "{minutes} मिनट पहले"
 
+#: src/components/UsageBars.tsx
+msgid "{modelProvider} account allowance unavailable"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
 msgid "{name} failed"
@@ -169,6 +189,10 @@ msgstr "{name} पूरा हुआ"
 #: src/lib/browser-notifications.ts
 msgid "{name} stopped"
 msgstr "{name} रोक दिया गया"
+
+#: src/components/UsageBars.tsx
+msgid "{name} usage high"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -254,10 +278,6 @@ msgstr "{provider} ने जवाब देने में बहुत स�
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} शेष · बॉट देख रहा है, कार्रवाई नहीं कर रहा"
 
-#: src/components/UsageBars.tsx
-msgid "{runs} runs today"
-msgstr ""
-
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -284,7 +304,7 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/components/UsageBars.tsx
-msgid "{tokens} tokens today"
+msgid "{tokens} tokens today · {runs} runs today"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -301,11 +321,15 @@ msgid "@{0}"
 msgstr "@{0}"
 
 #: src/components/UsageBars.tsx
-msgid "≈ ${cost} at API prices"
+msgid "≈ ${cost} at API prices today"
 msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "1 decision"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "5 hours"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -366,6 +390,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "across this chat’s model calls"
 msgstr ""
 
 #. placeholder {0}: bot.name
@@ -666,6 +694,10 @@ msgstr ""
 msgid "Answered: {answer}"
 msgstr "उत्तर: {answer}"
 
+#: src/components/UsageBars.tsx
+msgid "Anthropic Claude · account allowance"
+msgstr ""
+
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr ""
@@ -687,6 +719,10 @@ msgstr "API कुंजी"
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
 msgstr "API कुंजी हेडर"
+
+#: src/components/UsageBars.tsx
+msgid "API-price equivalent unavailable"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Appearance"
@@ -732,6 +768,10 @@ msgstr "आर्ग्युमेंट"
 #: src/pages/Artifacts.tsx
 #: src/pages/Shell.tsx
 msgid "Artifacts"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "as of {allowanceTime}"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -790,6 +830,10 @@ msgstr "{0} बजे"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "{timeSelect} बजे"
+
+#: src/components/UsageBars.tsx
+msgid "At least {count} waiting items"
+msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
@@ -878,6 +922,10 @@ msgstr "बैकअप मॉडल का क्रम"
 msgid "Backup models saved."
 msgstr "बैकअप मॉडल सहेजे गए।"
 
+#: src/pages/Shell.tsx
+msgid "Backups: {headerBackupLabel}"
+msgstr ""
+
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
 msgid "Banks (comma-separated)"
 msgstr ""
@@ -939,6 +987,10 @@ msgid "Bot"
 msgstr "बॉट"
 
 #: src/pages/Shell.tsx
+msgid "Bot override"
+msgstr ""
+
+#: src/pages/Shell.tsx
 msgid "Bot screen"
 msgstr "बॉट स्क्रीन"
 
@@ -983,7 +1035,7 @@ msgid "Built-in"
 msgstr "अंतर्निहित"
 
 #: src/components/UsageBars.tsx
-msgid "cache {cache}% today"
+msgid "Cache today"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -1155,11 +1207,11 @@ msgid "Choose file"
 msgstr "फ़ाइल चुनें"
 
 #: src/components/UsageBars.tsx
-msgid "Claude · 5 hours"
+msgid "Claude 5 hours {fiveHourPct}% used"
 msgstr ""
 
 #: src/components/UsageBars.tsx
-msgid "Claude · this week"
+msgid "Claude week {weeklyPct}% used"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -1365,6 +1417,10 @@ msgstr "डिप्लॉयमेंट द्वारा कॉन्फ़�
 msgid "Configured servers"
 msgstr "कॉन्फ़िगर किए गए सर्वर"
 
+#: src/pages/Shell.tsx
+msgid "Configured: {headerConfiguredLabel}"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Confirm delete"
@@ -1455,11 +1511,7 @@ msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} से कनेक्शन अभी लंबित है। आप इसे बंद करके बाद में जांच सकते हैं।"
 
 #: src/components/UsageBars.tsx
-msgid "context {size}"
-msgstr ""
-
-#: src/components/UsageBars.tsx
-msgid "context {size} of {limit} ({pct}%)"
+msgid "Context"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2067,6 +2119,10 @@ msgstr "Cron एक्सप्रेशन"
 msgid "Current password"
 msgstr "वर्तमान पासवर्ड"
 
+#: src/pages/Shell.tsx
+msgid "Current run"
+msgstr ""
+
 #: src/pages/shell/bot-credentials.tsx
 msgid "Custom header"
 msgstr ""
@@ -2235,6 +2291,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "विवरण"
+
+#: src/components/UsageBars.tsx
+msgid "Diagnostics"
+msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "Direct chat"
@@ -2931,6 +2991,14 @@ msgstr "ज्ञान"
 msgid "Language"
 msgstr "भाषा"
 
+#: src/components/UsageBars.tsx
+msgid "Last call"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Last call context"
+msgstr ""
+
 #. placeholder {0}: new Date(state.checkedAt).toLocaleString()
 #: src/pages/RoutineEditor.tsx
 msgid "Last check {0}: changed"
@@ -3322,6 +3390,10 @@ msgstr "मॉडल विकल्प"
 msgid "Model spend uses your provider keys."
 msgstr "मॉडल का खर्च आपकी प्रोवाइडर कुंजियों से होता है।"
 
+#: src/pages/Shell.tsx
+msgid "Model unavailable"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
 msgstr "मॉडल अपडेट किया गया।"
@@ -3331,6 +3403,10 @@ msgstr "मॉडल अपडेट किया गया।"
 #: src/pages/SettingsOverlay.tsx
 msgid "Models"
 msgstr "मॉडल्स"
+
+#: src/pages/Shell.tsx
+msgid "Models by participant"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Models for the server owner’s default space."
@@ -3597,6 +3673,10 @@ msgstr ""
 msgid "No trigger"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "None"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "अभी तक कोई नहीं"
@@ -3664,6 +3744,10 @@ msgstr "OAuth कनेक्शन विफल"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Observed"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3952,6 +4036,10 @@ msgstr ""
 msgid "Provider"
 msgstr "प्रोवाइडर"
 
+#: src/components/UsageBars.tsx
+msgid "Provider account allowance unavailable"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
@@ -4073,6 +4161,7 @@ msgstr ""
 
 #: src/App.tsx
 #: src/components/ErrorBoundary.tsx
+#: src/components/UsageBars.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "Refresh"
 msgstr "रीफ़्रेश करें"
@@ -4227,11 +4316,8 @@ msgstr ""
 msgid "Research & writing"
 msgstr ""
 
-#: src/components/UsageBars.tsx
-msgid "reset"
-msgstr ""
-
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/components/UsageBars.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "रीसेट करें"
@@ -4252,12 +4338,20 @@ msgstr "कंप्यूटर रीसेट करें?"
 msgid "Reset password"
 msgstr "पासवर्ड रीसेट करें"
 
+#: src/components/UsageBars.tsx
+msgid "Reset time"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Reset time unavailable"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "अपना पासवर्ड रीसेट करें"
 
 #: src/components/UsageBars.tsx
-msgid "resets in {until}"
+msgid "Resets in {until}"
 msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
@@ -4818,6 +4912,7 @@ msgstr "स्पेस बदल गया। बैकअप सूची ल�
 msgid "Space changed. Reopen Models to save its backup list."
 msgstr "स्पेस बदल गया। बैकअप सूची सहेजने के लिए मॉडल फिर खोलें।"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "स्पेस डिफ़ॉल्ट"
@@ -4873,9 +4968,22 @@ msgstr "शुरू हो रहा है"
 msgid "Starting…"
 msgstr "शुरू हो रहा है…"
 
+#: src/components/UsageBars.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
 msgid "Status"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status incomplete"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status needs attention"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status refresh unavailable"
 msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
@@ -5140,6 +5248,7 @@ msgstr "यह सर्वर पहले से कनेक्टेड ह�
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "यह सब्सक्रिप्शन साइन-इन अभी Rakazo में उपलब्ध नहीं है। किसी डिप्लॉयमेंट क्रेडेंशियल का उपयोग करें या दूसरा प्रोवाइडर चुनें।"
 
+#: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
 msgstr ""
@@ -5180,6 +5289,10 @@ msgstr "प्रति:"
 #: src/pages/shell/chat-context.tsx
 msgid "Today"
 msgstr "आज"
+
+#: src/components/UsageBars.tsx
+msgid "tokens"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
@@ -5259,6 +5372,8 @@ msgid "Unassigned"
 msgstr "असाइन नहीं किया गया"
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/UsageBars.tsx
+#: src/pages/Shell.tsx
 msgid "Unavailable"
 msgstr ""
 
@@ -5276,6 +5391,10 @@ msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Unknown tool"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "unknown window"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -5332,6 +5451,7 @@ msgid "Update progress"
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/UsageBars.tsx
 msgid "Updated"
 msgstr ""
 
@@ -5371,6 +5491,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "उपयोग"
+
+#: src/components/UsageBars.tsx
+msgid "Usage / Details"
+msgstr ""
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'
 #. placeholder {0}: deviceTimezone.replaceAll("_", " ")
@@ -5461,6 +5585,10 @@ msgstr ""
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"
 msgstr "कतार में प्रतीक्षा…"
+
+#: src/components/UsageBars.tsx
+msgid "Waiting on you"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"

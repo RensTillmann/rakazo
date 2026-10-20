@@ -9,6 +9,7 @@ import {
 } from "@rakazo/contracts";
 import { Button, NativeSelect, NativeSelectOption } from "@rakazo/ui-web";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { notifyModelSettingsChanged } from "../lib/model-settings-events";
 import { selectedSpaceId } from "../lib/rpc";
 import { useBoundSpaceId, useSpaceRpc } from "../lib/space-rpc";
 
@@ -198,6 +199,7 @@ export function ModelBackupsSettings({
         throw new Error(t`Space changed. Reopen Models to save its backup list.`);
       }
       await rpc.models.setBackups(choices, { context: { spaceId } });
+      notifyModelSettingsChanged();
       if (!isCurrent()) return;
       setState((previous) =>
         previous.scopeKey === activeScopeKey

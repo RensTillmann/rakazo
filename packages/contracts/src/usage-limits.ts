@@ -9,6 +9,16 @@ export const SubscriptionWindowSchema = z.object({
 });
 export type SubscriptionWindow = z.infer<typeof SubscriptionWindowSchema>;
 
+/** Structured status counts; missing counts are unavailable, not zero. */
+export const ExtraUsageBarSummarySchema = z.object({
+  waitingCount: z.number().int().nonnegative().optional(),
+  unaskedCount: z.number().int().nonnegative().nullable().optional(),
+  pausedRoutineCount: z.number().int().nonnegative().optional(),
+  issueCount: z.number().int().nonnegative().optional(),
+  partial: z.boolean().optional(),
+});
+export type ExtraUsageBarSummary = z.infer<typeof ExtraUsageBarSummarySchema>;
+
 /** A row of `fleet.usage_bars`, written by the fleet service. */
 export const ExtraUsageBarSchema = z.object({
   name: z.string(),
@@ -18,6 +28,7 @@ export const ExtraUsageBarSchema = z.object({
   updatedAt: z.iso.datetime().nullable(),
   /** The colour of a bar that is not a percentage (`usedPct` null): a count, a health state. */
   tone: z.enum(["ok", "warn", "high"]).nullable().optional(),
+  summary: ExtraUsageBarSummarySchema.nullable().optional(),
 });
 export type ExtraUsageBar = z.infer<typeof ExtraUsageBarSchema>;
 
@@ -26,6 +37,7 @@ export const UsageLimitsSchema = z.object({
   enabled: z.boolean(),
   claude: z
     .object({
+      provider: z.string().optional(),
       fiveHour: SubscriptionWindowSchema,
       sevenDay: SubscriptionWindowSchema,
       status: z.string().nullable(),
@@ -46,5 +58,6 @@ export const ThreadUsageSchema = z.object({
   tokensToday: z.number(),
   runsToday: z.number(),
   apiEquivalentCostUsdToday: z.number().nullable(),
+  lastModel: z.object({ provider: z.string(), model: z.string() }).nullable().optional(),
 });
 export type ThreadUsage = z.infer<typeof ThreadUsageSchema>;

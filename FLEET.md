@@ -25,6 +25,14 @@ This is Rens's fork of [elie222/rakazo](https://github.com/elie222/rakazo):
 
 All commands are for Git Bash on this PC.
 
+Status data for the compact header: `usage.limits.extra[].summary` provides optional structured
+waiting/unasked, unique live paused-routine and current alerted-issue counts. Missing counts are
+unavailable, not zero; `partial` marks incomplete sources. The API reads optional fleet columns
+through `to_jsonb`, so it can precede fleet migration `070_usage_bar_summary.sql`; apply that
+migration before deploying the new fleet producers. `usage.thread.lastModel` identifies the latest
+context-bearing call (null without one), independently of the currently configured model. Existing
+Claude allowance percentages and reset timestamps are unchanged; no OpenAI allowance is fabricated.
+
 ## What is on `fleet-next`
 
 The base is upstream commit `76f4259` ("fix(team-chat): backfill Slack thread history

@@ -16,6 +16,7 @@ vi.mock("../lib/artifact-open", () => ({
   downloadArtifactBytes: vi.fn(),
 }));
 vi.mock("../lib/relative-time", () => ({ formatRelativeTime: () => "just now" }));
+vi.mock("../components/UsageBars", () => ({ UsageTopBar: () => null }));
 vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray) => parts.join("");
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };

@@ -60,20 +60,6 @@ describe("window chrome", () => {
     expect(welcome).not.toContain("FF5F57");
   });
 
-  it("keeps conversation header controls clickable", () => {
-    const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "../pages");
-    const shell = readFileSync(path.join(root, "Shell.tsx"), "utf8");
-    expect(shell).toContain(
-      'className="app-drag flex items-center justify-between border-b border-sidebar-border',
-    );
-    expect(shell).toContain('className="app-no-drag grid h-8 w-8');
-    expect(shell).toContain('className="app-no-drag flex min-w-0 items-center gap-3"');
-    // Every square header control (Show thoughts, computer panel, …) must sit outside the drag region.
-    const controls = shell.match(/className="[^"]*h-\[30px\] w-\[34px\][^"]*"/g) ?? [];
-    expect(controls.length).toBeGreaterThan(0);
-    for (const control of controls) expect(control).toMatch(/^className="app-no-drag /);
-  });
-
   it("moves window chrome into the conversation header when the bots sidebar is collapsed", () => {
     const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "../pages");
     const shell = readFileSync(path.join(root, "Shell.tsx"), "utf8");

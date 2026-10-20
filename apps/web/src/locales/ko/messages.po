@@ -127,8 +127,24 @@ msgstr ""
 msgid "{count} decisions"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "{count} issues"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "{count} months"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} not yet asked"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} paused routines"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} waiting items"
 msgstr ""
 
 #: src/lib/billing.ts
@@ -155,6 +171,10 @@ msgstr "{hours}시간 전"
 msgid "{minutes}m ago"
 msgstr "{minutes}분 전"
 
+#: src/components/UsageBars.tsx
+msgid "{modelProvider} account allowance unavailable"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
 msgid "{name} failed"
@@ -169,6 +189,10 @@ msgstr "{name} 완료"
 #: src/lib/browser-notifications.ts
 msgid "{name} stopped"
 msgstr "{name} 중지됨"
+
+#: src/components/UsageBars.tsx
+msgid "{name} usage high"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -254,10 +278,6 @@ msgstr "{provider}의 응답 시간이 초과되었습니다. 다시 시도하�
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "남은 시간 {remaining} · Bot은 화면만 보고 직접 조작하지 않습니다"
 
-#: src/components/UsageBars.tsx
-msgid "{runs} runs today"
-msgstr ""
-
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -284,7 +304,7 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/components/UsageBars.tsx
-msgid "{tokens} tokens today"
+msgid "{tokens} tokens today · {runs} runs today"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -301,11 +321,15 @@ msgid "@{0}"
 msgstr "@{0}"
 
 #: src/components/UsageBars.tsx
-msgid "≈ ${cost} at API prices"
+msgid "≈ ${cost} at API prices today"
 msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "1 decision"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "5 hours"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -366,6 +390,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "across this chat’s model calls"
 msgstr ""
 
 #. placeholder {0}: bot.name
@@ -666,6 +694,10 @@ msgstr ""
 msgid "Answered: {answer}"
 msgstr "응답: {answer}"
 
+#: src/components/UsageBars.tsx
+msgid "Anthropic Claude · account allowance"
+msgstr ""
+
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr ""
@@ -687,6 +719,10 @@ msgstr "API 키"
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
 msgstr "API 키 헤더"
+
+#: src/components/UsageBars.tsx
+msgid "API-price equivalent unavailable"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Appearance"
@@ -732,6 +768,10 @@ msgstr "인자"
 #: src/pages/Artifacts.tsx
 #: src/pages/Shell.tsx
 msgid "Artifacts"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "as of {allowanceTime}"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -790,6 +830,10 @@ msgstr "{0}에"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "{timeSelect}에"
+
+#: src/components/UsageBars.tsx
+msgid "At least {count} waiting items"
+msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
@@ -878,6 +922,10 @@ msgstr "백업 모델 순서"
 msgid "Backup models saved."
 msgstr "백업 모델을 저장했습니다."
 
+#: src/pages/Shell.tsx
+msgid "Backups: {headerBackupLabel}"
+msgstr ""
+
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
 msgid "Banks (comma-separated)"
 msgstr ""
@@ -939,6 +987,10 @@ msgid "Bot"
 msgstr "Bot"
 
 #: src/pages/Shell.tsx
+msgid "Bot override"
+msgstr ""
+
+#: src/pages/Shell.tsx
 msgid "Bot screen"
 msgstr "Bot 화면"
 
@@ -983,7 +1035,7 @@ msgid "Built-in"
 msgstr "기본 제공"
 
 #: src/components/UsageBars.tsx
-msgid "cache {cache}% today"
+msgid "Cache today"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -1155,11 +1207,11 @@ msgid "Choose file"
 msgstr "파일 선택"
 
 #: src/components/UsageBars.tsx
-msgid "Claude · 5 hours"
+msgid "Claude 5 hours {fiveHourPct}% used"
 msgstr ""
 
 #: src/components/UsageBars.tsx
-msgid "Claude · this week"
+msgid "Claude week {weeklyPct}% used"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -1365,6 +1417,10 @@ msgstr "서버에서 설정됨"
 msgid "Configured servers"
 msgstr "연결된 서버"
 
+#: src/pages/Shell.tsx
+msgid "Configured: {headerConfiguredLabel}"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Confirm delete"
@@ -1455,11 +1511,7 @@ msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} 연결이 아직 진행 중입니다. 이 창을 닫고 나중에 다시 확인할 수 있습니다."
 
 #: src/components/UsageBars.tsx
-msgid "context {size}"
-msgstr ""
-
-#: src/components/UsageBars.tsx
-msgid "context {size} of {limit} ({pct}%)"
+msgid "Context"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2067,6 +2119,10 @@ msgstr "Cron 표현식"
 msgid "Current password"
 msgstr "현재 비밀번호"
 
+#: src/pages/Shell.tsx
+msgid "Current run"
+msgstr ""
+
 #: src/pages/shell/bot-credentials.tsx
 msgid "Custom header"
 msgstr ""
@@ -2235,6 +2291,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "세부 정보"
+
+#: src/components/UsageBars.tsx
+msgid "Diagnostics"
+msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "Direct chat"
@@ -2931,6 +2991,14 @@ msgstr "지식"
 msgid "Language"
 msgstr "언어"
 
+#: src/components/UsageBars.tsx
+msgid "Last call"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Last call context"
+msgstr ""
+
 #. placeholder {0}: new Date(state.checkedAt).toLocaleString()
 #: src/pages/RoutineEditor.tsx
 msgid "Last check {0}: changed"
@@ -3322,6 +3390,10 @@ msgstr "모델 선택지"
 msgid "Model spend uses your provider keys."
 msgstr "모델 사용 비용은 연결한 서비스의 API 키로 청구됩니다."
 
+#: src/pages/Shell.tsx
+msgid "Model unavailable"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
 msgstr "모델이 변경되었습니다."
@@ -3331,6 +3403,10 @@ msgstr "모델이 변경되었습니다."
 #: src/pages/SettingsOverlay.tsx
 msgid "Models"
 msgstr "AI 모델"
+
+#: src/pages/Shell.tsx
+msgid "Models by participant"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Models for the server owner’s default space."
@@ -3597,6 +3673,10 @@ msgstr ""
 msgid "No trigger"
 msgstr "트리거 없음"
 
+#: src/pages/Shell.tsx
+msgid "None"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "아직 없음"
@@ -3664,6 +3744,10 @@ msgstr "OAuth 연결 실패"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Observed"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3952,6 +4036,10 @@ msgstr ""
 msgid "Provider"
 msgstr "서비스"
 
+#: src/components/UsageBars.tsx
+msgid "Provider account allowance unavailable"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
@@ -4073,6 +4161,7 @@ msgstr ""
 
 #: src/App.tsx
 #: src/components/ErrorBoundary.tsx
+#: src/components/UsageBars.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "Refresh"
 msgstr "새로고침"
@@ -4227,11 +4316,8 @@ msgstr ""
 msgid "Research & writing"
 msgstr ""
 
-#: src/components/UsageBars.tsx
-msgid "reset"
-msgstr ""
-
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/components/UsageBars.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "재설정"
@@ -4252,12 +4338,20 @@ msgstr "컴퓨터를 재설정할까요?"
 msgid "Reset password"
 msgstr "비밀번호 재설정"
 
+#: src/components/UsageBars.tsx
+msgid "Reset time"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Reset time unavailable"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "비밀번호를 재설정하세요"
 
 #: src/components/UsageBars.tsx
-msgid "resets in {until}"
+msgid "Resets in {until}"
 msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
@@ -4818,6 +4912,7 @@ msgstr "공간이 변경되었습니다. 백업 목록을 불러오려면 모델
 msgid "Space changed. Reopen Models to save its backup list."
 msgstr "공간이 변경되었습니다. 백업 목록을 저장하려면 모델 설정을 다시 여세요."
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "스페이스 기본값"
@@ -4873,9 +4968,22 @@ msgstr "시작 중"
 msgid "Starting…"
 msgstr "시작하는 중…"
 
+#: src/components/UsageBars.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
 msgid "Status"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status incomplete"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status needs attention"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status refresh unavailable"
 msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
@@ -5140,6 +5248,7 @@ msgstr "이 서버는 이미 연결되어 있습니다. 다시 인증하려면 �
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "이 구독 로그인 방식은 아직 Rakazo에서 지원되지 않습니다. 서버에 설정된 인증 정보를 사용하거나 다른 서비스를 선택하세요."
 
+#: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
 msgstr ""
@@ -5180,6 +5289,10 @@ msgstr "받는 사람:"
 #: src/pages/shell/chat-context.tsx
 msgid "Today"
 msgstr "오늘"
+
+#: src/components/UsageBars.tsx
+msgid "tokens"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
@@ -5259,6 +5372,8 @@ msgid "Unassigned"
 msgstr "섹션 없음"
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/UsageBars.tsx
+#: src/pages/Shell.tsx
 msgid "Unavailable"
 msgstr "사용할 수 없음"
 
@@ -5276,6 +5391,10 @@ msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Unknown tool"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "unknown window"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -5332,6 +5451,7 @@ msgid "Update progress"
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/UsageBars.tsx
 msgid "Updated"
 msgstr "업데이트됨"
 
@@ -5371,6 +5491,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "사용량"
+
+#: src/components/UsageBars.tsx
+msgid "Usage / Details"
+msgstr ""
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'
 #. placeholder {0}: deviceTimezone.replaceAll("_", " ")
@@ -5461,6 +5585,10 @@ msgstr "API가 다시 작동하기를 기다리는 중…"
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"
 msgstr "줄에서 기다리는 중…"
+
+#: src/components/UsageBars.tsx
+msgid "Waiting on you"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"

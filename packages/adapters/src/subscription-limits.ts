@@ -360,6 +360,7 @@ export function summarizeThreadUsage(
     if (run) runs.add(run);
   }
   return {
+    lastModel: latest ? { provider: latest.provider, model: latest.model } : null,
     contextTokens,
     contextWindow,
     contextPct:

@@ -3,6 +3,7 @@ import type {
   SubscriptionLimitReading,
   UsageOperationKind,
 } from "@rakazo/adapter-kit";
+import type { ExtraUsageBarSummary } from "@rakazo/contracts";
 import type { PrismaClient } from "./generated/prisma/client.js";
 
 type UsageEvent = Extract<AgentRuntimeEvent, { type: "usage" }>;
@@ -116,14 +117,29 @@ export interface FleetUsageBarRow {
   updatedAt: Date | null;
   /** The bar's colour when it is not a percentage (used_pct NULL); null when the row sets none. */
   tone: FleetUsageTone | null;
+  summary: ExtraUsageBarSummary | null;
 }
 
 const FLEET_TONES: readonly string[] = ["ok", "warn", "high"];
 
+function fleetSummary(value: unknown): ExtraUsageBarSummary | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const summary: ExtraUsageBarSummary = {};
+  for (const key of ["waitingCount", "unaskedCount", "pausedRoutineCount", "issueCount"] as const) {
+    const count = raw[key];
+    if (typeof count === "number" && Number.isSafeInteger(count) && count >= 0)
+      summary[key] = count;
+    else if (key === "unaskedCount" && count === null) summary.unaskedCount = null;
+  }
+  if (typeof raw.partial === "boolean") summary.partial = raw.partial;
+  return Object.keys(summary).length ? summary : null;
+}
+
 /**
  * Fleet: every row of `fleet.usage_bars`, written by the fleet service. The schema belongs to
  * another role, so a missing schema or table (or no read grant) simply means no extra bars.
- * `tone` is read through `to_jsonb(b)` so a table without that column yet still lists its bars.
+ * Optional columns are read through `to_jsonb(b)` so older tables still list their bars.
  */
 export async function listFleetUsageBars(
   prisma: Pick<PrismaClient, "$queryRawUnsafe">,
@@ -137,9 +153,11 @@ export async function listFleetUsageBars(
         detail: string | null;
         updated_at: Date | null;
         tone: string | null;
+        summary?: unknown;
       }[]
     >(
-      "SELECT name, used_pct, label, detail, updated_at, to_jsonb(b)->>'tone' AS tone " +
+      "SELECT name, used_pct, label, detail, updated_at, to_jsonb(b)->>'tone' AS tone, " +
+        "to_jsonb(b)->'summary' AS summary " +
         "FROM fleet.usage_bars b ORDER BY name",
     );
     return rows.map((row) => {
@@ -151,6 +169,7 @@ export async function listFleetUsageBars(
         detail: row.detail,
         updatedAt: row.updated_at,
         tone: row.tone && FLEET_TONES.includes(row.tone) ? (row.tone as FleetUsageTone) : null,
+        summary: fleetSummary(row.summary),
       };
     });
   } catch {

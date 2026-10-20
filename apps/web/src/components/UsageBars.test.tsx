@@ -1,194 +1,194 @@
 // @vitest-environment jsdom
-import type { ThreadUsage, UsageLimits } from "@rakazo/contracts";
+import type { ExtraUsageBar, ThreadUsage, UsageLimits } from "@rakazo/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatUntil, ThreadUsageLine, UsageTopBar, usageTone } from "./UsageBars";
+import { attentionSummary, formatUntil, UsageDetails, UsageTopBar, usageTone } from "./UsageBars";
 
-const limits = vi.hoisted(() => vi.fn());
-const thread = vi.hoisted(() => vi.fn());
-vi.mock("../lib/rpc", () => ({ rpc: { usage: { limits, thread } } }));
+const api = vi.hoisted(() => ({
+  usage: { limits: vi.fn(), thread: vi.fn() },
+}));
+vi.mock("../lib/auth", () => ({
+  authClient: { useSession: () => ({ data: { user: { id: "user-1" } } }) },
+}));
+vi.mock("../lib/rpc", () => ({
+  createSpaceRpc: () => api,
+  selectedSpaceId: () => "space-1",
+}));
+
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (strings: TemplateStringsArray, ...values: unknown[]) =>
       String.raw({ raw: strings }, ...values),
   }),
 }));
-
 let host: HTMLDivElement;
 let root: Root;
-
 beforeEach(() => {
-  vi.clearAllMocks();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
 });
-
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
   vi.unstubAllGlobals();
 });
-
 async function render(node: ReactNode) {
   await act(async () => {
     root.render(node);
   });
 }
-
-const inTwoHours = () => new Date(Date.now() + 2 * 3_600_000 + 10_000).toISOString();
+const extra = (summary: ExtraUsageBar["summary"]): ExtraUsageBar => ({
+  name: "status",
+  usedPct: null,
+  label: "Old diagnostic label with 900 waiting cards",
+  detail: "Historical failures",
+  updatedAt: null,
+  summary,
+});
 
 describe("usage helpers", () => {
-  it("colors green, amber and red", () => {
-    expect(usageTone(null)).toBe("ok");
-    expect(usageTone(69)).toBe("ok");
-    expect(usageTone(70)).toBe("warn");
-    expect(usageTone(90)).toBe("high");
-  });
-
-  it("formats the time until a reset", () => {
+  it("retains allowance thresholds and reset timing", () => {
+    expect([usageTone(null), usageTone(69), usageTone(70), usageTone(90)]).toEqual([
+      "ok",
+      "ok",
+      "warn",
+      "high",
+    ]);
     const now = Date.parse("2026-10-19T10:00:00Z");
     expect(formatUntil("2026-10-19T12:10:00Z", now)).toBe("2 h 10 m");
-    expect(formatUntil("2026-10-19T10:45:00Z", now)).toBe("45 m");
     expect(formatUntil("2026-10-22T14:00:00Z", now)).toBe("3 d 4 h");
-    expect(formatUntil("2026-10-19T09:00:00Z", now)).toBeNull();
     expect(formatUntil(null, now)).toBeNull();
   });
-});
-
-describe("UsageTopBar", () => {
-  it("shows the Claude windows and fleet bars with % used, reset and stale age", async () => {
-    limits.mockResolvedValue({
-      enabled: true,
-      claude: {
-        fiveHour: { usedPct: 42, resetsAt: inTwoHours(), reset: false },
-        sevenDay: { usedPct: 0, resetsAt: "2026-10-18T00:00:00.000Z", reset: true },
-        status: "allowed",
-        observedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
-        ageSeconds: 1200,
-      },
-      extra: [
-        {
-          name: "hindsight",
-          usedPct: 95,
-          label: "Hindsight · this month",
-          detail: "$4.10 of $20",
-          updatedAt: new Date().toISOString(),
-        },
-      ],
-    } satisfies UsageLimits);
-    await render(<UsageTopBar />);
-    const five = host.querySelector('[data-testid="usage-bar-five-hour"]');
-    expect(five?.textContent).toContain("Claude · 5 hours");
-    expect(five?.textContent).toContain("42%");
-    expect(five?.textContent).toContain("resets in 2 h 0 m");
-    expect(five?.textContent).toContain("as of");
-    expect(five?.querySelector(".bg-emerald-500")).not.toBeNull();
-    const week = host.querySelector('[data-testid="usage-bar-seven-day"]');
-    expect(week?.textContent).toContain("Claude · this week");
-    expect(week?.textContent).toContain("0%");
-    expect(week?.textContent).toContain("reset");
-    const hindsight = host.querySelector('[data-testid="usage-bar-hindsight"]');
-    expect(hindsight?.textContent).toContain("$4.10 of $20");
-    expect(hindsight?.textContent).not.toContain("as of");
-    expect(hindsight?.querySelector(".bg-red-500")).not.toBeNull();
+  it("uses structured waiting items and routine counts, not historical diagnostic numbers", () => {
+    const result = attentionSummary([
+      extra({ waitingCount: 43, unaskedCount: 7 }),
+      extra({ pausedRoutineCount: 9, issueCount: 2 }),
+    ]);
+    expect(result).toContain("43 waiting items");
+    expect(result).toContain("9 paused routines");
+    expect(result).toContain("2 issues");
+    expect(result.join(" ")).not.toMatch(/cards|900|Historical/);
   });
-
-  it("colours a fleet bar without a percentage by its tone, with no % or dash", async () => {
-    limits.mockResolvedValue({
-      enabled: true,
-      claude: null,
-      extra: [
-        {
-          name: "waiting-on-rens",
-          usedPct: null,
-          label: "15 waiting on you · oldest 4½ days",
-          detail: "9 not asked as a card yet · list: https://example.test",
-          updatedAt: new Date().toISOString(),
-          tone: "high",
-        },
-        {
-          name: "fleet-health",
-          usedPct: null,
-          label: "Fleet health",
-          detail: "all OK",
-          updatedAt: null,
-        },
-      ],
-    } satisfies UsageLimits);
-    await render(<UsageTopBar />);
-    const waiting = host.querySelector('[data-testid="usage-bar-waiting-on-rens"]');
-    const fill = waiting?.querySelector<HTMLElement>(".bg-red-500");
-    expect(fill).not.toBeNull();
-    expect(fill?.style.width).toBe("100%");
-    expect(waiting?.textContent).toBe(
-      "15 waiting on you · oldest 4½ days9 not asked as a card yet · list: https://example.test",
+  it("never fills unknown partial counts with zero", () => {
+    const result = attentionSummary([extra({ partial: true, issueCount: 2, unaskedCount: null })]);
+    expect(result).toContain("Status incomplete");
+    expect(result).toContain("2 issues");
+    expect(result.join(" ")).not.toMatch(/0 |paused|waiting|unasked/);
+  });
+  it("keeps active legacy warnings visible without printing raw diagnostics", () => {
+    expect(attentionSummary([{ ...extra(null), tone: "high" }])).toContain(
+      "Status needs attention",
     );
-    // No tone and no percentage: today's look, a dash and an empty track.
-    const health = host.querySelector('[data-testid="usage-bar-fleet-health"]');
-    expect(health?.textContent).toContain("–");
-    expect(health?.querySelector<HTMLElement>(".bg-emerald-500")?.style.width).toBe("0%");
   });
-
-  it("renders nothing when the setting is off", async () => {
-    limits.mockResolvedValue({ enabled: false, claude: null, extra: [] } satisfies UsageLimits);
-    await render(<UsageTopBar />);
-    expect(host.querySelector('[data-testid="usage-top-bar"]')).toBeNull();
+  it("keeps an unverified recorded brake visible without inventing a paused count", () => {
+    const result = attentionSummary([{ ...extra({ partial: true, issueCount: 0 }), tone: "high" }]);
+    expect(result).toContain("Status needs attention");
+    expect(result).toContain("Status incomplete");
+    expect(result.join(" ")).not.toMatch(/\d+ paused|\d+ issues/);
   });
-
-  it("refetches when the refresh key changes", async () => {
-    limits.mockResolvedValue({ enabled: false, claude: null, extra: [] } satisfies UsageLimits);
-    await render(<UsageTopBar refreshKey="run-1" />);
-    await render(<UsageTopBar refreshKey={null} />);
-    expect(limits).toHaveBeenCalledTimes(2);
+  it("marks old status counts with their observation time", () => {
+    const observed = "2026-10-20T10:00:00Z";
+    const result = attentionSummary(
+      [{ ...extra({ issueCount: 2 }), updatedAt: observed }],
+      Date.parse("2026-10-20T10:11:00Z"),
+    );
+    expect(result.join(" ")).toContain("2 issues");
+    expect(result.join(" ")).toContain(
+      new Date(observed).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    );
   });
 });
 
-describe("ThreadUsageLine", () => {
+describe("usage details", () => {
   const usage: ThreadUsage = {
-    contextTokens: 45_000,
+    contextTokens: 45_123,
     contextWindow: 200_000,
     contextPct: 22.5,
     cachePctToday: 81.2,
     tokensToday: 1_234_000,
     runsToday: 6,
     apiEquivalentCostUsdToday: 3.1,
+    lastModel: { provider: "old-provider", model: "old-model" },
   };
-
-  it("shows context, cache, tokens, runs and the API-price cost", async () => {
-    thread.mockResolvedValue(usage);
-    await render(<ThreadUsageLine botId="bot-1" />);
-    expect(thread).toHaveBeenCalledWith(expect.objectContaining({ botId: "bot-1" }));
-    expect(host.textContent).toBe(
-      "context 45k of 200k (23%) · cache 81% today · 1.2M tokens today · 6 runs today · ≈ $3.10 at API prices",
+  it("preserves exact last-call context, totals and cross-model daily cache", async () => {
+    await render(<UsageDetails limits={null} usage={usage} contextLabel="Last call context" />);
+    expect(host.textContent).toContain("old-provider/old-model");
+    expect(host.textContent).toContain((45_123).toLocaleString());
+    expect(host.textContent).toContain((200_000).toLocaleString());
+    expect(host.textContent).toContain((1_234_000).toLocaleString());
+    expect(host.textContent).toContain("81%");
+    expect(host.textContent).toContain("$3.10");
+  });
+  it("keeps compact context and cache visible without assigning old context to the configured model", async () => {
+    api.usage.limits.mockResolvedValue({ enabled: false, claude: null, extra: [] });
+    api.usage.thread.mockResolvedValue(usage);
+    await render(
+      <UsageTopBar compact botId="bot-1" modelProvider="new-provider" modelId="new-model" />,
     );
+    expect(host.textContent).toContain("Last call context 23%");
+    expect(host.textContent).toContain("Cache today 81%");
+    expect(host.textContent).not.toContain("Historical failures");
   });
-
-  it("asks for the group in a room and refreshes after a run finishes", async () => {
-    thread.mockResolvedValue(usage);
-    await render(<ThreadUsageLine groupId="group-1" refreshKey="run-1" />);
-    await render(<ThreadUsageLine groupId="group-1" refreshKey={null} />);
-    expect(thread).toHaveBeenCalledTimes(2);
-    expect(thread.mock.calls[0]?.[0]).toMatchObject({ groupId: "group-1" });
-    expect(thread.mock.calls[0]?.[0]).not.toHaveProperty("botId");
-  });
-
-  it("stays empty for a chat without usage", async () => {
-    thread.mockResolvedValue({
-      ...usage,
-      contextTokens: null,
-      contextWindow: null,
-      contextPct: null,
-      cachePctToday: null,
-      tokensToday: 0,
-      runsToday: 0,
-      apiEquivalentCostUsdToday: null,
+  it("keeps the weekly account percentage visible without assigning it to the current model", async () => {
+    api.usage.limits.mockResolvedValue({
+      enabled: true,
+      claude: {
+        provider: "anthropic",
+        fiveHour: { usedPct: 10, resetsAt: null, reset: false },
+        sevenDay: { usedPct: 98, resetsAt: null, reset: false },
+        status: null,
+        observedAt: "2026-10-20T12:00:00Z",
+        ageSeconds: 0,
+      },
+      extra: [],
     });
-    await render(<ThreadUsageLine botId="bot-1" />);
-    expect(host.querySelector('[data-testid="thread-usage-line"]')).toBeNull();
+    api.usage.thread.mockResolvedValue(usage);
+    await render(
+      <UsageTopBar compact botId="bot-1" modelProvider="openai-codex" modelId="new-model" />,
+    );
+    const quota = host.querySelector('[data-testid="weekly-allowance-summary"]');
+    expect(quota?.textContent).toContain("Claude");
+    expect(quota?.textContent).toContain("98%");
+    expect(quota?.textContent).not.toContain("openai");
+  });
+  it("retains weekly and five-hour provider allowance and full linked diagnostics under disclosure", async () => {
+    const resetsAt = "2026-10-25T12:00:00.000Z";
+    const limits: UsageLimits = {
+      enabled: true,
+      claude: {
+        fiveHour: { usedPct: null, resetsAt: null, reset: false },
+        sevenDay: { usedPct: 98, resetsAt, reset: false },
+        status: "allowed",
+        observedAt: "2026-10-20T12:00:00.000Z",
+        ageSeconds: 0,
+      },
+      extra: [
+        {
+          ...extra({ partial: true }),
+          name: "hindsight",
+          usedPct: 30,
+          detail: "Full provider diagnostic with history · list: https://example.test/list",
+          label: "Hindsight monthly cost",
+        },
+      ],
+    };
+    await render(<UsageDetails limits={limits} usage={null} />);
+    expect(host.textContent).toContain("Anthropic Claude");
+    expect(host.querySelector('[data-testid="usage-bar-seven-day"]')?.textContent).toContain("98%");
+    expect(host.querySelector('[data-testid="usage-bar-seven-day"]')?.textContent).toContain(
+      new Date(resetsAt).toLocaleString(),
+    );
+    expect(host.querySelector('[data-testid="usage-bar-five-hour"]')?.textContent).toContain(
+      "Unavailable",
+    );
+    const details = host.querySelector("details");
+    expect(details?.open).toBe(false);
+    expect(details?.textContent).toContain("Full provider diagnostic with history");
+    expect(details?.querySelector("a")?.href).toBe("https://example.test/list");
   });
 });

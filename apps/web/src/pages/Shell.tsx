@@ -189,7 +189,7 @@ import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
 import { TeachRecordingChrome, TeachStopButton } from "../components/teach/TeachRecordingChrome";
-import { ThreadUsageLine, UsageTopBar } from "../components/UsageBars";
+import { UsageTopBar } from "../components/UsageBars";
 import { readActivityMode, writeActivityMode } from "../lib/activity-mode";
 import type { ArtifactTarget } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
@@ -253,6 +253,10 @@ import { localTimezone } from "../lib/local-timezone";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import { parseModelOptionKey } from "../lib/model-catalog";
+import {
+  MODEL_SETTINGS_CHANGED_EVENT,
+  notifyModelSettingsChanged,
+} from "../lib/model-settings-events";
 import { type PeerRoomView, peerRoomView, unsentPeerReplyTo } from "../lib/peer-messages";
 import {
   ATTACHMENT_ACCEPT,
@@ -330,6 +334,7 @@ import {
   transcriptMovedDown,
 } from "../lib/transcript-scroll";
 import { speaker } from "../lib/tts";
+import { useVisibleResource } from "../lib/use-visible-resource";
 import { errorText } from "../lib/user-error";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
@@ -2138,6 +2143,59 @@ function SpaceShell() {
     : snapshot?.botId === active?.id
       ? snapshot
       : null;
+  const headerModelScope = `${userId ?? "anonymous"}:${currentSpaceId ?? "primary"}`;
+  const headerMetadata = useVisibleResource(
+    async () => {
+      const [me, backups] = await Promise.all([rpc.me(), rpc.models.backups()]);
+      if (currentSpaceId && me.spaceId !== currentSpaceId) return null;
+      return { me, backups };
+    },
+    { key: `header-model:${headerModelScope}`, event: MODEL_SETTINGS_CHANGED_EVENT },
+  );
+  const headerConfiguredProvider = active?.modelProvider ?? headerMetadata.data?.me.defaultProvider;
+  const headerConfiguredModel = active?.modelId ?? headerMetadata.data?.me.defaultModel;
+  const headerRun = activeSnapshot?.run;
+  const headerRunningModel =
+    !inGroup &&
+    headerRun &&
+    !headerRun.completedAt &&
+    isActive(headerRun.status) &&
+    headerRun.modelProvider &&
+    headerRun.modelId
+      ? headerRun
+      : null;
+  const headerProvider = headerRunningModel?.modelProvider ?? headerConfiguredProvider;
+  const headerModelId = headerRunningModel?.modelId ?? headerConfiguredModel;
+  const headerModelSource = headerRunningModel
+    ? t`Current run`
+    : active?.modelId
+      ? t`Bot override`
+      : t`Space default`;
+  const headerModelLabel = inGroup
+    ? t`Models by participant`
+    : headerProvider && headerModelId
+      ? `${headerModelId} · ${headerModelSource}`
+      : t`Model unavailable`;
+  const headerConfiguredLabel =
+    headerConfiguredProvider && headerConfiguredModel
+      ? `${headerConfiguredProvider}/${headerConfiguredModel}`
+      : t`Unavailable`;
+  const headerBackupLabel = headerMetadata.data
+    ? headerMetadata.data.backups.length
+      ? headerMetadata.data.backups
+          .map((backup) => `${backup.provider}/${backup.modelId}`)
+          .join(", ")
+      : t`None`
+    : t`Unavailable`;
+  const headerModelDetails = [
+    inGroup
+      ? t`Models by participant`
+      : headerProvider && headerModelId
+        ? `${headerProvider}/${headerModelId} · ${headerModelSource}`
+        : t`Model unavailable`,
+    ...(!inGroup ? [t`Configured: ${headerConfiguredLabel}`] : []),
+    t`Backups: ${headerBackupLabel}`,
+  ].join("\n");
   // Keep the armed reply even when its parent leaves the loaded page: the
   // server resolves a paged-out target and degrades a deleted one to a plain
   // reply instead of failing the send.
@@ -4191,8 +4249,8 @@ function SpaceShell() {
             className="absolute bottom-20 start-0 top-16 z-20 w-8 touch-none md:hidden"
           />
         ) : null}
-        <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="app-drag flex flex-wrap items-center justify-between gap-x-2 border-b border-sidebar-border px-3 py-2 md:px-[22px]">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
             {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
             <button
@@ -4219,7 +4277,7 @@ function SpaceShell() {
               type="button"
               data-testid="bot-settings-trigger"
               onClick={() => setPanel(inGroup ? "group-settings" : "settings")}
-              className="app-no-drag flex min-w-0 items-center gap-3"
+              className="app-no-drag flex min-w-0 justify-start items-center gap-3 text-start"
             >
               {inGroup ? (
                 <GroupAvatar
@@ -4240,13 +4298,14 @@ function SpaceShell() {
                     ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
                     : (active?.name ?? t`Select a bot`)}
                 </span>
-                <ThreadUsageLine
-                  botId={inGroup ? null : (active?.id ?? null)}
-                  groupId={inGroup ? (groupId ?? null) : null}
-                  refreshKey={activeSnapshot?.run?.id ?? null}
-                />
               </span>
             </button>
+            <span
+              className="ms-auto min-w-0 max-w-[50%] break-words text-end text-[11px] text-muted-foreground"
+              data-testid="header-model"
+            >
+              {headerModelLabel}
+            </span>
           </div>
           <div className="flex items-center gap-1">
             {bootstrapMe?.phoneCallsEnabled && !inGroup && active ? (
@@ -4326,9 +4385,18 @@ function SpaceShell() {
               </button>
             ) : null}
           </div>
+          <UsageTopBar
+            compact
+            botId={inGroup ? null : (active?.id ?? null)}
+            groupId={inGroup ? (groupId ?? null) : null}
+            spaceId={currentSpaceId}
+            refreshKey={`${activeSnapshot?.run?.id ?? ""}:${activeSnapshot?.run?.completedAt ?? ""}`}
+            model={headerModelDetails}
+            modelProvider={inGroup ? null : headerProvider}
+            modelId={inGroup ? null : headerModelId}
+          />
         </div>
         <CallReturnBar />
-        <UsageTopBar refreshKey={activeSnapshot?.run?.id ?? null} />
         {!active && !activeGroup && initialBotsLoaded ? (
           <div className="grid flex-1 place-items-center">
             <Button onClick={() => setPanel("create")}>
@@ -4700,6 +4768,9 @@ function SpaceShell() {
                   setBots((current) =>
                     current.map((bot) => (bot.id === updated.id ? updated : bot)),
                   );
+                  if (patch.modelProvider !== undefined || patch.modelId !== undefined) {
+                    notifyModelSettingsChanged();
+                  }
                   // Persistence succeeded; a failed navigation refresh must not undo the tool edit.
                   await refreshBots().catch(() => undefined);
                 }}

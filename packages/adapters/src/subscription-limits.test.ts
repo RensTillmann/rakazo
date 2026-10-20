@@ -288,9 +288,17 @@ describe("usage shapes", () => {
       parentRunId: "run-1",
       operationKind: "answer",
     };
-    const second = { ...row, runId: "run-2", parentRunId: "run-2", costUsd: null };
+    const second = {
+      ...row,
+      provider: "other-provider",
+      model: "latest-model",
+      runId: "run-2",
+      parentRunId: "run-2",
+      costUsd: null,
+    };
     const rows = [row, second, { ...row, runId: null }];
     expect(summarizeThreadUsage(rows, second, () => 10_000)).toEqual({
+      lastModel: { provider: "other-provider", model: "latest-model" },
       contextTokens: 1000,
       contextWindow: 10_000,
       contextPct: 10,
@@ -300,6 +308,7 @@ describe("usage shapes", () => {
       apiEquivalentCostUsdToday: 0.02,
     });
     expect(summarizeThreadUsage([], null, () => null)).toEqual({
+      lastModel: null,
       contextTokens: null,
       contextWindow: null,
       contextPct: null,
@@ -307,6 +316,12 @@ describe("usage shapes", () => {
       tokensToday: 0,
       runsToday: 0,
       apiEquivalentCostUsdToday: null,
+    });
+    expect(summarizeThreadUsage(rows, null, () => 10_000)).toMatchObject({
+      lastModel: null,
+      contextTokens: null,
+      contextWindow: null,
+      cachePctToday: 80,
     });
   });
 });

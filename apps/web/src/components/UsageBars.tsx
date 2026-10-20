@@ -1,27 +1,31 @@
+import { t as translate } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import type { ThreadUsage, UsageLimits } from "@rakazo/contracts";
-import { useEffect, useState } from "react";
-import { rpc } from "../lib/rpc";
-
-/** Readings older than this show their age (the server refreshes after 10 min). */
-const STALE_AFTER_SECONDS = 10 * 60;
-const LIMITS_POLL_MS = 5 * 60_000;
+import type { ExtraUsageBar, ThreadUsage, UsageLimits } from "@rakazo/contracts";
+import {
+  Button,
+  Disclosure,
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+  ScrollArea,
+} from "@rakazo/ui-web";
+import { useEffect, useMemo, useRef } from "react";
+import { authClient } from "../lib/auth";
+import { MODEL_SETTINGS_CHANGED_EVENT } from "../lib/model-settings-events";
+import { createSpaceRpc, selectedSpaceId } from "../lib/rpc";
+import { useVisibleResource } from "../lib/use-visible-resource";
 
 type UsageTone = "ok" | "warn" | "high";
-
-/** Green below 70% used, amber below 90%, red from 90%. */
 export function usageTone(usedPct: number | null): UsageTone {
   if (usedPct === null || usedPct < 70) return "ok";
   return usedPct < 90 ? "warn" : "high";
 }
-
 const TONE_CLASS: Record<UsageTone, string> = {
-  ok: "bg-emerald-500",
-  warn: "bg-amber-500",
-  high: "bg-red-500",
+  ok: "bg-success",
+  warn: "bg-warning",
+  high: "bg-destructive",
 };
-
-/** "2 h 10 m", "45 m", "3 d 4 h" until `iso`; null when absent or past. */
 export function formatUntil(iso: string | null, now: number): string | null {
   if (!iso) return null;
   const minutes = Math.round((Date.parse(iso) - now) / 60_000);
@@ -33,201 +37,373 @@ export function formatUntil(iso: string | null, now: number): string | null {
   if (hours > 0) return `${hours} h ${rest} m`;
   return `${rest} m`;
 }
-
 export function formatTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${Math.round(value / 1_000)}k`;
   return String(value);
 }
 
-type Bar = {
-  key: string;
-  label: string;
-  usedPct: number | null;
-  /** Fleet bars that are not a percentage (a count, a health state) colour by this instead. */
-  tone?: UsageTone | null;
-  detail: string | null;
-  stale: string | null;
-};
-
-function UsageMeter({ bar }: { bar: Bar }) {
-  const pct = bar.usedPct === null ? null : Math.min(100, Math.max(0, bar.usedPct));
-  // A tone without a percentage: the whole track in that colour, and no "N%" or "–".
-  const tone = pct === null ? (bar.tone ?? null) : null;
-  return (
-    <span className="flex min-w-0 items-center gap-1.5" data-testid={`usage-bar-${bar.key}`}>
-      <span className="truncate">{bar.label}</span>
-      <span className="relative h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-foreground/10">
-        <span
-          data-tone={tone ?? usageTone(pct)}
-          className={`absolute inset-y-0 start-0 rounded-full ${TONE_CLASS[tone ?? usageTone(pct)]}`}
-          style={{ width: tone ? "100%" : `${pct ?? 0}%` }}
-        />
-      </span>
-      {tone ? null : (
-        <span className="shrink-0 tabular-nums text-foreground/80">
-          {pct === null ? "–" : `${Math.round(pct)}%`}
-        </span>
-      )}
-      {bar.detail ? <span className="truncate">{bar.detail}</span> : null}
-      {bar.stale ? <span className="shrink-0 italic">{bar.stale}</span> : null}
-    </span>
-  );
+/** Counts are supplied by the producer, never inferred from diagnostic prose. */
+export function attentionSummary(extra: ExtraUsageBar[], now = Date.now()): string[] {
+  const parts: string[] = [];
+  for (const bar of extra) {
+    const start = parts.length;
+    if (bar.usedPct !== null && bar.usedPct >= 90) {
+      const name = bar.name;
+      parts.push(translate`${name} usage high`);
+    }
+    const s = bar.summary;
+    if (s) {
+      if (s.waitingCount !== undefined && (!s.partial || s.waitingCount > 0)) {
+        const count = s.waitingCount;
+        parts.push(
+          s.partial
+            ? translate`At least ${count} waiting items`
+            : translate`${count} waiting items`,
+        );
+      }
+      if (s.unaskedCount != null && s.unaskedCount > 0) {
+        const count = s.unaskedCount;
+        parts.push(translate`${count} not yet asked`);
+      }
+      if (s.pausedRoutineCount !== undefined && s.pausedRoutineCount > 0) {
+        const count = s.pausedRoutineCount;
+        parts.push(translate`${count} paused routines`);
+      }
+      if (s.issueCount !== undefined && s.issueCount > 0) {
+        const count = s.issueCount;
+        parts.push(translate`${count} issues`);
+      }
+    }
+    if ((bar.tone === "warn" || bar.tone === "high") && parts.length === start) {
+      parts.push(translate`Status needs attention`);
+    }
+    if (s?.partial) parts.push(translate`Status incomplete`);
+    if (parts.length > start && bar.updatedAt && now - Date.parse(bar.updatedAt) > 10 * 60_000) {
+      const time = new Date(bar.updatedAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      parts.push(translate`as of ${time}`);
+    }
+  }
+  return [...new Set(parts)];
 }
 
-/** Fleet: slim usage strip on every app page (RAKAZO_SUBSCRIPTION_LIMITS); hidden when off. */
-export function UsageTopBar({ refreshKey }: { refreshKey?: string | null }) {
+function Meter({
+  name,
+  label,
+  pct,
+  detail,
+}: {
+  name: string;
+  label: string;
+  pct: number | null;
+  detail?: string | null;
+}) {
   const { t } = useLingui();
-  const [limits, setLimits] = useState<UsageLimits | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    // Through a promise so a missing or failing endpoint never throws into React.
-    const load = () =>
-      Promise.resolve()
-        .then(() => rpc.usage.limits())
-        .then((next) => {
-          if (!cancelled) setLimits(next);
-        })
-        .catch(() => {
-          /* Undocumented upstream surface: keep the last bars rather than a broken one. */
-        });
-    void load();
-    const timer = setInterval(load, LIMITS_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [refreshKey]);
-  if (!limits?.enabled) return null;
-  const now = Date.now();
-  const bars: Bar[] = [];
-  const claude = limits.claude;
-  if (claude) {
-    const time = new Date(claude.observedAt).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const stale = claude.ageSeconds > STALE_AFTER_SECONDS ? t`as of ${time}` : null;
-    const resetDetail = (resetsAt: string | null, reset: boolean) => {
-      if (reset) return t`reset`;
-      const until = formatUntil(resetsAt, now);
-      return until ? t`resets in ${until}` : null;
-    };
-    bars.push(
-      {
-        key: "five-hour",
-        label: t`Claude · 5 hours`,
-        usedPct: claude.fiveHour.usedPct,
-        detail: resetDetail(claude.fiveHour.resetsAt, claude.fiveHour.reset),
-        stale,
-      },
-      {
-        key: "seven-day",
-        label: t`Claude · this week`,
-        usedPct: claude.sevenDay.usedPct,
-        detail: resetDetail(claude.sevenDay.resetsAt, claude.sevenDay.reset),
-        stale,
-      },
-    );
-  }
-  for (const extra of limits.extra) {
-    const age = extra.updatedAt ? (now - Date.parse(extra.updatedAt)) / 1000 : 0;
-    bars.push({
-      key: extra.name,
-      label: extra.label ?? extra.name,
-      usedPct: extra.usedPct,
-      tone: extra.tone ?? null,
-      detail: extra.detail,
-      stale: (() => {
-        if (!extra.updatedAt || age <= STALE_AFTER_SECONDS) return null;
-        const time = new Date(extra.updatedAt).toLocaleString([], {
-          dateStyle: "short",
-          timeStyle: "short",
-        });
-        return t`as of ${time}`;
-      })(),
-    });
-  }
-  if (bars.length === 0) return null;
   return (
-    <div
-      data-testid="usage-top-bar"
-      className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-sidebar-border px-3 py-1 text-[11px] text-muted-foreground md:px-[22px]"
-    >
-      {bars.map((bar) => (
-        <UsageMeter key={bar.key} bar={bar} />
-      ))}
+    <div data-testid={`usage-bar-${name}`} className="space-y-1">
+      <div className="flex flex-wrap justify-between gap-x-3">
+        <span>{label}</span>
+        <span className="tabular-nums">
+          {pct === null ? t`Unavailable` : `${Math.round(pct)}%`}
+        </span>
+      </div>
+      {pct === null ? null : (
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            data-tone={usageTone(pct)}
+            className={`h-full ${TONE_CLASS[usageTone(pct)]}`}
+            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+          />
+        </div>
+      )}
+      {detail ? (
+        <p className="whitespace-pre-wrap break-words text-muted-foreground">{detail}</p>
+      ) : null}
     </div>
   );
 }
 
-/** Fleet: grey line under the chat name; refetched whenever `refreshKey` changes. */
-export function ThreadUsageLine({
-  botId,
-  groupId,
-  refreshKey,
+function DiagnosticText({ text }: { text: string }) {
+  // Keep the full producer text, with its external list URLs usable on touch screens too.
+  return (
+    <p className="whitespace-pre-wrap break-words">
+      {text.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
+        /^https?:\/\//.test(part) ? (
+          <a key={i} href={part} target="_blank" rel="noreferrer" className="underline">
+            {part}
+          </a>
+        ) : (
+          part
+        ),
+      )}
+    </p>
+  );
+}
+
+export function UsageDetails({
+  limits,
+  usage,
+  model,
+  contextLabel,
 }: {
-  botId?: string | null;
-  groupId?: string | null;
-  refreshKey?: string | null;
+  limits: UsageLimits | null;
+  usage: ThreadUsage | null;
+  model?: string | null;
+  contextLabel?: string;
 }) {
   const { t } = useLingui();
-  const [usage, setUsage] = useState<ThreadUsage | null>(null);
-  useEffect(() => {
-    if (!botId && !groupId) {
-      setUsage(null);
-      return;
-    }
-    let cancelled = false;
-    const dayStart = new Date();
-    dayStart.setHours(0, 0, 0, 0);
-    Promise.resolve()
-      .then(() =>
-        rpc.usage.thread({
-          ...(groupId ? { groupId } : { botId: botId ?? undefined }),
-          dayStart: dayStart.toISOString(),
-        }),
-      )
-      .then((next) => {
-        if (!cancelled) setUsage(next);
-      })
-      .catch(() => {
-        if (!cancelled) setUsage(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [botId, groupId, refreshKey]);
-  if (!usage || (usage.runsToday === 0 && usage.contextTokens === null)) return null;
-  const parts: string[] = [];
-  if (usage.contextTokens !== null) {
-    const size = formatTokens(usage.contextTokens);
-    if (usage.contextPct !== null && usage.contextWindow) {
-      const limit = formatTokens(usage.contextWindow);
-      const pct = Math.round(usage.contextPct);
-      parts.push(t`context ${size} of ${limit} (${pct}%)`);
-    } else {
-      parts.push(t`context ${size}`);
-    }
-  }
-  if (usage.cachePctToday !== null) {
-    const cache = Math.round(usage.cachePctToday);
-    parts.push(t`cache ${cache}% today`);
-  }
-  const tokens = formatTokens(usage.tokensToday);
-  const runs = usage.runsToday;
-  parts.push(t`${tokens} tokens today`);
-  parts.push(t`${runs} runs today`);
-  if (usage.apiEquivalentCostUsdToday !== null) {
-    const cost = usage.apiEquivalentCostUsdToday.toFixed(2);
-    parts.push(t`≈ $${cost} at API prices`);
-  }
+  const claude = limits?.enabled ? limits.claude : null;
+  const context = contextLabel ?? t`Context`;
+  const tokens = usage?.tokensToday.toLocaleString();
+  const runs = usage?.runsToday;
+  const cost = usage?.apiEquivalentCostUsdToday?.toFixed(2);
   return (
-    <span
-      data-testid="thread-usage-line"
-      className="block truncate text-[11px] font-normal text-muted-foreground"
+    <div className="space-y-4 text-xs">
+      {model ? <p className="whitespace-pre-line break-words">{model}</p> : null}
+      {usage ? (
+        <section className="space-y-1">
+          {usage.lastModel ? (
+            <p>
+              {t`Last call`}: {usage.lastModel.provider}/{usage.lastModel.model}
+            </p>
+          ) : null}
+          <p>
+            {context}:{" "}
+            {usage.contextTokens === null ? t`Unavailable` : usage.contextTokens.toLocaleString()} /{" "}
+            {usage.contextWindow === null
+              ? t`unknown window`
+              : usage.contextWindow.toLocaleString()}{" "}
+            {t`tokens`} {usage.contextPct === null ? "" : `(${Math.round(usage.contextPct)}%)`}
+          </p>
+          <p>
+            {t`Cache today`}:{" "}
+            {usage.cachePctToday === null ? t`Unavailable` : `${Math.round(usage.cachePctToday)}%`}{" "}
+            · {t`across this chat’s model calls`}
+          </p>
+          <p>{t`${tokens} tokens today · ${runs} runs today`}</p>
+          <p>
+            {cost === undefined
+              ? t`API-price equivalent unavailable`
+              : t`≈ $${cost} at API prices today`}
+          </p>
+        </section>
+      ) : null}
+      {claude ? (
+        <section className="space-y-3">
+          <h3 className="font-medium">{t`Anthropic Claude · account allowance`}</h3>
+          {(
+            [
+              ["five-hour", t`5 hours`, claude.fiveHour],
+              ["seven-day", t`This week`, claude.sevenDay],
+            ] as const
+          ).map(([key, label, window]) => {
+            const until = formatUntil(window.resetsAt, Date.now());
+            const resetLabel = window.reset
+              ? t`Reset`
+              : until
+                ? t`Resets in ${until}`
+                : t`Reset time`;
+            const detail = window.resetsAt
+              ? `${resetLabel} · ${new Date(window.resetsAt).toLocaleString()}`
+              : t`Reset time unavailable`;
+            return (
+              <Meter key={key} name={key} label={label} pct={window.usedPct} detail={detail} />
+            );
+          })}
+          <p className="text-muted-foreground">
+            {claude.status ? `${claude.status} · ` : ""}
+            {t`Observed`} {new Date(claude.observedAt).toLocaleString()}
+          </p>
+        </section>
+      ) : null}
+      {limits?.enabled
+        ? limits.extra.map((extra) => {
+            const waiting =
+              extra.summary?.waitingCount !== undefined ||
+              extra.summary?.unaskedCount !== undefined;
+            const label =
+              extra.usedPct !== null
+                ? (extra.label ?? extra.name)
+                : waiting
+                  ? t`Waiting on you`
+                  : t`Status`;
+            const counts = attentionSummary([extra]);
+            return (
+              <section key={extra.name} className="space-y-2">
+                {extra.usedPct === null ? (
+                  <div data-testid={`usage-status-${extra.name}`} className="space-y-1">
+                    <h3 className="font-medium">{label}</h3>
+                    {counts.length ? <p>{counts.join(" · ")}</p> : null}
+                  </div>
+                ) : (
+                  <Meter
+                    name={extra.name}
+                    label={label}
+                    pct={extra.usedPct}
+                    detail={extra.detail}
+                  />
+                )}
+                <Disclosure
+                  summary={t`Diagnostics`}
+                  summaryClassName="items-start text-start break-words"
+                >
+                  <div className="space-y-2 pt-2 text-muted-foreground">
+                    {extra.label &&
+                    !extra.detail?.startsWith(extra.label) &&
+                    extra.label !== label ? (
+                      <DiagnosticText text={extra.label} />
+                    ) : null}
+                    {extra.detail ? <DiagnosticText text={extra.detail} /> : null}
+                    {extra.updatedAt ? (
+                      <p>
+                        {t`Updated`} {new Date(extra.updatedAt).toLocaleString()}
+                      </p>
+                    ) : null}
+                  </div>
+                </Disclosure>
+              </section>
+            );
+          })
+        : null}
+      {!claude ? (
+        <p className="text-muted-foreground">{t`Provider account allowance unavailable`}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/** The chat header and Board/Artifacts use one limits fetcher per page. */
+export function UsageTopBar({
+  refreshKey,
+  botId,
+  groupId,
+  spaceId,
+  model,
+  modelProvider,
+  modelId,
+  compact = false,
+}: {
+  refreshKey?: string | null;
+  botId?: string | null;
+  groupId?: string | null;
+  spaceId?: string | null;
+  model?: string | null;
+  modelProvider?: string | null;
+  modelId?: string | null;
+  compact?: boolean;
+}) {
+  const { t } = useLingui();
+  const session = authClient.useSession();
+  const effectiveSpace = spaceId ?? selectedSpaceId();
+  const scope = `${session.data?.user.id ?? "anonymous"}:${effectiveSpace ?? "primary"}`;
+  const api = useMemo(() => createSpaceRpc(effectiveSpace), [effectiveSpace]);
+  const limitsResource = useVisibleResource(() => api.usage.limits(), {
+    key: `limits:${scope}`,
+    event: MODEL_SETTINGS_CHANGED_EVENT,
+  });
+  const threadResource = useVisibleResource(
+    async () => {
+      if (!botId && !groupId) return null;
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
+      return api.usage.thread({
+        ...(groupId ? { groupId } : { botId: botId ?? undefined }),
+        dayStart: dayStart.toISOString(),
+      });
+    },
+    { key: `thread:${scope}:${groupId ?? botId ?? "none"}`, event: MODEL_SETTINGS_CHANGED_EVENT },
+  );
+  const { refresh: refreshLimits } = limitsResource;
+  const { refresh: refreshThread } = threadResource;
+  const previousRefreshKey = useRef(refreshKey);
+  useEffect(() => {
+    if (previousRefreshKey.current === refreshKey) return;
+    previousRefreshKey.current = refreshKey;
+    void refreshLimits();
+    void refreshThread();
+  }, [refreshKey, refreshLimits, refreshThread]);
+  const limits = limitsResource.data;
+  const usage = threadResource.data;
+  const contextMatches =
+    !groupId &&
+    usage?.lastModel &&
+    modelProvider &&
+    modelId &&
+    usage.lastModel.provider === modelProvider &&
+    usage.lastModel.model === modelId;
+  const contextLabel = contextMatches ? t`Context` : t`Last call context`;
+  const summary = limits?.enabled ? attentionSummary(limits.extra) : [];
+  const weeklyUsed = limits?.enabled ? limits.claude?.sevenDay.usedPct : null;
+  const fiveHourUsed = limits?.enabled ? limits.claude?.fiveHour.usedPct : null;
+  const weeklyPct = weeklyUsed == null ? null : Math.round(weeklyUsed);
+  const fiveHourPct = fiveHourUsed == null ? null : Math.round(fiveHourUsed);
+  const allowanceTime =
+    limits?.claude && limits.claude.ageSeconds > 10 * 60
+      ? new Date(limits.claude.observedAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
+  if (!compact && !limits?.enabled && !limitsResource.error) return null;
+  return (
+    <div
+      data-testid="usage-top-bar"
+      className={`app-no-drag flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground ${compact ? "w-full pt-1" : "border-b border-sidebar-border px-3 py-1 md:px-[22px]"}`}
     >
-      {parts.join(" · ")}
-    </span>
+      {botId || groupId ? (
+        <>
+          <span>
+            {contextLabel} {usage?.contextPct == null ? "—" : `${Math.round(usage.contextPct)}%`}
+          </span>
+          <span>
+            {t`Cache today`}{" "}
+            {usage?.cachePctToday == null ? "—" : `${Math.round(usage.cachePctToday)}%`}
+          </span>
+        </>
+      ) : null}
+      {summary.length ? (
+        <span className="break-words text-foreground">{summary.join(" · ")}</span>
+      ) : null}
+      {weeklyPct === null ? null : (
+        <span
+          data-testid="weekly-allowance-summary"
+          className={weeklyPct >= 90 ? "text-destructive" : undefined}
+        >
+          {t`Claude week ${weeklyPct}% used`}
+          {allowanceTime ? ` · ${t`as of ${allowanceTime}`}` : ""}
+        </span>
+      )}
+      {fiveHourPct !== null && fiveHourPct >= 90 ? (
+        <span className="text-destructive">{t`Claude 5 hours ${fiveHourPct}% used`}</span>
+      ) : null}
+      {limitsResource.error || threadResource.error ? (
+        <span>{t`Status refresh unavailable`}</span>
+      ) : null}
+      <Popover>
+        <PopoverTrigger className="ms-auto shrink-0 rounded px-1 py-0.5 text-foreground hover:bg-accent">{t`Usage / Details`}</PopoverTrigger>
+        <PopoverContent align="end" className="w-[min(28rem,calc(100vw-1.5rem))]">
+          <div className="flex items-center justify-between">
+            <PopoverTitle>{t`Usage / Details`}</PopoverTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void refreshLimits();
+                void refreshThread();
+              }}
+            >{t`Refresh`}</Button>
+          </div>
+          <ScrollArea className="max-h-[65vh] overflow-y-auto">
+            <UsageDetails limits={limits} usage={usage} model={model} contextLabel={contextLabel} />
+          </ScrollArea>
+          {modelProvider && modelProvider !== limits?.claude?.provider ? (
+            <p className="break-words text-xs text-muted-foreground">{t`${modelProvider} account allowance unavailable`}</p>
+          ) : null}
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }

@@ -144,13 +144,29 @@ describe("subscription limit readings", () => {
         detail: null,
         updated_at: null,
         tone: "high",
+        summary: { waitingCount: 3, unaskedCount: null, partial: true },
       },
       { name: "odd", used_pct: null, label: null, detail: null, updated_at: null, tone: "purple" },
     ]);
     const ok = { $queryRawUnsafe: query } as unknown as Pick<PrismaClient, "$queryRawUnsafe">;
     await expect(listFleetUsageBars(ok)).resolves.toEqual([
-      { name: "hindsight", usedPct: 20.5, ...hindsight, updatedAt: updated, tone: null },
-      { name: "other", usedPct: null, label: null, detail: null, updatedAt: null, tone: null },
+      {
+        name: "hindsight",
+        usedPct: 20.5,
+        ...hindsight,
+        updatedAt: updated,
+        tone: null,
+        summary: null,
+      },
+      {
+        name: "other",
+        usedPct: null,
+        label: null,
+        detail: null,
+        updatedAt: null,
+        tone: null,
+        summary: null,
+      },
       {
         name: "waiting-on-rens",
         usedPct: null,
@@ -158,8 +174,17 @@ describe("subscription limit readings", () => {
         detail: null,
         updatedAt: null,
         tone: "high",
+        summary: { waitingCount: 3, unaskedCount: null, partial: true },
       },
-      { name: "odd", usedPct: null, label: null, detail: null, updatedAt: null, tone: null },
+      {
+        name: "odd",
+        usedPct: null,
+        label: null,
+        detail: null,
+        updatedAt: null,
+        tone: null,
+        summary: null,
+      },
     ]);
     const missing = {
       $queryRawUnsafe: vi.fn(async () => {
@@ -167,5 +192,37 @@ describe("subscription limit readings", () => {
       }),
     } as unknown as Pick<PrismaClient, "$queryRawUnsafe">;
     await expect(listFleetUsageBars(missing)).resolves.toEqual([]);
+  });
+
+  it("keeps valid counts without coercing malformed or unavailable summary values to zero", async () => {
+    const values = [
+      null,
+      [],
+      "bad",
+      { waitingCount: -1, unaskedCount: 1.5, pausedRoutineCount: Infinity, issueCount: NaN },
+      { waitingCount: 0, unaskedCount: null, issueCount: 2, partial: true, ignored: 9 },
+      { waitingCount: "4", partial: "false" },
+    ];
+    const prisma = {
+      $queryRawUnsafe: vi.fn(async () =>
+        values.map((summary) => ({
+          name: "status",
+          used_pct: null,
+          label: null,
+          detail: null,
+          updated_at: null,
+          tone: null,
+          summary,
+        })),
+      ),
+    } as unknown as Pick<PrismaClient, "$queryRawUnsafe">;
+    expect((await listFleetUsageBars(prisma)).map((row) => row.summary)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      { waitingCount: 0, unaskedCount: null, issueCount: 2, partial: true },
+      null,
+    ]);
   });
 });

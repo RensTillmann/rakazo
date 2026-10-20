@@ -127,9 +127,25 @@ msgstr "{count} ימים"
 msgid "{count} decisions"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "{count} issues"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "{count} months"
 msgstr "{count} חודשים"
+
+#: src/components/UsageBars.tsx
+msgid "{count} not yet asked"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} paused routines"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} waiting items"
+msgstr ""
 
 #: src/lib/billing.ts
 msgid "{count} weeks"
@@ -155,6 +171,10 @@ msgstr "לפני {hours} שע׳"
 msgid "{minutes}m ago"
 msgstr "לפני {minutes} דק׳"
 
+#: src/components/UsageBars.tsx
+msgid "{modelProvider} account allowance unavailable"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
 msgid "{name} failed"
@@ -169,6 +189,10 @@ msgstr "{name} סיים"
 #: src/lib/browser-notifications.ts
 msgid "{name} stopped"
 msgstr "{name} נעצר"
+
+#: src/components/UsageBars.tsx
+msgid "{name} usage high"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -254,10 +278,6 @@ msgstr "{provider} לא הגיב בזמן. אפשר לנסות שוב."
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "נותרו {remaining} · הבוט צופה ולא פועל"
 
-#: src/components/UsageBars.tsx
-msgid "{runs} runs today"
-msgstr ""
-
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr "{seats, plural, one {# מושב} other {# מושבים}}"
@@ -284,7 +304,7 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/components/UsageBars.tsx
-msgid "{tokens} tokens today"
+msgid "{tokens} tokens today · {runs} runs today"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -301,11 +321,15 @@ msgid "@{0}"
 msgstr "@{0}"
 
 #: src/components/UsageBars.tsx
-msgid "≈ ${cost} at API prices"
+msgid "≈ ${cost} at API prices today"
 msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "1 decision"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "5 hours"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -367,6 +391,10 @@ msgstr "תווית חשבון"
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
 msgstr "חשבונות"
+
+#: src/components/UsageBars.tsx
+msgid "across this chat’s model calls"
+msgstr ""
 
 #. placeholder {0}: bot.name
 #. placeholder {0}: group.spaceName
@@ -666,6 +694,10 @@ msgstr ""
 msgid "Answered: {answer}"
 msgstr "נענה: {answer}"
 
+#: src/components/UsageBars.tsx
+msgid "Anthropic Claude · account allowance"
+msgstr ""
+
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr "כל מודל, עם מפתח משלך"
@@ -687,6 +719,10 @@ msgstr "מפתח API"
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
 msgstr "header של מפתח API"
+
+#: src/components/UsageBars.tsx
+msgid "API-price equivalent unavailable"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Appearance"
@@ -733,6 +769,10 @@ msgstr "ארגומנטים"
 #: src/pages/Shell.tsx
 msgid "Artifacts"
 msgstr "תוצרים"
+
+#: src/components/UsageBars.tsx
+msgid "as of {allowanceTime}"
+msgstr ""
 
 #: src/components/UsageBars.tsx
 msgid "as of {time}"
@@ -790,6 +830,10 @@ msgstr "בשעה {0}"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "בשעה {timeSelect}"
+
+#: src/components/UsageBars.tsx
+msgid "At least {count} waiting items"
+msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
@@ -878,6 +922,10 @@ msgstr "סדר מודלי הגיבוי"
 msgid "Backup models saved."
 msgstr "מודלי הגיבוי נשמרו."
 
+#: src/pages/Shell.tsx
+msgid "Backups: {headerBackupLabel}"
+msgstr ""
+
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
 msgid "Banks (comma-separated)"
 msgstr ""
@@ -939,6 +987,10 @@ msgid "Bot"
 msgstr "בוט"
 
 #: src/pages/Shell.tsx
+msgid "Bot override"
+msgstr ""
+
+#: src/pages/Shell.tsx
 msgid "Bot screen"
 msgstr "מסך הבוט"
 
@@ -983,7 +1035,7 @@ msgid "Built-in"
 msgstr "מובנה"
 
 #: src/components/UsageBars.tsx
-msgid "cache {cache}% today"
+msgid "Cache today"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -1155,11 +1207,11 @@ msgid "Choose file"
 msgstr "בחירת קובץ"
 
 #: src/components/UsageBars.tsx
-msgid "Claude · 5 hours"
+msgid "Claude 5 hours {fiveHourPct}% used"
 msgstr ""
 
 #: src/components/UsageBars.tsx
-msgid "Claude · this week"
+msgid "Claude week {weeklyPct}% used"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -1365,6 +1417,10 @@ msgstr "מוגדר על ידי ההתקנה"
 msgid "Configured servers"
 msgstr "שרתים מוגדרים"
 
+#: src/pages/Shell.tsx
+msgid "Configured: {headerConfiguredLabel}"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Confirm delete"
@@ -1455,11 +1511,7 @@ msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "החיבור ל-{0} עדיין ממתין. אפשר לסגור את החלון ולבדוק שוב."
 
 #: src/components/UsageBars.tsx
-msgid "context {size}"
-msgstr ""
-
-#: src/components/UsageBars.tsx
-msgid "context {size} of {limit} ({pct}%)"
+msgid "Context"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2067,6 +2119,10 @@ msgstr "ביטוי Cron"
 msgid "Current password"
 msgstr "סיסמה נוכחית"
 
+#: src/pages/Shell.tsx
+msgid "Current run"
+msgstr ""
+
 #: src/pages/shell/bot-credentials.tsx
 msgid "Custom header"
 msgstr "כותרת מותאמת אישית"
@@ -2235,6 +2291,10 @@ msgstr "עדכון לאפליקציית הדסקטופ"
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "פרטים"
+
+#: src/components/UsageBars.tsx
+msgid "Diagnostics"
+msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "Direct chat"
@@ -2931,6 +2991,14 @@ msgstr "ידע"
 msgid "Language"
 msgstr "שפה"
 
+#: src/components/UsageBars.tsx
+msgid "Last call"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Last call context"
+msgstr ""
+
 #. placeholder {0}: new Date(state.checkedAt).toLocaleString()
 #: src/pages/RoutineEditor.tsx
 msgid "Last check {0}: changed"
@@ -3322,6 +3390,10 @@ msgstr "אפשרויות מודל"
 msgid "Model spend uses your provider keys."
 msgstr "העלות של המודלים מחויבת דרך מפתחות הספק שלך."
 
+#: src/pages/Shell.tsx
+msgid "Model unavailable"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
 msgstr "המודל עודכן."
@@ -3331,6 +3403,10 @@ msgstr "המודל עודכן."
 #: src/pages/SettingsOverlay.tsx
 msgid "Models"
 msgstr "מודלים"
+
+#: src/pages/Shell.tsx
+msgid "Models by participant"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Models for the server owner’s default space."
@@ -3597,6 +3673,10 @@ msgstr "אין כלים זמינים."
 msgid "No trigger"
 msgstr "ללא טריגר"
 
+#: src/pages/Shell.tsx
+msgid "None"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "עדיין אין"
@@ -3665,6 +3745,10 @@ msgstr "חיבור OAuth נכשל"
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
 msgstr "תוקף OAuth פג"
+
+#: src/components/UsageBars.tsx
+msgid "Observed"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "On a schedule"
@@ -3952,6 +4036,10 @@ msgstr "קלט מוגן"
 msgid "Provider"
 msgstr "ספק"
 
+#: src/components/UsageBars.tsx
+msgid "Provider account allowance unavailable"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
@@ -4073,6 +4161,7 @@ msgstr "יוצר מחדש את המחשב"
 
 #: src/App.tsx
 #: src/components/ErrorBoundary.tsx
+#: src/components/UsageBars.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "Refresh"
 msgstr "רענון"
@@ -4227,11 +4316,8 @@ msgstr "תשובה ל-{0}"
 msgid "Research & writing"
 msgstr "מחקר וכתיבה"
 
-#: src/components/UsageBars.tsx
-msgid "reset"
-msgstr ""
-
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/components/UsageBars.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "איפוס"
@@ -4252,12 +4338,20 @@ msgstr "לאפס את המחשב?"
 msgid "Reset password"
 msgstr "איפוס סיסמה"
 
+#: src/components/UsageBars.tsx
+msgid "Reset time"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Reset time unavailable"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "איפוס הסיסמה"
 
 #: src/components/UsageBars.tsx
-msgid "resets in {until}"
+msgid "Resets in {until}"
 msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
@@ -4818,6 +4912,7 @@ msgstr "המרחב השתנה. יש לפתוח מחדש את המודלים כד
 msgid "Space changed. Reopen Models to save its backup list."
 msgstr "המרחב השתנה. יש לפתוח מחדש את המודלים כדי לשמור את רשימת הגיבוי שלו."
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "ברירת המחדל של המרחב"
@@ -4873,10 +4968,23 @@ msgstr "מתחיל"
 msgid "Starting…"
 msgstr "מתחיל…"
 
+#: src/components/UsageBars.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
 msgid "Status"
 msgstr "סטטוס"
+
+#: src/components/UsageBars.tsx
+msgid "Status incomplete"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status needs attention"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status refresh unavailable"
+msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Steps"
@@ -5140,6 +5248,7 @@ msgstr "השרת הזה כבר מחובר. יש לנתק אותו קודם כד�
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "התחברות עם המנוי הזה עדיין לא זמינה ב-Rakazo. אפשר להשתמש בפרטי גישה של ההתקנה או לבחור ספק אחר."
 
+#: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
 msgstr "השבוע"
@@ -5180,6 +5289,10 @@ msgstr "אל:"
 #: src/pages/shell/chat-context.tsx
 msgid "Today"
 msgstr "היום"
+
+#: src/components/UsageBars.tsx
+msgid "tokens"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
@@ -5259,6 +5372,8 @@ msgid "Unassigned"
 msgstr "ללא שיוך"
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/UsageBars.tsx
+#: src/pages/Shell.tsx
 msgid "Unavailable"
 msgstr "לא זמין"
 
@@ -5277,6 +5392,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Unknown tool"
 msgstr "כלי לא ידוע"
+
+#: src/components/UsageBars.tsx
+msgid "unknown window"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -5332,6 +5451,7 @@ msgid "Update progress"
 msgstr "התקדמות העדכון"
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/UsageBars.tsx
 msgid "Updated"
 msgstr "עודכן"
 
@@ -5371,6 +5491,10 @@ msgstr "דחוף"
 #: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "שימוש"
+
+#: src/components/UsageBars.tsx
+msgid "Usage / Details"
+msgstr ""
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'
 #. placeholder {0}: deviceTimezone.replaceAll("_", " ")
@@ -5461,6 +5585,10 @@ msgstr "ממתין שה-API יחזור לפעול…"
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"
 msgstr "ממתין בתור…"
+
+#: src/components/UsageBars.tsx
+msgid "Waiting on you"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"

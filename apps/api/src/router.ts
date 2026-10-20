@@ -6308,6 +6308,7 @@ export function createRouter(deps: RouterDeps) {
           enabled: true,
           claude: reading
             ? {
+                provider: reading.provider,
                 fiveHour: subscriptionWindow(reading.fiveHourUtil, reading.fiveHourResetAt, now),
                 sevenDay: subscriptionWindow(reading.sevenDayUtil, reading.sevenDayResetAt, now),
                 status: reading.status,

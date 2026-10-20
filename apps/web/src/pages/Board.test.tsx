@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../lib/rpc", () => ({ rpc: api }));
 vi.mock("../lib/relative-time", () => ({ formatRelativeTime: () => "5m ago" }));
 vi.mock("./WindowChrome", () => ({ WindowChrome: () => null }));
+vi.mock("../components/UsageBars", () => ({ UsageTopBar: () => null }));
 vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, index) => text + part + String(values[index] ?? ""), "");

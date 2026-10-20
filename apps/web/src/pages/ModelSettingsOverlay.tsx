@@ -72,6 +72,7 @@ import {
   runModelConnectionPreflight,
   unavailableSelectedModel,
 } from "../lib/model-connection-preflight";
+import { notifyModelSettingsChanged } from "../lib/model-settings-events";
 import { useSpaceRpc } from "../lib/space-rpc";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
 import { errorText } from "../lib/user-error";
@@ -153,6 +154,7 @@ export function ModelSettingsOverlay({
     onClearError: () => setError(null),
     onError: setError,
     onFinished: async () => {
+      notifyModelSettingsChanged();
       await refresh();
     },
   });
@@ -556,6 +558,7 @@ export function ModelSettingsOverlay({
             }
           : {}),
       });
+      notifyModelSettingsChanged();
       await refresh();
       setNotice(isOpenAiCompatible ? t`Model updated.` : t`Now using ${selected.label}.`);
     } catch (err) {
@@ -660,6 +663,7 @@ export function ModelSettingsOverlay({
               label: selected.providerName ?? selected.provider,
             },
       );
+      notifyModelSettingsChanged();
       if (!settingsOnly) setApiKey("");
       await refresh();
       detailScrollRef.current?.scrollTo({ top: 0 });
@@ -680,6 +684,7 @@ export function ModelSettingsOverlay({
     setPending("disconnect");
     try {
       await rpc.models.disconnect({ provider: selected.provider });
+      notifyModelSettingsChanged();
       setApiKey("");
       setThinkingLevel(null);
       await refresh();

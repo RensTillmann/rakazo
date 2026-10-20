@@ -127,8 +127,24 @@ msgstr ""
 msgid "{count} decisions"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "{count} issues"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "{count} months"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} not yet asked"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} paused routines"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "{count} waiting items"
 msgstr ""
 
 #: src/lib/billing.ts
@@ -155,6 +171,10 @@ msgstr "il y a {hours} h"
 msgid "{minutes}m ago"
 msgstr "il y a {minutes} min"
 
+#: src/components/UsageBars.tsx
+msgid "{modelProvider} account allowance unavailable"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
 msgid "{name} failed"
@@ -169,6 +189,10 @@ msgstr "{name} terminé"
 #: src/lib/browser-notifications.ts
 msgid "{name} stopped"
 msgstr "{name} arrêté"
+
+#: src/components/UsageBars.tsx
+msgid "{name} usage high"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -254,10 +278,6 @@ msgstr "{provider} a mis trop de temps à répondre. Réessayez."
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} restant · le bot observe, il n'agit pas"
 
-#: src/components/UsageBars.tsx
-msgid "{runs} runs today"
-msgstr ""
-
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -284,7 +304,7 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/components/UsageBars.tsx
-msgid "{tokens} tokens today"
+msgid "{tokens} tokens today · {runs} runs today"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -301,11 +321,15 @@ msgid "@{0}"
 msgstr "@{0}"
 
 #: src/components/UsageBars.tsx
-msgid "≈ ${cost} at API prices"
+msgid "≈ ${cost} at API prices today"
 msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "1 decision"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "5 hours"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -367,6 +391,10 @@ msgstr "Libellé du compte"
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
 msgstr "Comptes"
+
+#: src/components/UsageBars.tsx
+msgid "across this chat’s model calls"
+msgstr ""
 
 #. placeholder {0}: bot.name
 #. placeholder {0}: group.spaceName
@@ -666,6 +694,10 @@ msgstr ""
 msgid "Answered: {answer}"
 msgstr "Répondu : {answer}"
 
+#: src/components/UsageBars.tsx
+msgid "Anthropic Claude · account allowance"
+msgstr ""
+
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr ""
@@ -687,6 +719,10 @@ msgstr "Clé API"
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
 msgstr "En-tête de clé API"
+
+#: src/components/UsageBars.tsx
+msgid "API-price equivalent unavailable"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Appearance"
@@ -733,6 +769,10 @@ msgstr "Arguments"
 #: src/pages/Shell.tsx
 msgid "Artifacts"
 msgstr "Artefacts"
+
+#: src/components/UsageBars.tsx
+msgid "as of {allowanceTime}"
+msgstr ""
 
 #: src/components/UsageBars.tsx
 msgid "as of {time}"
@@ -790,6 +830,10 @@ msgstr "à {0}"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "à {timeSelect}"
+
+#: src/components/UsageBars.tsx
+msgid "At least {count} waiting items"
+msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/pages/Shell.tsx
@@ -878,6 +922,10 @@ msgstr "Ordre des modèles de secours"
 msgid "Backup models saved."
 msgstr "Modèles de secours enregistrés."
 
+#: src/pages/Shell.tsx
+msgid "Backups: {headerBackupLabel}"
+msgstr ""
+
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
 msgid "Banks (comma-separated)"
 msgstr ""
@@ -939,6 +987,10 @@ msgid "Bot"
 msgstr "Bot"
 
 #: src/pages/Shell.tsx
+msgid "Bot override"
+msgstr ""
+
+#: src/pages/Shell.tsx
 msgid "Bot screen"
 msgstr "Écran du bot"
 
@@ -983,7 +1035,7 @@ msgid "Built-in"
 msgstr "Intégré"
 
 #: src/components/UsageBars.tsx
-msgid "cache {cache}% today"
+msgid "Cache today"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -1155,11 +1207,11 @@ msgid "Choose file"
 msgstr "Choisir un fichier"
 
 #: src/components/UsageBars.tsx
-msgid "Claude · 5 hours"
+msgid "Claude 5 hours {fiveHourPct}% used"
 msgstr ""
 
 #: src/components/UsageBars.tsx
-msgid "Claude · this week"
+msgid "Claude week {weeklyPct}% used"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -1365,6 +1417,10 @@ msgstr "Configuré par le déploiement"
 msgid "Configured servers"
 msgstr "Serveurs configurés"
 
+#: src/pages/Shell.tsx
+msgid "Configured: {headerConfiguredLabel}"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Confirm delete"
@@ -1455,11 +1511,7 @@ msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "La connexion à {0} est toujours en attente. Vous pouvez fermer cette fenêtre et réessayer."
 
 #: src/components/UsageBars.tsx
-msgid "context {size}"
-msgstr ""
-
-#: src/components/UsageBars.tsx
-msgid "context {size} of {limit} ({pct}%)"
+msgid "Context"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2067,6 +2119,10 @@ msgstr "Expression Cron"
 msgid "Current password"
 msgstr "Mot de passe actuel"
 
+#: src/pages/Shell.tsx
+msgid "Current run"
+msgstr ""
+
 #: src/pages/shell/bot-credentials.tsx
 msgid "Custom header"
 msgstr ""
@@ -2235,6 +2291,10 @@ msgstr "Mise à jour du bureau"
 #: src/pages/Shell.tsx
 msgid "Details"
 msgstr "Détails"
+
+#: src/components/UsageBars.tsx
+msgid "Diagnostics"
+msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "Direct chat"
@@ -2931,6 +2991,14 @@ msgstr "Connaissances"
 msgid "Language"
 msgstr "Langue"
 
+#: src/components/UsageBars.tsx
+msgid "Last call"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Last call context"
+msgstr ""
+
 #. placeholder {0}: new Date(state.checkedAt).toLocaleString()
 #: src/pages/RoutineEditor.tsx
 msgid "Last check {0}: changed"
@@ -3322,6 +3390,10 @@ msgstr "Options du modèle"
 msgid "Model spend uses your provider keys."
 msgstr "La consommation du modèle utilise vos clés de fournisseur."
 
+#: src/pages/Shell.tsx
+msgid "Model unavailable"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
 msgstr "Modèle mis à jour."
@@ -3331,6 +3403,10 @@ msgstr "Modèle mis à jour."
 #: src/pages/SettingsOverlay.tsx
 msgid "Models"
 msgstr "Modèles"
+
+#: src/pages/Shell.tsx
+msgid "Models by participant"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Models for the server owner’s default space."
@@ -3597,6 +3673,10 @@ msgstr "Aucun outil disponible."
 msgid "No trigger"
 msgstr "Aucun déclencheur"
 
+#: src/pages/Shell.tsx
+msgid "None"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "Aucun pour le moment"
@@ -3665,6 +3745,10 @@ msgstr "Échec de la connexion OAuth"
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
 msgstr "OAuth expiré"
+
+#: src/components/UsageBars.tsx
+msgid "Observed"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "On a schedule"
@@ -3952,6 +4036,10 @@ msgstr ""
 msgid "Provider"
 msgstr "Fournisseur"
 
+#: src/components/UsageBars.tsx
+msgid "Provider account allowance unavailable"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
@@ -4073,6 +4161,7 @@ msgstr "Recréation de l'ordinateur"
 
 #: src/App.tsx
 #: src/components/ErrorBoundary.tsx
+#: src/components/UsageBars.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "Refresh"
 msgstr "Actualiser"
@@ -4227,11 +4316,8 @@ msgstr ""
 msgid "Research & writing"
 msgstr "Recherche et rédaction"
 
-#: src/components/UsageBars.tsx
-msgid "reset"
-msgstr ""
-
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/components/UsageBars.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "Réinitialiser"
@@ -4252,12 +4338,20 @@ msgstr "Réinitialiser l'ordinateur ?"
 msgid "Reset password"
 msgstr "Réinitialiser le mot de passe"
 
+#: src/components/UsageBars.tsx
+msgid "Reset time"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Reset time unavailable"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "Réinitialisez votre mot de passe"
 
 #: src/components/UsageBars.tsx
-msgid "resets in {until}"
+msgid "Resets in {until}"
 msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
@@ -4818,6 +4912,7 @@ msgstr "L’espace a changé. Rouvrez Modèles pour charger sa liste de secours.
 msgid "Space changed. Reopen Models to save its backup list."
 msgstr "L’espace a changé. Rouvrez Modèles pour enregistrer sa liste de secours."
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "Défaut de l'espace"
@@ -4873,9 +4968,22 @@ msgstr "Démarrage"
 msgid "Starting…"
 msgstr "Démarrage en cours…"
 
+#: src/components/UsageBars.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
 msgid "Status"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status incomplete"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status needs attention"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Status refresh unavailable"
 msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
@@ -5140,6 +5248,7 @@ msgstr "Ce serveur est déjà connecté. Déconnectez-le d'abord pour l'autorise
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "Cette connexion par abonnement n'est pas encore disponible dans Rakazo. Utilisez un identifiant de déploiement ou choisissez un autre fournisseur."
 
+#: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
 msgstr "Cette semaine"
@@ -5180,6 +5289,10 @@ msgstr "À :"
 #: src/pages/shell/chat-context.tsx
 msgid "Today"
 msgstr "Aujourd'hui"
+
+#: src/components/UsageBars.tsx
+msgid "tokens"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
@@ -5259,6 +5372,8 @@ msgid "Unassigned"
 msgstr "Non assigné"
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/UsageBars.tsx
+#: src/pages/Shell.tsx
 msgid "Unavailable"
 msgstr "Indisponible"
 
@@ -5276,6 +5391,10 @@ msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Unknown tool"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "unknown window"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -5332,6 +5451,7 @@ msgid "Update progress"
 msgstr "Progression de la mise à jour"
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/UsageBars.tsx
 msgid "Updated"
 msgstr "Mis à jour"
 
@@ -5371,6 +5491,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "Utilisation"
+
+#: src/components/UsageBars.tsx
+msgid "Usage / Details"
+msgstr ""
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'
 #. placeholder {0}: deviceTimezone.replaceAll("_", " ")
@@ -5461,6 +5585,10 @@ msgstr "En attente du retour de l'API…"
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"
 msgstr "En attente dans la file…"
+
+#: src/components/UsageBars.tsx
+msgid "Waiting on you"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"

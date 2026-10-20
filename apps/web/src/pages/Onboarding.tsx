@@ -51,6 +51,7 @@ import {
   runModelConnectionPreflight,
   unavailableSelectedModel,
 } from "../lib/model-connection-preflight";
+import { notifyModelSettingsChanged } from "../lib/model-settings-events";
 import { rpc } from "../lib/rpc";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
 import { errorText } from "../lib/user-error";
@@ -188,6 +189,7 @@ export function OnboardingPage() {
           // The connection itself succeeded; the effort stays adjustable in Models.
         }
       }
+      notifyModelSettingsChanged();
       setStep(nextStepAfterModel(needsIntegrationSetup));
     },
   });
@@ -503,6 +505,7 @@ export function OnboardingPage() {
       if (level && !isOpenAiCompatible && modelId) {
         await rpc.models.setDefault({ provider, modelId, thinkingLevel: level });
       }
+      notifyModelSettingsChanged();
       setStep(nextStepAfterModel(needsIntegrationSetup));
     } catch (err) {
       setError(errorText(err, t`Could not save model`));
