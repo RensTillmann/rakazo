@@ -29,6 +29,7 @@ import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
 import { ApprovalDetail } from "./ApprovalDetail";
 import { HoldToTalkControls, HoldToTalkStrip, useHoldToTalk } from "./composer/HoldToTalk";
+import { ReplyReview, useApprovalReview } from "./ReplyReview";
 
 /** `pendingAction` while a typed answer (with its files) is being sent; never an action id. */
 const TYPED_ANSWER_ACTION = "\u0000typed";
@@ -149,6 +150,30 @@ export function AskCard({
   });
   const submitting = pendingAction !== null;
   const approvalActions = isApprovalAskBlock(block) ? block.actions : undefined;
+  const replyReviewTarget =
+    approvalActions && !block.instructionUpdate && block.status !== "answered"
+      ? block.approvalEffectId
+      : undefined;
+  const replyReview = useApprovalReview(replyReviewTarget);
+  // The old server detail only identifies reply presentation; it is never a body/context source.
+  const knownReply = Boolean(
+    replyReviewTarget &&
+      !block.detailFormat &&
+      /^Ticket: .+$/m.test(block.detail ?? "") &&
+      /^Message: /m.test(block.detail ?? ""),
+  );
+  const needsFullReply = (knownReply || Boolean(replyReview.review)) && !replyReview.review;
+  const approvalDetail = replyReview.review
+    ? block.detail
+        ?.split("\n")
+        .filter(
+          (line) =>
+            !/^(?:Ticket|Status|Tags|Expect last comment ID|Expected last comment|Message): /.test(
+              line,
+            ),
+        )
+        .join("\n")
+    : block.detail;
   const askActions = block.actions;
   const displayActions = block.instructionUpdate
     ? askActions?.flatMap((action) =>
@@ -161,6 +186,7 @@ export function AskCard({
 
   async function submitAnswer(value: string) {
     if (submitting) return;
+    if (needsFullReply && (value === "allow" || value === "always")) return;
     if (draftEmpty) {
       setError(t`The reply is empty`);
       return;
@@ -274,6 +300,8 @@ export function AskCard({
       <div className="text-[15.5px] leading-[1.5] text-foreground">
         {block.instructionUpdate ? (
           <Trans>Update instructions?</Trans>
+        ) : replyReview.review ? (
+          <Trans>Send public Zendesk reply?</Trans>
         ) : (
           <ChatMarkdown>{block.text}</ChatMarkdown>
         )}
@@ -288,9 +316,28 @@ export function AskCard({
             : block.credential.origin}
         </div>
       ) : null}
-      {block.detail && !secretInput ? (
+      {replyReview.review ? (
+        <ReplyReview
+          review={replyReview.review}
+          retry={replyReview.retry}
+          loading={replyReview.loading}
+        />
+      ) : needsFullReply && replyReview.loading ? (
+        <div className="mt-3 text-sm text-muted-foreground" role="status">
+          <Trans>Loading full reply…</Trans>
+        </div>
+      ) : null}
+      {needsFullReply && !replyReview.loading ? (
+        <div className="mt-3 text-sm text-muted-foreground" role="status">
+          <Trans>Full approval review unavailable.</Trans>
+          <Button type="button" variant="ghost" size="sm" onClick={replyReview.retry}>
+            <Trans>Retry</Trans>
+          </Button>
+        </div>
+      ) : null}
+      {approvalDetail && !secretInput ? (
         approvalActions && !block.instructionUpdate && !block.detailFormat ? (
-          <ApprovalDetail detail={block.detail} />
+          <ApprovalDetail detail={approvalDetail} />
         ) : (
           <pre
             className={
@@ -299,7 +346,7 @@ export function AskCard({
                 : "mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.7] text-muted-foreground"
             }
           >
-            {block.detail}
+            {approvalDetail}
           </pre>
         )
       ) : null}
@@ -384,7 +431,9 @@ export function AskCard({
               key={action.id}
               variant={approvalActions && action.id === "allow" ? "default" : "outline"}
               className={`h-auto min-w-0 whitespace-normal px-3.5 py-3 text-start font-normal ${approvalActions ? "" : "w-full justify-start"}`}
-              disabled={submitting}
+              disabled={
+                submitting || (needsFullReply && (action.id === "allow" || action.id === "always"))
+              }
               onClick={() =>
                 action.id === "edit" && block.instructionUpdate
                   ? setEditing(true)

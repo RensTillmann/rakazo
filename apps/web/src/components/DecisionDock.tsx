@@ -61,6 +61,7 @@ export function DecisionDock({
   onAnswered,
   voice,
   attachmentMaxBytes,
+  onFeedback,
 }: {
   userId: string | null;
   currentThreadId: string | null;
@@ -76,6 +77,8 @@ export function DecisionDock({
   voice?: AskVoice;
   /** The chat's upload limit; set = a question card's answer can carry files. */
   attachmentMaxBytes?: number;
+  /** Reports references only; never answers or advances the selected card. */
+  onFeedback?: (decision: PendingDecision) => void;
 }) {
   const { t } = useLingui();
   const [decisions, setDecisions] = useState<PendingDecision[]>([]);
@@ -299,7 +302,7 @@ export function DecisionDock({
             large ? "sm:w-[min(1200px,calc(100%-2rem))]" : ""
           }`}
         >
-          <header className="flex items-center gap-2 border-b border-border px-3 py-2">
+          <header className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
             <BotAvatar color={color} identity={current.botId} size={24} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13.5px] font-medium text-foreground">
@@ -355,6 +358,15 @@ export function DecisionDock({
             >
               <Minus size={16} aria-hidden="true" />
             </button>
+            {onFeedback ? (
+              <button
+                type="button"
+                onClick={() => onFeedback(current)}
+                className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <Trans>Feedback to Elena</Trans>
+              </button>
+            ) : null}
           </header>
           <div
             data-testid="decision-dock-body"

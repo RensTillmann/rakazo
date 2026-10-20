@@ -1,6 +1,7 @@
 import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
+import { ApprovalReviewSchema } from "./approval-review.js";
 import {
   ARTIFACT_DESCRIPTION_MAX_LENGTH,
   ARTIFACT_NAME_MAX_LENGTH,
@@ -1040,6 +1041,9 @@ export const appContract = {
       // The longest origin: a scheme, a 253-character host name and a port.
       .input(z.object({ origin: z.string().max("https://".length + 253 + ":65535".length) }))
       .output(z.object({ icon: z.string().nullable(), retry: z.boolean().optional() })),
+  },
+  approvals: {
+    review: oc.input(z.object({ effectId: Id }).strict()).output(ApprovalReviewSchema.nullable()),
   },
   /** Fleet: every pending card whose run waits for the caller, oldest first. */
   decisions: {

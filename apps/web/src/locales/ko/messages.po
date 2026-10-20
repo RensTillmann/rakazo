@@ -1261,6 +1261,10 @@ msgstr ""
 msgid "Close"
 msgstr "닫기"
 
+#: src/components/FleetFeedback.tsx
+msgid "Close (keep draft)"
+msgstr ""
+
 #: src/components/computer/ComputerWorkspace.tsx
 msgid "Close {title}"
 msgstr ""
@@ -1728,6 +1732,10 @@ msgstr "{name}을 다운로드하지 못했습니다. 다시 시도해 주세요
 msgid "Could not download file"
 msgstr ""
 
+#: src/components/FleetFeedback.tsx
+msgid "Could not find Elena. Retry when connected."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "도구 연결을 추가하지 못했습니다."
@@ -1967,6 +1975,10 @@ msgstr "선택 내용을 저장하지 못했습니다."
 msgid "Could not search catalog"
 msgstr ""
 
+#: src/components/FleetFeedback.tsx
+msgid "Could not send feedback. Your draft is preserved; please retry."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "재설정 이메일을 보낼 수 없습니다"
@@ -2134,6 +2146,14 @@ msgstr ""
 msgid "Custom header"
 msgstr ""
 
+#: src/components/ReplyReview.tsx
+msgid "Customer context unavailable."
+msgstr ""
+
+#: src/components/ReplyReview.tsx
+msgid "Customer message"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Customer support"
 msgstr "고객 지원"
@@ -2287,6 +2307,10 @@ msgstr "이 Bot이 하는 일을 짧게 설명하세요"
 msgid "Description"
 msgstr "설명"
 
+#: src/components/FleetFeedback.tsx
+msgid "Description (required)"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Desktop app"
 msgstr ""
@@ -2313,6 +2337,10 @@ msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Disabled tools"
+msgstr ""
+
+#: src/components/FleetFeedback.tsx
+msgid "Discard draft and start new report"
 msgstr ""
 
 #: src/components/composer/HoldToTalk.tsx
@@ -2381,6 +2409,7 @@ msgid "Don’t have an account?"
 msgstr "계정이 없나요?"
 
 #: src/components/FlagMessageDialog.tsx
+#: src/components/FleetFeedback.tsx
 #: src/lib/ticket-status.ts
 #: src/pages/ActivityList.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -2562,6 +2591,10 @@ msgstr "{0} 펼치기"
 msgid "Expand {label}"
 msgstr "{label} 펼치기"
 
+#: src/components/ReplyReview.tsx
+msgid "Expected last comment"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "내보내기"
@@ -2610,6 +2643,16 @@ msgstr "실패했습니다."
 msgid "Failure handling"
 msgstr "실패했을 때 처리"
 
+#: src/components/FleetFeedback.tsx
+msgid "Feedback"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+#: src/components/FleetFeedback.tsx
+#: src/pages/Shell.tsx
+msgid "Feedback to Elena"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Fields that mark a change"
 msgstr "변경을 나타내는 필드"
@@ -2655,6 +2698,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Find models"
 msgstr "모델 찾기"
+
+#: src/components/FleetFeedback.tsx
+msgid "Finding the configured feedback bot in this Space…"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -2704,6 +2751,10 @@ msgstr "비밀번호를 잊으셨나요?"
 msgid "Free"
 msgstr "무료"
 
+#: src/components/ReplyReview.tsx
+msgid "Freshness could not be verified."
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "From"
 msgstr ""
@@ -2711,6 +2762,10 @@ msgstr ""
 #. placeholder {0}: filters.dateRange.from
 #: src/pages/ActivityList.tsx
 msgid "From {0}"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Full approval review unavailable."
 msgstr ""
 
 #: src/pages/WindowChrome.tsx
@@ -2869,6 +2924,10 @@ msgstr "이미지 업로드 영역"
 msgid "Import OpenAPI JSON"
 msgstr "OpenAPI JSON 가져오기"
 
+#: src/components/FleetFeedback.tsx
+msgid "Improvement"
+msgstr ""
+
 #: src/lib/ticket-status.ts
 msgid "In progress"
 msgstr ""
@@ -2883,6 +2942,10 @@ msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
+msgstr ""
+
+#: src/components/FleetFeedback.tsx
+msgid "Included context references"
 msgstr ""
 
 #: src/components/call/VoiceChatCard.tsx
@@ -2960,6 +3023,10 @@ msgstr "이 Bot만 사용"
 
 #: src/pages/Artifacts.tsx
 msgid "Isolated preview — no access to your account"
+msgstr ""
+
+#: src/components/FleetFeedback.tsx
+msgid "Issue"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -3097,6 +3164,10 @@ msgstr "웹 이미지 자동으로 불러오기"
 #: src/pages/ActivityList.tsx
 msgid "Loading activity…"
 msgstr "활동을 불러오는 중…"
+
+#: src/components/AskCard.tsx
+msgid "Loading full reply…"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading integrations…"
@@ -3315,6 +3386,10 @@ msgstr "메시지 작성기"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Message event"
+msgstr ""
+
+#: src/components/FleetFeedback.tsx
+msgid "Message feedback is limited to {FLAG_NOTE_MAX_LENGTH} characters including the type and context references. Shorten the description before retrying; your full draft is preserved."
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -3557,6 +3632,10 @@ msgstr "새 스페이스"
 msgid "New ticket"
 msgstr ""
 
+#: src/components/ReplyReview.tsx
+msgid "Newer comments exist since this reply was proposed."
+msgstr ""
+
 #: src/components/DecisionDock.tsx
 msgid "Next decision"
 msgstr ""
@@ -3649,6 +3728,10 @@ msgstr "나열된 모델이 없습니다."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "검색된 AI 서비스가 없습니다."
+
+#: src/components/ReplyReview.tsx
+msgid "No public customer message found."
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "No remote MCP servers found"
@@ -3820,6 +3903,10 @@ msgstr ""
 
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Open computer settings"
+msgstr ""
+
+#: src/components/FleetFeedback.tsx
+msgid "Open Elena’s chat"
 msgstr ""
 
 #: src/components/markdown-link-prompt.tsx
@@ -4046,6 +4133,10 @@ msgstr ""
 msgid "Prompt"
 msgstr ""
 
+#: src/components/ReplyReview.tsx
+msgid "Proposed reply"
+msgstr ""
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Protected input"
 msgstr ""
@@ -4185,9 +4276,17 @@ msgstr ""
 msgid "Refresh"
 msgstr "새로고침"
 
+#: src/components/ReplyReview.tsx
+msgid "Refresh customer context"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refresh view"
 msgstr "화면 새로고침"
+
+#: src/components/ReplyReview.tsx
+msgid "Refreshing customer context…"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refreshing…"
@@ -4411,6 +4510,7 @@ msgid "Resume room"
 msgstr ""
 
 #: src/components/AccountAccess.tsx
+#: src/components/AskCard.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelBackupsSettings.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -4424,6 +4524,10 @@ msgstr "지금 다시 시도"
 
 #: src/pages/Shell.tsx
 msgid "Retry screen"
+msgstr ""
+
+#: src/components/FleetFeedback.tsx
+msgid "Retry send to Elena"
 msgstr ""
 
 #. placeholder {0}: call.botName
@@ -4684,6 +4788,10 @@ msgstr "삭제 코드 보내기"
 msgid "Send it"
 msgstr "보내기"
 
+#: src/components/AskCard.tsx
+msgid "Send public Zendesk reply?"
+msgstr ""
+
 #: src/components/composer/HoldToTalk.tsx
 msgid "Send recording"
 msgstr ""
@@ -4692,12 +4800,21 @@ msgstr ""
 msgid "Send reset link"
 msgstr "재설정 링크 보내기"
 
+#: src/components/FleetFeedback.tsx
+msgid "Send to Elena"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Send with Enter"
 msgstr "Enter 키로 전송"
 
+#: src/components/FleetFeedback.tsx
+msgid "Send your exact description and page/card references to Elena in this Space. This does not answer or close any decision. Do not include passwords or credentials."
+msgstr ""
+
 #: src/components/AskCard.tsx
 #: src/components/FlagMessageDialog.tsx
+#: src/components/FleetFeedback.tsx
 msgid "Sending…"
 msgstr "보내는 중…"
 
@@ -4709,6 +4826,10 @@ msgstr ""
 #. placeholder {0}: flag.botName
 #: src/components/FlagMessageDialog.tsx
 msgid "Sent to {0}."
+msgstr ""
+
+#: src/components/FleetFeedback.tsx
+msgid "Sent to Elena."
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -4991,6 +5112,7 @@ msgstr "시작 중"
 msgid "Starting…"
 msgstr "시작하는 중…"
 
+#: src/components/ReplyReview.tsx
 #: src/components/UsageBars.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
@@ -5081,6 +5203,10 @@ msgstr "전환 중…"
 msgid "System"
 msgstr "시스템"
 
+#: src/components/ReplyReview.tsx
+msgid "Tags"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Take control"
 msgstr "제어권 가져오기"
@@ -5111,6 +5237,10 @@ msgstr "Teams 메시지"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Teams not enabled"
+msgstr ""
+
+#: src/components/ReplyReview.tsx
+msgid "Technical details"
 msgstr ""
 
 #: src/components/computer/ComputerWorkspace.tsx
@@ -5149,9 +5279,17 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침하세요."
 
+#: src/components/FleetFeedback.tsx
+msgid "The configured feedback target is unavailable in this Space. Ask a Space administrator to check the feedback bot, then retry."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "연결 시간이 초과되었습니다."
+
+#: src/components/FleetFeedback.tsx
+msgid "The current Space changed. Return to this Space before sending, or reload the app in the intended Space. Your draft is preserved."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -5219,9 +5357,17 @@ msgstr ""
 msgid "This file is not valid UTF-8 text."
 msgstr ""
 
+#: src/components/FleetFeedback.tsx
+msgid "This kept draft still uses its original context, not the newly opened page or card."
+msgstr ""
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "이 Mac"
+
+#: src/components/FleetFeedback.tsx
+msgid "This message has no thread reference. Your draft is preserved; reopen feedback from the original message."
+msgstr ""
 
 #: src/pages/Artifacts.tsx
 msgid "This month"
@@ -5274,6 +5420,10 @@ msgstr "이 구독 로그인 방식은 아직 Rakazo에서 지원되지 않습�
 #: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
+msgstr ""
+
+#: src/components/ReplyReview.tsx
+msgid "Ticket"
 msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
@@ -5378,6 +5528,7 @@ msgstr "다시 시도"
 msgid "Try the test again."
 msgstr "테스트를 다시 시도하세요."
 
+#: src/components/FleetFeedback.tsx
 #: src/pages/shell/bot-credentials.tsx
 msgid "Type"
 msgstr ""

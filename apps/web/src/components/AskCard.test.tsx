@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ApprovalReview } from "@rakazo/contracts";
 import { selectedAskActionLabel } from "@rakazo/core";
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -8,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AnsweredByLine, type AskBlock, AskCard } from "./AskCard";
 
 // vi.mock factories run before module code, so the shared lingui stub is hoisted with them.
-const { joinTemplate, dictationMock } = vi.hoisted(() => ({
+const { joinTemplate, dictationMock, reviewRpc } = vi.hoisted(() => ({
   joinTemplate: (strings: TemplateStringsArray, ...values: unknown[]) =>
     strings.reduce(
       (text, part, index) => text + part + (index < values.length ? String(values[index]) : ""),
@@ -20,6 +21,7 @@ const { joinTemplate, dictationMock } = vi.hoisted(() => ({
     submitHold: () => {},
     stop: () => {},
   },
+  reviewRpc: { approvals: { review: vi.fn(async (): Promise<ApprovalReview | null> => null) } },
 }));
 
 vi.mock("@lingui/core/macro", () => ({ t: joinTemplate }));
@@ -29,6 +31,7 @@ vi.mock("@lingui/react/macro", () => ({
 }));
 vi.mock("../lib/rpc", () => ({ rpc: {} }));
 vi.mock("../lib/dictation", () => ({ dictation: dictationMock }));
+vi.mock("../lib/space-rpc", () => ({ useSpaceRpc: () => reviewRpc }));
 
 describe("AnsweredByLine", () => {
   it("names the answering device and time", () => {
@@ -346,4 +349,136 @@ describe("AskCard reply draft", () => {
     container.remove();
     vi.unstubAllGlobals();
   });
+});
+
+describe("AskCard reply approval review", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  const onAnswer = vi.fn(async () => {});
+  const proposal = `Hello,\n\n${"Complete reply. ".repeat(400)}FINAL Ω`;
+  const review: ApprovalReview = {
+    ticket: "42",
+    proposedReply: proposal,
+    status: "pending",
+    tags: ["reviewed"],
+    expectedLastCommentId: "10",
+    customerContext: { status: "unavailable" },
+  };
+  const block: AskBlock = {
+    kind: "ask",
+    text: "Approve tool?",
+    status: "pending",
+    approvalEffectId: "effect-reply",
+    detail:
+      "Ticket: 42\nStatus: pending\nTags: reviewed\nExpect last comment ID: 10\nMessage: clipped preview\nWhy: Customer requested help\nSafety check: Verified policy\nThis action is never automatic.",
+    actions: [
+      { id: "allow", label: "Allow" },
+      { id: "deny", label: "Deny" },
+    ],
+  };
+  const button = (label: string) =>
+    [...container.querySelectorAll("button")].find((element) => element.textContent === label)!;
+  const render = (card = block) =>
+    act(async () => {
+      root.render(<AskCard block={card} canAnswer onAnswer={onAnswer} />);
+    });
+
+  beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    reviewRpc.approvals.review.mockReset();
+    onAnswer.mockClear();
+    container = document.createElement("div");
+    root = createRoot(container);
+  });
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps decision reasons alongside the complete proposal without duplicate clipped metadata", async () => {
+    reviewRpc.approvals.review.mockResolvedValue(review);
+    await render();
+    expect(container.querySelector('[aria-label="Proposed reply"] > div')?.textContent).toBe(
+      proposal,
+    );
+    expect(container.textContent).toContain("Customer requested help");
+    expect(container.textContent).toContain("Verified policy");
+    expect(container.textContent).toContain("never automatic");
+    expect(container.textContent).not.toContain("clipped preview");
+    expect(container.textContent).not.toContain("Expect last comment ID:");
+    expect(button("Allow once").disabled).toBe(false);
+  });
+
+  it("leaves historical approvals unchanged without reading current customer context", async () => {
+    await render({ ...block, status: "answered", answer: "allow" });
+    expect(reviewRpc.approvals.review).not.toHaveBeenCalled();
+    expect(container.querySelector('[aria-label="Proposed reply"]')).toBeNull();
+    expect(container.textContent).toContain("Allowed once");
+    expect(container.textContent).toContain("clipped preview");
+  });
+
+  it("blocks blind approval during loading and failure but still lets the user deny", async () => {
+    let reject!: (error: Error) => void;
+    reviewRpc.approvals.review.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    await render();
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(button("Allow once").disabled).toBe(true);
+    expect(button("Deny").disabled).toBe(false);
+    await act(async () => reject(new Error("offline")));
+    expect(button("Allow once").disabled).toBe(true);
+    expect(button("Retry")).toBeDefined();
+    expect(container.querySelector('[aria-label="Proposed reply"]')).toBeNull();
+    await act(async () => button("Deny").click());
+    expect(onAnswer).toHaveBeenCalledWith("deny", undefined, undefined, undefined);
+  });
+
+  it("keeps the full reply visible and prevents overlapping refreshes when a retry fails", async () => {
+    let reject!: (error: Error) => void;
+    reviewRpc.approvals.review.mockResolvedValueOnce(review).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    await render();
+    const refresh = button("Refresh customer context");
+    await act(async () => {
+      refresh.click();
+      refresh.click();
+    });
+    expect(reviewRpc.approvals.review).toHaveBeenCalledTimes(2);
+    expect(refresh.disabled).toBe(true);
+    expect(container.querySelector('[aria-label="Proposed reply"] > div')?.textContent).toBe(
+      proposal,
+    );
+    await act(async () => reject(new Error("offline")));
+    expect(container.querySelector('[aria-label="Proposed reply"] > div')?.textContent).toBe(
+      proposal,
+    );
+    expect(button("Refresh customer context").disabled).toBe(false);
+  });
+
+  it.each([
+    { result: "failure", detailFormat: undefined },
+    { result: "not a reply", detailFormat: undefined },
+    { result: "failure", detailFormat: "code" as const },
+    { result: "not a reply", detailFormat: "code" as const },
+  ])(
+    "does not change unrelated approvals after $result ($detailFormat)",
+    async ({ result, detailFormat }) => {
+      if (result === "failure") reviewRpc.approvals.review.mockRejectedValue(new Error("offline"));
+      else reviewRpc.approvals.review.mockResolvedValue(null);
+      await render({ ...block, text: "Run command?", detail: "echo hello", detailFormat });
+      expect(container.textContent).toContain("Run command?");
+      expect(container.textContent).toContain("echo hello");
+      expect(container.querySelector('[role="status"]')).toBeNull();
+      expect(button("Allow once").disabled).toBe(false);
+      expect(button("Retry")).toBeUndefined();
+    },
+  );
 });

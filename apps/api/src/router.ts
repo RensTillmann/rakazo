@@ -248,6 +248,7 @@ import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-sec
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { answeredByFromRequest } from "./answered-by.js";
+import { reviewApproval } from "./approval-review.js";
 import {
   ArtifactListCursorError,
   createOwnedArtifact,
@@ -6433,6 +6434,11 @@ export function createRouter(deps: RouterDeps) {
     },
     links: {
       favicon: authed.links.favicon.handler(async ({ input }) => favicons.favicon(input.origin)),
+    },
+    approvals: {
+      review: authed.approvals.review.handler(({ context, input }) =>
+        reviewApproval(deps, context.actor, input.effectId, context.signal),
+      ),
     },
     decisions: {
       list: authed.decisions.list.handler(async ({ context }) => ({

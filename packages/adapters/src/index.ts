@@ -2,6 +2,14 @@ export * from "./activity-details.js";
 export * from "./agent-connections.js";
 export * from "./agent-environment.js";
 export * from "./ai-consent.js";
+export type { BoundApprovalRoute } from "./approval-effect.js";
+export {
+  boundDirectApprovalDetails,
+  catalogApprovalConnectorId,
+  catalogApprovalDetails,
+  catalogApprovalInnerArgs,
+  parseCatalogApprovalTarget,
+} from "./approval-effect.js";
 export * from "./artifacts.js";
 export * from "./auto-review.js";
 export * from "./auto-review-factory.js";

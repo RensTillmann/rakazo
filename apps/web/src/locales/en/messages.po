@@ -1261,6 +1261,10 @@ msgstr "Client secret"
 msgid "Close"
 msgstr "Close"
 
+#: src/components/FleetFeedback.tsx
+msgid "Close (keep draft)"
+msgstr "Close (keep draft)"
+
 #: src/components/computer/ComputerWorkspace.tsx
 msgid "Close {title}"
 msgstr "Close {title}"
@@ -1728,6 +1732,10 @@ msgstr "Could not download {name}. Try again."
 msgid "Could not download file"
 msgstr "Could not download file"
 
+#: src/components/FleetFeedback.tsx
+msgid "Could not find Elena. Retry when connected."
+msgstr "Could not find Elena. Retry when connected."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "Could not install connector"
@@ -1967,6 +1975,10 @@ msgstr "Could not save this choice"
 msgid "Could not search catalog"
 msgstr "Could not search catalog"
 
+#: src/components/FleetFeedback.tsx
+msgid "Could not send feedback. Your draft is preserved; please retry."
+msgstr "Could not send feedback. Your draft is preserved; please retry."
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "Could not send reset email"
@@ -2134,6 +2146,14 @@ msgstr "Current run"
 msgid "Custom header"
 msgstr "Custom header"
 
+#: src/components/ReplyReview.tsx
+msgid "Customer context unavailable."
+msgstr "Customer context unavailable."
+
+#: src/components/ReplyReview.tsx
+msgid "Customer message"
+msgstr "Customer message"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Customer support"
 msgstr "Customer support"
@@ -2287,6 +2307,10 @@ msgstr "Describe what this bot does"
 msgid "Description"
 msgstr "Description"
 
+#: src/components/FleetFeedback.tsx
+msgid "Description (required)"
+msgstr "Description (required)"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Desktop app"
 msgstr "Desktop app"
@@ -2314,6 +2338,10 @@ msgstr "Direct MCP"
 #: src/pages/shell/bot-panel.tsx
 msgid "Disabled tools"
 msgstr "Disabled tools"
+
+#: src/components/FleetFeedback.tsx
+msgid "Discard draft and start new report"
+msgstr "Discard draft and start new report"
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Discard recording"
@@ -2381,6 +2409,7 @@ msgid "Don’t have an account?"
 msgstr "Don’t have an account?"
 
 #: src/components/FlagMessageDialog.tsx
+#: src/components/FleetFeedback.tsx
 #: src/lib/ticket-status.ts
 #: src/pages/ActivityList.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -2562,6 +2591,10 @@ msgstr "Expand {0}"
 msgid "Expand {label}"
 msgstr "Expand {label}"
 
+#: src/components/ReplyReview.tsx
+msgid "Expected last comment"
+msgstr "Expected last comment"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Export"
@@ -2610,6 +2643,16 @@ msgstr "Failed."
 msgid "Failure handling"
 msgstr "Failure handling"
 
+#: src/components/FleetFeedback.tsx
+msgid "Feedback"
+msgstr "Feedback"
+
+#: src/components/DecisionDock.tsx
+#: src/components/FleetFeedback.tsx
+#: src/pages/Shell.tsx
+msgid "Feedback to Elena"
+msgstr "Feedback to Elena"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Fields that mark a change"
 msgstr "Fields that mark a change"
@@ -2655,6 +2698,10 @@ msgstr "Filters"
 #: src/pages/Onboarding.tsx
 msgid "Find models"
 msgstr "Find models"
+
+#: src/components/FleetFeedback.tsx
+msgid "Finding the configured feedback bot in this Space…"
+msgstr "Finding the configured feedback bot in this Space…"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -2704,6 +2751,10 @@ msgstr "Forgot password?"
 msgid "Free"
 msgstr "Free"
 
+#: src/components/ReplyReview.tsx
+msgid "Freshness could not be verified."
+msgstr "Freshness could not be verified."
+
 #: src/pages/ActivityList.tsx
 msgid "From"
 msgstr "From"
@@ -2712,6 +2763,10 @@ msgstr "From"
 #: src/pages/ActivityList.tsx
 msgid "From {0}"
 msgstr "From {0}"
+
+#: src/components/AskCard.tsx
+msgid "Full approval review unavailable."
+msgstr "Full approval review unavailable."
 
 #: src/pages/WindowChrome.tsx
 msgid "Fullscreen"
@@ -2869,6 +2924,10 @@ msgstr "Image upload area"
 msgid "Import OpenAPI JSON"
 msgstr "Import OpenAPI JSON"
 
+#: src/components/FleetFeedback.tsx
+msgid "Improvement"
+msgstr "Improvement"
+
 #: src/lib/ticket-status.ts
 msgid "In progress"
 msgstr "In progress"
@@ -2884,6 +2943,10 @@ msgstr "Inactive"
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
 msgstr "Inbox & email"
+
+#: src/components/FleetFeedback.tsx
+msgid "Included context references"
+msgstr "Included context references"
 
 #: src/components/call/VoiceChatCard.tsx
 msgid "Incoming call"
@@ -2961,6 +3024,10 @@ msgstr "Isolated"
 #: src/pages/Artifacts.tsx
 msgid "Isolated preview — no access to your account"
 msgstr "Isolated preview — no access to your account"
+
+#: src/components/FleetFeedback.tsx
+msgid "Issue"
+msgstr "Issue"
 
 #: src/pages/Shell.tsx
 msgid "Its bots and groups are kept and leave the section."
@@ -3097,6 +3164,10 @@ msgstr "Load web images automatically"
 #: src/pages/ActivityList.tsx
 msgid "Loading activity…"
 msgstr "Loading activity…"
+
+#: src/components/AskCard.tsx
+msgid "Loading full reply…"
+msgstr "Loading full reply…"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading integrations…"
@@ -3316,6 +3387,10 @@ msgstr "Message composer"
 #: src/pages/RoutineEditor.tsx
 msgid "Message event"
 msgstr "Message event"
+
+#: src/components/FleetFeedback.tsx
+msgid "Message feedback is limited to {FLAG_NOTE_MAX_LENGTH} characters including the type and context references. Shorten the description before retrying; your full draft is preserved."
+msgstr "Message feedback is limited to {FLAG_NOTE_MAX_LENGTH} characters including the type and context references. Shorten the description before retrying; your full draft is preserved."
 
 #: src/pages/Shell.tsx
 msgid "Message from {peer}"
@@ -3557,6 +3632,10 @@ msgstr "New space"
 msgid "New ticket"
 msgstr "New ticket"
 
+#: src/components/ReplyReview.tsx
+msgid "Newer comments exist since this reply was proposed."
+msgstr "Newer comments exist since this reply was proposed."
+
 #: src/components/DecisionDock.tsx
 msgid "Next decision"
 msgstr "Next decision"
@@ -3649,6 +3728,10 @@ msgstr "No models listed."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "No providers found."
+
+#: src/components/ReplyReview.tsx
+msgid "No public customer message found."
+msgstr "No public customer message found."
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "No remote MCP servers found"
@@ -3821,6 +3904,10 @@ msgstr "Open chat with {speakerName}"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Open computer settings"
 msgstr "Open computer settings"
+
+#: src/components/FleetFeedback.tsx
+msgid "Open Elena’s chat"
+msgstr "Open Elena’s chat"
 
 #: src/components/markdown-link-prompt.tsx
 msgid "Open external link?"
@@ -4046,6 +4133,10 @@ msgstr "Project ID"
 msgid "Prompt"
 msgstr "Prompt"
 
+#: src/components/ReplyReview.tsx
+msgid "Proposed reply"
+msgstr "Proposed reply"
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Protected input"
 msgstr "Protected input"
@@ -4185,9 +4276,17 @@ msgstr "Recreating the computer"
 msgid "Refresh"
 msgstr "Refresh"
 
+#: src/components/ReplyReview.tsx
+msgid "Refresh customer context"
+msgstr "Refresh customer context"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refresh view"
 msgstr "Refresh view"
+
+#: src/components/ReplyReview.tsx
+msgid "Refreshing customer context…"
+msgstr "Refreshing customer context…"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refreshing…"
@@ -4411,6 +4510,7 @@ msgid "Resume room"
 msgstr "Resume room"
 
 #: src/components/AccountAccess.tsx
+#: src/components/AskCard.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelBackupsSettings.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -4425,6 +4525,10 @@ msgstr "Retry now"
 #: src/pages/Shell.tsx
 msgid "Retry screen"
 msgstr "Retry screen"
+
+#: src/components/FleetFeedback.tsx
+msgid "Retry send to Elena"
+msgstr "Retry send to Elena"
 
 #. placeholder {0}: call.botName
 #: src/components/call/CallCard.tsx
@@ -4684,6 +4788,10 @@ msgstr "Send deletion code"
 msgid "Send it"
 msgstr "Send it"
 
+#: src/components/AskCard.tsx
+msgid "Send public Zendesk reply?"
+msgstr "Send public Zendesk reply?"
+
 #: src/components/composer/HoldToTalk.tsx
 msgid "Send recording"
 msgstr "Send recording"
@@ -4692,12 +4800,21 @@ msgstr "Send recording"
 msgid "Send reset link"
 msgstr "Send reset link"
 
+#: src/components/FleetFeedback.tsx
+msgid "Send to Elena"
+msgstr "Send to Elena"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Send with Enter"
 msgstr "Send with Enter"
 
+#: src/components/FleetFeedback.tsx
+msgid "Send your exact description and page/card references to Elena in this Space. This does not answer or close any decision. Do not include passwords or credentials."
+msgstr "Send your exact description and page/card references to Elena in this Space. This does not answer or close any decision. Do not include passwords or credentials."
+
 #: src/components/AskCard.tsx
 #: src/components/FlagMessageDialog.tsx
+#: src/components/FleetFeedback.tsx
 msgid "Sending…"
 msgstr "Sending…"
 
@@ -4710,6 +4827,10 @@ msgstr "Sends this message to {0}, with your note."
 #: src/components/FlagMessageDialog.tsx
 msgid "Sent to {0}."
 msgstr "Sent to {0}."
+
+#: src/components/FleetFeedback.tsx
+msgid "Sent to Elena."
+msgstr "Sent to Elena."
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -4991,6 +5112,7 @@ msgstr "Starting"
 msgid "Starting…"
 msgstr "Starting…"
 
+#: src/components/ReplyReview.tsx
 #: src/components/UsageBars.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
@@ -5081,6 +5203,10 @@ msgstr "Switching…"
 msgid "System"
 msgstr "System"
 
+#: src/components/ReplyReview.tsx
+msgid "Tags"
+msgstr "Tags"
+
 #: src/pages/Shell.tsx
 msgid "Take control"
 msgstr "Take control"
@@ -5112,6 +5238,10 @@ msgstr "Teams message"
 #: src/pages/RoutineEditor.tsx
 msgid "Teams not enabled"
 msgstr "Teams not enabled"
+
+#: src/components/ReplyReview.tsx
+msgid "Technical details"
+msgstr "Technical details"
 
 #: src/components/computer/ComputerWorkspace.tsx
 msgid "Terminal"
@@ -5149,9 +5279,17 @@ msgstr "Text"
 msgid "The API did not come back. Refresh this page."
 msgstr "The API did not come back. Refresh this page."
 
+#: src/components/FleetFeedback.tsx
+msgid "The configured feedback target is unavailable in this Space. Ask a Space administrator to check the feedback bot, then retry."
+msgstr "The configured feedback target is unavailable in this Space. Ask a Space administrator to check the feedback bot, then retry."
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "The connection timed out."
+
+#: src/components/FleetFeedback.tsx
+msgid "The current Space changed. Return to this Space before sending, or reload the app in the intended Space. Your draft is preserved."
+msgstr "The current Space changed. Return to this Space before sending, or reload the app in the intended Space. Your draft is preserved."
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -5219,9 +5357,17 @@ msgstr "This deletes all {0} versions of this artifact. This can't be undone."
 msgid "This file is not valid UTF-8 text."
 msgstr "This file is not valid UTF-8 text."
 
+#: src/components/FleetFeedback.tsx
+msgid "This kept draft still uses its original context, not the newly opened page or card."
+msgstr "This kept draft still uses its original context, not the newly opened page or card."
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "this Mac"
+
+#: src/components/FleetFeedback.tsx
+msgid "This message has no thread reference. Your draft is preserved; reopen feedback from the original message."
+msgstr "This message has no thread reference. Your draft is preserved; reopen feedback from the original message."
 
 #: src/pages/Artifacts.tsx
 msgid "This month"
@@ -5275,6 +5421,10 @@ msgstr "This subscription sign-in is not available in Rakazo yet. Use a deployme
 #: src/pages/Artifacts.tsx
 msgid "This week"
 msgstr "This week"
+
+#: src/components/ReplyReview.tsx
+msgid "Ticket"
+msgstr "Ticket"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
@@ -5378,6 +5528,7 @@ msgstr "Try again"
 msgid "Try the test again."
 msgstr "Try the test again."
 
+#: src/components/FleetFeedback.tsx
 #: src/pages/shell/bot-credentials.tsx
 msgid "Type"
 msgstr "Type"

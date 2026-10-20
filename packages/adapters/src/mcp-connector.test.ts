@@ -107,6 +107,45 @@ function mcpFetch(
 }
 
 describe("MCP connector session cache", () => {
+  it("rejects a pinned tool when the execution snapshot has been reauthorized", async () => {
+    const state = { failNext: false, initializations: 0, calls: [] as string[] };
+    vi.stubGlobal("fetch", mcpFetch(state));
+    const assignment = { ...ASSIGNMENT, server: { ...SERVER } };
+    const prisma = {
+      botMcpServer: {
+        findMany: vi.fn(async () => [assignment]),
+        findFirst: vi.fn(async () => assignment),
+      },
+    };
+    const context = {
+      operationId: "revision-check",
+      traceId: "revision-check",
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    };
+    const connector = new McpConnector(prisma as never, {} as never, { network: TEST_NETWORK });
+    try {
+      const [tool] = await connector.discoverTools(context);
+      assignment.server = { ...SERVER, revision: 2 };
+      const events = [];
+      for await (const event of connector.execute(
+        {
+          tool: tool!.name,
+          route: tool!.route,
+          args: {},
+          executionId: "old-proposal",
+        },
+        context,
+      ))
+        events.push(event);
+      expect(events).toMatchObject([{ type: "error" }]);
+      expect(state.calls).toEqual([]);
+    } finally {
+      await connector.close();
+    }
+  });
   it("keeps sessions across unchanged TTL reads and reconnects on observed rotation", async () => {
     vi.useFakeTimers();
     const fake = infisicalFake();

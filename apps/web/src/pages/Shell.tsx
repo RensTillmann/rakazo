@@ -173,6 +173,11 @@ import { ComputerWorkspace } from "../components/computer/ComputerWorkspace";
 import { DecisionDock } from "../components/DecisionDock";
 import { lazyOverlay } from "../components/ErrorBoundary";
 import { FlagMessageDialog, type FlagTarget } from "../components/FlagMessageDialog";
+import {
+  FleetFeedback,
+  type FleetFeedbackContext,
+  fleetFeedbackContext,
+} from "../components/FleetFeedback";
 import { InboundDeliveryCard } from "../components/InboundDeliveryCard";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { RosterAttentionBadge } from "../components/RosterAttentionBadge";
@@ -500,7 +505,9 @@ export function ShellPage() {
 function SpaceShell() {
   const { t } = useLingui();
   const { botId, groupId } = useParams();
-  const [rpc] = useState(() => createSpaceRpc(selectedSpaceId()));
+  // Both the rendered Space and its RPC stay bound to this shell, not another tab's selection.
+  const [shellSpaceId, setShellSpaceId] = useState(selectedSpaceId);
+  const [rpc] = useState(() => createSpaceRpc(shellSpaceId));
   const routerNavigate = useNavigate();
   const navigateRef = useRef(routerNavigate);
   navigateRef.current = routerNavigate;
@@ -832,7 +839,11 @@ function SpaceShell() {
   useEffect(() => {
     callsEnabledRef.current = bootstrapMe?.phoneCallsEnabled === true;
   }, [bootstrapMe?.phoneCallsEnabled]);
-  const currentSpaceId = selectedSpaceId() ?? bootstrapMe?.spaceId ?? null;
+  useEffect(() => {
+    const spaceId = bootstrapMe?.spaceId;
+    if (spaceId) setShellSpaceId((current) => current ?? spaceId);
+  }, [bootstrapMe?.spaceId]);
+  const currentSpaceId = shellSpaceId ?? bootstrapMe?.spaceId ?? null;
   // null: settings follow the space the app is showing.
   const [settingsSpaceId, setSettingsSpaceId] = useState<string | null>(null);
   const settingsSpace =
@@ -2258,6 +2269,10 @@ function SpaceShell() {
     setDecisionFocus((previous) => ({ messageId: message.id, nonce: (previous?.nonce ?? 0) + 1 }));
   }, []);
   const [decisionDockInset, setDecisionDockInset] = useState(0);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackContext, setFeedbackContext] = useState<FleetFeedbackContext>(() =>
+    fleetFeedbackContext(),
+  );
   // The 3s sidebar poll carries each chat's waiting-card count; the dock refetches when one moves.
   const pendingDecisionsKey = useMemo(
     () => pendingDecisionSignature([...bots, ...groups]),
@@ -4387,6 +4402,20 @@ function SpaceShell() {
               </button>
             ) : null}
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFeedbackContext({
+                ...fleetFeedbackContext(),
+                ...(active?.id ? { botId: active.id } : {}),
+                ...(inGroup && groupId ? { groupId } : {}),
+              });
+              setFeedbackOpen(true);
+            }}
+            className="app-no-drag col-span-2 row-start-4 justify-self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground md:col-span-3 md:row-start-3"
+          >
+            <Trans>Feedback to Elena</Trans>
+          </button>
           <UsageTopBar
             compact
             botId={inGroup ? null : (active?.id ?? null)}
@@ -4408,6 +4437,14 @@ function SpaceShell() {
           />
         </div>
         <CallReturnBar />
+        {currentSpaceId ? (
+          <FleetFeedback
+            open={feedbackOpen}
+            spaceId={currentSpaceId}
+            context={feedbackContext}
+            onClose={() => setFeedbackOpen(false)}
+          />
+        ) : null}
         {!active && !activeGroup && initialBotsLoaded ? (
           <div className="grid flex-1 place-items-center">
             <Button onClick={() => setPanel("create")}>
@@ -4475,6 +4512,10 @@ function SpaceShell() {
               bots={bots}
               onHeightChange={setDecisionDockInset}
               onAnswered={refreshAfterDecision}
+              onFeedback={(decision) => {
+                setFeedbackContext(fleetFeedbackContext(decision));
+                setFeedbackOpen(true);
+              }}
               // Same dictation as the composer, but it fills the card's answer box.
               voice={
                 bootstrapMe?.phoneCallsEnabled === true
