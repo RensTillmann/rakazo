@@ -2,8 +2,10 @@ import type { AdapterContext } from "@rakazo/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import {
   createHindsightProvider,
+  HINDSIGHT_RECALL_TIMEOUT_MS,
   HINDSIGHT_SAVE_REFUSAL,
   HindsightMemoryProvider,
+  hindsightRecallTimeoutMs,
 } from "./hindsight-memory-provider.js";
 
 const context: AdapterContext = {
@@ -194,6 +196,53 @@ describe("HindsightMemoryProvider", () => {
         error: "Hindsight recall timed out after 8000 ms",
       });
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads the recall timeout from RAKAZO_HINDSIGHT_RECALL_TIMEOUT_MS", () => {
+    const read = (value?: string) =>
+      hindsightRecallTimeoutMs(
+        value === undefined ? {} : { RAKAZO_HINDSIGHT_RECALL_TIMEOUT_MS: value },
+      );
+    expect(HINDSIGHT_RECALL_TIMEOUT_MS).toBe(8_000);
+    for (const invalid of [undefined, "", "  ", "abc", "12ms", "0", "-5", "1.5"]) {
+      expect(read(invalid)).toBe(8_000);
+    }
+    expect(read("20000")).toBe(20_000);
+    expect(read(" 15000 ")).toBe(15_000);
+    expect(read("60000")).toBe(60_000);
+    expect(read("999999")).toBe(60_000);
+  });
+
+  it("uses the env recall timeout unless the connection sets timeoutMs", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("RAKAZO_HINDSIGHT_RECALL_TIMEOUT_MS", "20000");
+    try {
+      const make = (timeoutMs?: number) =>
+        new HindsightMemoryProvider({
+          baseUrl: "http://hindsight:8888",
+          apiKey: "hs_test_key",
+          banks: ["fleet"],
+          excludeTags: [],
+          ...(timeoutMs === undefined ? {} : { timeoutMs }),
+          fetch: (() => new Promise<Response>(() => undefined)) as typeof fetch,
+        });
+      const request = { query: "q", scope: "shared" as const, botId: "bot-1", limit: 5 };
+      const fromEnv = make().recall(request, context);
+      const fromConnection = make(3_000).recall(request, context);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await expect(fromConnection).resolves.toEqual({
+        ok: false,
+        error: "Hindsight recall timed out after 3000 ms",
+      });
+      await vi.advanceTimersByTimeAsync(17_000);
+      await expect(fromEnv).resolves.toEqual({
+        ok: false,
+        error: "Hindsight recall timed out after 20000 ms",
+      });
+    } finally {
+      vi.unstubAllEnvs();
       vi.useRealTimers();
     }
   });

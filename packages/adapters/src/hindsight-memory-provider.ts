@@ -16,6 +16,15 @@ export const HINDSIGHT_PROVIDER_ID = "hindsight";
 export const HINDSIGHT_DEFAULT_BANKS = ["fleet", "knowledge", "public"] as const;
 export const HINDSIGHT_DEFAULT_EXCLUDE_TAGS = ["pii:person", "embargo:security"] as const;
 export const HINDSIGHT_RECALL_TIMEOUT_MS = 8_000;
+export const HINDSIGHT_RECALL_TIMEOUT_MAX_MS = 60_000;
+/** Fork: RAKAZO_HINDSIGHT_RECALL_TIMEOUT_MS (positive integer ms, capped); else the default. */
+export function hindsightRecallTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.RAKAZO_HINDSIGHT_RECALL_TIMEOUT_MS?.trim();
+  if (!raw || !/^\d+$/.test(raw)) return HINDSIGHT_RECALL_TIMEOUT_MS;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) return HINDSIGHT_RECALL_TIMEOUT_MS;
+  return Math.min(value, HINDSIGHT_RECALL_TIMEOUT_MAX_MS);
+}
 export const HINDSIGHT_SAVE_REFUSAL =
   "Saving to shared memory through the memory provider is disabled. Use memory_save (fleet MCP).";
 /** Injected into the run instead of recalled memory when Hindsight times out or fails. */
@@ -138,7 +147,7 @@ export async function prepareHindsightConnection(
       method: "GET",
       headers: { authorization: `Bearer ${connection.apiKey}` },
       redirect: "error",
-      signal: AbortSignal.timeout(HINDSIGHT_RECALL_TIMEOUT_MS),
+      signal: AbortSignal.timeout(hindsightRecallTimeoutMs()),
     });
   } catch {
     throw new Error("Could not reach Hindsight at the base URL.");
@@ -249,7 +258,7 @@ export class HindsightMemoryProvider implements SemanticMemoryProvider {
     request: SemanticMemoryRecallRequest,
     context: AdapterContext,
   ): Promise<SemanticMemoryResponse<SemanticMemoryResult[]>> {
-    const timeoutMs = this.connection.timeoutMs ?? HINDSIGHT_RECALL_TIMEOUT_MS;
+    const timeoutMs = this.connection.timeoutMs ?? hindsightRecallTimeoutMs();
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = AbortSignal.any([context.signal, timeout]);
     const work = Promise.all(
