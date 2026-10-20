@@ -1564,16 +1564,41 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     `ask_user draft must be text of at most ${ASK_DRAFT_MAX_LENGTH} characters`,
                   );
                 }
-                host.pausePending = true;
-                host.queue.push({
-                  type: "ask",
+                const ask = {
+                  type: "ask" as const,
                   text: String(args.question ?? "What should I use?"),
                   actions: options.map((label, index) => ({
                     id: `choice-${index + 1}`,
                     label,
                   })),
                   ...(typeof draft === "string" && draft.trim() ? { draft } : {}),
-                });
+                };
+                // Fleet: the consumer may refuse a card that is already open; the run goes on.
+                let refusal: string | null = null;
+                if (host.request.settlesAsks) {
+                  refusal = await new Promise<string | null>((resolve, reject) => {
+                    const onAbort = () =>
+                      reject(new Error("Run stopped before the card was stored."));
+                    if (host.signal.aborted) return onAbort();
+                    host.signal.addEventListener("abort", onAbort, { once: true });
+                    host.queue.push({
+                      ...ask,
+                      settle: (value) => {
+                        host.signal.removeEventListener("abort", onAbort);
+                        resolve(value);
+                      },
+                    });
+                  });
+                } else {
+                  host.queue.push(ask);
+                }
+                if (refusal !== null) {
+                  return {
+                    content: [{ type: "text", text: refusal }],
+                    details: { ...args, notAsked: true },
+                  };
+                }
+                host.pausePending = true;
                 return {
                   content: [{ type: "text", text: "Waiting for the user's choice." }],
                   details: args,

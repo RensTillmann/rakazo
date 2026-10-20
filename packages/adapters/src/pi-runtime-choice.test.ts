@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fakeAgentState = vi.hoisted(() => ({
   options: ["Berlin", "Seoul", "Toronto"],
   draft: undefined as unknown,
+  results: [] as unknown[],
   tools: [] as Array<{
     name: string;
     execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -25,11 +26,12 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
     async prompt() {
       const askUser = this.tools.find((tool) => tool.name === "ask_user");
       if (!askUser) throw new Error("ask_user tool missing");
-      await askUser.execute("call-choice-1", {
+      const result = await askUser.execute("call-choice-1", {
         question: "Which city should I use?",
         options: fakeAgentState.options,
         ...(fakeAgentState.draft === undefined ? {} : { draft: fakeAgentState.draft }),
       });
+      fakeAgentState.results.push(result);
     }
 
     async waitForIdle() {}
@@ -98,6 +100,7 @@ describe("Pi choice asks", () => {
     fakeAgentState.tools = [];
     fakeAgentState.options = ["Berlin", "Seoul", "Toronto"];
     fakeAgentState.draft = undefined;
+    fakeAgentState.results = [];
   });
 
   it("emits a tappable ask and stops without a finished-work fallback", async () => {
@@ -164,5 +167,42 @@ describe("Pi choice asks", () => {
       for await (const event of runtime.run(runRequest, runContext)) events.push(event);
     }).rejects.toThrow("ask_user draft must be text of at most 20000 characters");
     expect(events.some((event) => event.type === "ask")).toBe(false);
+  });
+
+  it("returns the consumer's refusal without pausing when no card was made", async () => {
+    const refusal =
+      "Not asked: the same card is already open in Rens's queue (asked 05:26 UTC). Don't ask it again; his answer comes to the run that asked it.";
+    const runtime = new PiAgentRuntime();
+    const asks: AgentRuntimeEvent[] = [];
+
+    for await (const event of runtime.run({ ...runRequest, settlesAsks: true }, runContext)) {
+      if (event.type !== "ask") continue;
+      asks.push(event);
+      event.settle?.(refusal);
+    }
+
+    expect(asks).toHaveLength(1);
+    expect(fakeAgentState.results).toEqual([
+      expect.objectContaining({
+        content: [{ type: "text", text: refusal }],
+        details: expect.objectContaining({ notAsked: true }),
+      }),
+    ]);
+    expect(fakeAgentState.results[0]).not.toHaveProperty("terminate");
+  });
+
+  it("pauses once the consumer has stored the card", async () => {
+    const runtime = new PiAgentRuntime();
+
+    for await (const event of runtime.run({ ...runRequest, settlesAsks: true }, runContext)) {
+      if (event.type === "ask") event.settle?.(null);
+    }
+
+    expect(fakeAgentState.results).toEqual([
+      expect.objectContaining({
+        content: [{ type: "text", text: "Waiting for the user's choice." }],
+        terminate: true,
+      }),
+    ]);
   });
 });

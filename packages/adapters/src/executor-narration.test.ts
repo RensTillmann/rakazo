@@ -280,6 +280,41 @@ describe("mid-turn narration in a user-triggered run", () => {
     expect(pause.blocks).toEqual([expect.objectContaining({ kind: "ask", text: "Which colour?" })]);
     expect(pause.blocks[0]!.narration).toBeUndefined();
   });
+
+  it("hands back the refusal and goes on when the same card is already open", async () => {
+    const settle = vi.fn();
+    const f = fixture([
+      { type: "ask", text: "Case 78 · alert: export?", actions: [], settle },
+      { type: "text", text: "Carrying on without asking." },
+      { type: "done", text: "Carrying on without asking." },
+    ]);
+    f.pauseRunForInput.mockImplementationOnce((async () => ({
+      duplicateAskedAt: new Date("2026-10-20T05:26:23.000Z"),
+    })) as never);
+    await f.run();
+    expect(f.pauseRunForInput).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupeQuestion: true }),
+    );
+    expect(settle).toHaveBeenCalledWith(
+      "Not asked: the same card is already open in Rens's queue (asked 05:26 UTC). Don't ask it again; his answer comes to the run that asked it.",
+    );
+    expect(f.finalBlocks()).toContainEqual(
+      expect.objectContaining({ kind: "text", text: "Carrying on without asking." }),
+    );
+  });
+
+  it("settles a stored card with null and does not dedupe asks it cannot settle", async () => {
+    const settle = vi.fn();
+    const stored = fixture([{ type: "ask", text: "Which colour?", actions: [], settle }]);
+    await stored.run();
+    expect(settle).toHaveBeenCalledWith(null);
+
+    const plain = fixture([{ type: "ask", text: "Which colour?", actions: [] }]);
+    await plain.run();
+    expect(plain.pauseRunForInput).toHaveBeenCalledWith(
+      expect.not.objectContaining({ dedupeQuestion: true }),
+    );
+  });
 });
 
 describe("NO_RESPONSE in a run woken by another bot's fyi", () => {

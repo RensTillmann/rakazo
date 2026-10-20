@@ -30,6 +30,7 @@ import { getLogger } from "@rakazo/logging";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
+import { findOpenDuplicateQuestion } from "./decisions.js";
 import {
   assertRunCanWriteHistory,
   assertRunIsCancelled,
@@ -66,7 +67,8 @@ export interface ThreadEvents {
   ): Promise<FinalizeComputerControlReleaseResult | false>;
   finalizeRun(input: FinalizeRunInput): Promise<FinalizeRunResult | false>;
   notify(threadId: string, seq: number): Promise<void>;
-  pauseRunForInput(input: PauseRunForInput): Promise<boolean>;
+  /** With `dedupeQuestion`, an open duplicate card returns `{ duplicateAskedAt }` and pauses nothing. */
+  pauseRunForInput(input: PauseRunForInput): Promise<PauseRunForInputResult>;
   pauseRunForTakeover(input: PauseRunForTakeover): Promise<boolean>;
   sendUserMessage(input: SendUserMessageInput): Promise<SendUserMessageResult>;
   follow(threadId: string, cursor: number, signal?: AbortSignal): AsyncGenerator<ProductEvent>;
@@ -155,7 +157,16 @@ export interface PauseRunForInput {
    * (not in message blocks) so clients still see redacted labels.
    */
   offeredActions?: Array<{ id: string; label: string }>;
+  /**
+   * Fleet (`patch/ask-dedupe`): a bot question card. When the same bot already has the same
+   * question open (`findOpenDuplicateQuestion`), store nothing and report it instead. Checked
+   * under a per-bot lock in the same transaction as the insert.
+   */
+  dedupeQuestion?: boolean;
 }
+
+/** `true` paused, `false` the run was not ours to pause, or the duplicate card that is open. */
+export type PauseRunForInputResult = boolean | { duplicateAskedAt: Date };
 
 const CHOICE_ASK_CHECKPOINT_KIND = "choice_ask_v1";
 
@@ -1174,11 +1185,25 @@ export async function pauseRunForInput(
   prisma: PrismaClient,
   input: PauseRunForInput,
   realtime?: RealtimeFanout,
-): Promise<boolean> {
+): Promise<PauseRunForInputResult> {
   const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
     // concurrent clear cannot deadlock against this transaction.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    const question = input.dedupeQuestion
+      ? input.blocks.find((block) => block.kind === "ask")
+      : undefined;
+    if (question?.kind === "ask") {
+      // Two runs of one bot asking at once queue here, so only the first stores its card.
+      const lockKey = `ask-dedupe\u001f${input.botId}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS "lock"`;
+      const duplicate = await findOpenDuplicateQuestion(tx, {
+        botId: input.botId,
+        runId: input.runId,
+        text: question.text,
+      });
+      if (duplicate) return { duplicateAskedAt: duplicate.askedAt };
+    }
     const paused = await tx.run.updateMany({
       where: {
         id: input.runId,
@@ -1239,6 +1264,7 @@ export async function pauseRunForInput(
   });
 
   if (!committed) return false;
+  if (committed.duplicateAskedAt) return { duplicateAskedAt: committed.duplicateAskedAt };
   await notifyRealtime(realtime, committed.threadId, committed.seq);
   return true;
 }

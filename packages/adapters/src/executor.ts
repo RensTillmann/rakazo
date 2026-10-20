@@ -117,6 +117,7 @@ import {
   appendEventInTransaction,
   createSpaceForMember,
   createThreadMessageInTransaction,
+  duplicateAskRefusal,
   effectiveMemoryScope,
   findDefaultModelCredential,
   InstructionConflictError,
@@ -7888,6 +7889,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     });
                     return attachSteeringRecall(claimed, steering, steeringRecall);
                   },
+              settlesAsks: true,
             },
             context,
           );
@@ -8015,8 +8017,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 ],
                 // Keep unredacted labels on the run for resume; message blocks stay redacted.
                 offeredActions: event.actions,
+                // Fleet: a runtime that waits for the card can be told it is already open.
+                ...(event.settle ? { dedupeQuestion: true } : {}),
               });
+              if (paused && typeof paused === "object") {
+                event.settle?.(duplicateAskRefusal(paused.duplicateAskedAt));
+                continue;
+              }
               if (!paused) return;
+              event.settle?.(null);
               await notifyRun(deps, run, {
                 kind: "help",
                 title: `${bot.name} needs an answer`,

@@ -1,5 +1,6 @@
 import type { Actor, MessageBlock } from "@rakazo/contracts";
-import type { PrismaClient } from "./client.js";
+import { isApprovalAskBlock, isSecretAskBlock } from "@rakazo/core";
+import type { Prisma, PrismaClient } from "./client.js";
 
 /** Fleet: one pending card whose run is paused in `waiting_input`, for the decision dock. */
 export type PendingDecisionRow = {
@@ -107,4 +108,57 @@ export async function pendingDecisionCountsByThread(
     counts.set(threadId, (counts.get(threadId) ?? 0) + 1);
   }
   return counts;
+}
+
+/** Fleet: the leading `Case <n>` of a question (also after `URGENT · `), lowercased; null when none. */
+export function askCaseKey(text: string): string | null {
+  const match = /^\s*(?:urgent\s*·\s*)?case\s+(\d+)\b/i.exec(text);
+  return match ? `case ${match[1]}` : null;
+}
+
+function sameQuestion(a: string, b: string): boolean {
+  const key = askCaseKey(a);
+  if (key) return askCaseKey(b) === key;
+  return a.trim().replace(/\s+/g, " ") === b.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Fleet: the bot's open question card (not an approval or secret card) in another run that has
+ * not ended, asking the same thing: the same case key, or without one the same text.
+ */
+export async function findOpenDuplicateQuestion(
+  tx: Prisma.TransactionClient,
+  input: { botId: string; runId: string; text: string },
+): Promise<{ messageId: string; askedAt: Date } | null> {
+  const runs = await tx.run.findMany({
+    where: {
+      botId: input.botId,
+      id: { not: input.runId },
+      status: { notIn: ["cancelled", "completed", "failed"] },
+    },
+    select: { id: true, threadId: true },
+  });
+  if (runs.length === 0) return null;
+  const threadByRun = new Map(runs.map((run) => [run.id, run.threadId]));
+  const messages = await tx.message.findMany({
+    where: { runId: { in: [...threadByRun.keys()] }, role: "bot" },
+    orderBy: [{ createdAt: "asc" }, { seq: "asc" }],
+    select: { id: true, runId: true, threadId: true, blocks: true, createdAt: true },
+  });
+  for (const message of messages) {
+    if (!message.runId || threadByRun.get(message.runId) !== message.threadId) continue;
+    const block = pendingAskBlock(message.blocks);
+    if (block?.kind !== "ask") continue;
+    if (block.approvalEffectId || isApprovalAskBlock(block) || isSecretAskBlock(block)) continue;
+    if (sameQuestion(input.text, block.text)) {
+      return { messageId: message.id, askedAt: message.createdAt };
+    }
+  }
+  return null;
+}
+
+/** Fleet: what `ask_user` returns to the bot instead of a duplicate card. */
+export function duplicateAskRefusal(askedAt: Date): string {
+  const time = askedAt.toISOString().slice(11, 16);
+  return `Not asked: the same card is already open in Rens's queue (asked ${time} UTC). Don't ask it again; his answer comes to the run that asked it.`;
 }

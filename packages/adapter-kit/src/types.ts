@@ -538,6 +538,8 @@ export interface AgentRunRequest {
   onToolCompleted?: (completion: AgentToolCompletion) => Promise<void> | void;
   /** Atomically claim durable user steering at the runtime's next safe turn boundary. */
   claimSteering?: (seenIds: string[]) => Promise<AgentSteeringMessage[]>;
+  /** Fleet: the consumer settles every `ask` event (`settle`); `ask_user` waits for it. */
+  settlesAsks?: boolean;
 }
 
 export interface ScriptedTurn {
@@ -605,6 +607,12 @@ export type AgentRuntimeEvent =
       actions?: Array<{ id: string; label: string }>;
       /** Fleet: a reply draft the card shows editable (`ask_user` `draft`). */
       draft?: string;
+      /**
+       * Fleet (`patch/ask-dedupe`): present when the request set `settlesAsks`. The consumer calls
+       * it with null once the card is stored (the run pauses), or with the text `ask_user` returns
+       * instead when no card was made (the run goes on).
+       */
+      settle?: (refusal: string | null) => void;
     }
   | { type: "takeover"; reason: string }
   | ({
