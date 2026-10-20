@@ -319,6 +319,7 @@ import {
   stopThreadRuns,
   threadHead,
   threadSnapshot,
+  withdrawQuestion,
 } from "./thread-target.js";
 import {
   disconnectVoiceCredential,
@@ -6444,6 +6445,9 @@ export function createRouter(deps: RouterDeps) {
       list: authed.decisions.list.handler(async ({ context }) => ({
         decisions: await listPendingDecisions(deps.prisma, context.actor),
       })),
+      withdraw: authed.decisions.withdraw.handler(({ context, input }) =>
+        withdrawQuestion(deps, context.actor, input),
+      ),
     },
     runs: {
       list: authed.runs.list.handler(async ({ context, input }) => ({

@@ -200,6 +200,18 @@ export const PendingDecisionSchema = z.object({
 });
 export type PendingDecision = z.infer<typeof PendingDecisionSchema>;
 
+export const WithdrawDecisionInputSchema = z
+  .object({
+    botId: Id,
+    messageId: Id,
+    reason: z.string().trim().min(1).max(500),
+  })
+  .strict();
+export type WithdrawDecisionInput = z.infer<typeof WithdrawDecisionInputSchema>;
+
+export const WithdrawDecisionOutputSchema = z.object({ withdrawn: z.boolean(), runId: Id });
+export type WithdrawDecisionOutput = z.infer<typeof WithdrawDecisionOutputSchema>;
+
 export const appContract = {
   aiConsent: {
     status: oc.input(AiConsentQuerySchema).output(AiConsentStatusSchema),
@@ -1048,6 +1060,7 @@ export const appContract = {
   /** Fleet: every pending card whose run waits for the caller, oldest first. */
   decisions: {
     list: oc.output(z.object({ decisions: z.array(PendingDecisionSchema) })),
+    withdraw: oc.input(WithdrawDecisionInputSchema).output(WithdrawDecisionOutputSchema),
   },
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),

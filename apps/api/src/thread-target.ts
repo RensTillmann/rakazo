@@ -9,6 +9,8 @@ import type {
   MessageReaction,
   ReplyPreview,
   ThreadSnapshot,
+  WithdrawDecisionInput,
+  WithdrawDecisionOutput,
 } from "@rakazo/contracts";
 import { GROUP_MEMBER_MIN, MessageBlock as MessageBlockSchema } from "@rakazo/contracts";
 import {
@@ -36,7 +38,9 @@ import {
   FLAG_STEERING_ORIGIN,
   IsolationError,
   lockOwnedGroup,
+  QuestionNotWithdrawableError,
   touchGroupUpdatedAt,
+  withdrawQuestionInTransaction,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import {
@@ -1436,6 +1440,79 @@ async function replayFlag(
   return flagResult(target, message, run);
 }
 
+interface CancelledRunWork {
+  runIds: string[];
+  leases: Array<{ computerId: string; botId: string; runId: string; fence: number }>;
+  computers: Array<{
+    id: string;
+    homeKey: string;
+    kind: string;
+    providerRef: string | null;
+    executionBotId: string | null;
+    executionRunId: string | null;
+  }>;
+}
+
+async function snapshotCancelledRunWork(
+  tx: Prisma.TransactionClient,
+  runIds: string[],
+): Promise<CancelledRunWork> {
+  // Snapshot before commit: a worker can release its cancelled lease immediately.
+  const leases = runIds.length
+    ? await tx.computerExecutionLease.findMany({
+        where: { runId: { in: runIds } },
+        select: { computerId: true, botId: true, runId: true, fence: true },
+      })
+    : [];
+  const leaseComputerIds = [...new Set(leases.map((lease) => lease.computerId))];
+  const computers = runIds.length
+    ? await tx.computer.findMany({
+        where:
+          leaseComputerIds.length > 0
+            ? {
+                OR: [{ id: { in: leaseComputerIds } }, { executionRunId: { in: runIds } }],
+              }
+            : { executionRunId: { in: runIds } },
+        select: {
+          id: true,
+          homeKey: true,
+          kind: true,
+          providerRef: true,
+          executionBotId: true,
+          executionRunId: true,
+        },
+      })
+    : [];
+  return { runIds, leases, computers };
+}
+
+export async function withdrawQuestion(
+  deps: { prisma: PrismaClient; sandbox: SandboxProvider; events: ThreadEvents },
+  actor: Actor,
+  input: WithdrawDecisionInput,
+): Promise<WithdrawDecisionOutput> {
+  const { commit, work } = await deps.prisma
+    .$transaction(async (tx) => {
+      const commit = await withdrawQuestionInTransaction(tx, actor, input);
+      const work = commit.withdrawn ? await snapshotCancelledRunWork(tx, [commit.runId]) : null;
+      return { commit, work };
+    })
+    .catch((error) => {
+      if (error instanceof IsolationError) throw new ORPCError("NOT_FOUND");
+      if (error instanceof QuestionNotWithdrawableError) {
+        throw new ORPCError("CONFLICT", { message: error.message });
+      }
+      throw error;
+    });
+  if (commit.eventSeq !== null) {
+    await deps.events.notify(commit.threadId, commit.eventSeq).catch((error) => {
+      getLogger().error("question withdrawal realtime notification", error);
+    });
+  }
+  if (work) await teardownCancelledRunWork(deps, actor, work);
+  return { withdrawn: commit.withdrawn, runId: commit.runId };
+}
+
 export async function stopThreadRuns(
   deps: {
     prisma: PrismaClient;
@@ -1445,7 +1522,7 @@ export async function stopThreadRuns(
   actor: Actor,
   target: ThreadTarget,
 ) {
-  const { runIds, computers, leases, eventSeq } = await deps.prisma.$transaction(async (tx) => {
+  const { eventSeq, ...work } = await deps.prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
     const cancelled = await tx.run.updateManyAndReturn({
       where: {
@@ -1462,36 +1539,7 @@ export async function stopThreadRuns(
         message: { threadId: target.threadId },
       },
     });
-    // Snapshot teardown coordinates before commit. Once cancellation becomes
-    // visible, a worker can release its lease / execution columns immediately; a
-    // later lookup would then miss the sandbox work this request must stop.
-    // Team ownership lives on ComputerExecutionLease; Computer.executionRunId is
-    // only a legacy secondary path and is not written by current acquisition.
-    const leases = ids.length
-      ? await tx.computerExecutionLease.findMany({
-          where: { runId: { in: ids } },
-          select: { computerId: true, botId: true, runId: true, fence: true },
-        })
-      : [];
-    const leaseComputerIds = [...new Set(leases.map((lease) => lease.computerId))];
-    const computers = ids.length
-      ? await tx.computer.findMany({
-          where:
-            leaseComputerIds.length > 0
-              ? {
-                  OR: [{ id: { in: leaseComputerIds } }, { executionRunId: { in: ids } }],
-                }
-              : { executionRunId: { in: ids } },
-          select: {
-            id: true,
-            homeKey: true,
-            kind: true,
-            providerRef: true,
-            executionBotId: true,
-            executionRunId: true,
-          },
-        })
-      : [];
+    const work = await snapshotCancelledRunWork(tx, ids);
     // One terminal event per cancelled run, in the same commit as the status
     // flip and the progress purge below. Other clients learn the run ended, and
     // the fresh seq keeps max(seq) above every deleted progress row so a client
@@ -1516,7 +1564,7 @@ export async function stopThreadRuns(
         },
       });
     }
-    return { runIds: ids, computers, leases, eventSeq };
+    return { ...work, eventSeq };
   });
   if (eventSeq !== null) {
     // The events are durable; subscribers refetch from their persisted cursor.
@@ -1524,6 +1572,14 @@ export async function stopThreadRuns(
       getLogger().error("thread stop realtime notification", error);
     });
   }
+  await teardownCancelledRunWork(deps, actor, work);
+}
+
+async function teardownCancelledRunWork(
+  deps: { prisma: PrismaClient; sandbox: SandboxProvider },
+  actor: Actor,
+  { runIds, computers, leases }: CancelledRunWork,
+) {
   // Keep the DB lease until after teardown so a replacement run cannot claim the
   // screen while we still need the cancelled run's screenLeaseId to release it.
   const computerById = new Map(computers.map((computer) => [computer.id, computer]));

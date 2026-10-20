@@ -1,5 +1,11 @@
 import type { RealtimeFanout } from "@rakazo/adapter-kit";
-import type { BotSecretDestination, MessageBlock, ProductEvent } from "@rakazo/contracts";
+import type {
+  Actor,
+  BotSecretDestination,
+  MessageBlock,
+  ProductEvent,
+  WithdrawDecisionInput,
+} from "@rakazo/contracts";
 import {
   BOT_INSTRUCTIONS_MAX_LENGTH,
   encodeLoginSecret,
@@ -30,13 +36,14 @@ import { getLogger } from "@rakazo/logging";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
-import { findOpenDuplicateQuestion } from "./decisions.js";
+import { findOpenDuplicateQuestion, pendingAskBlock } from "./decisions.js";
 import {
   assertRunCanWriteHistory,
   assertRunIsCancelled,
   createThreadMessageInTransaction,
   RunHistoryWriteError,
 } from "./messages.js";
+import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 const EVENT_BATCH_SIZE = 200;
@@ -1154,6 +1161,130 @@ export async function answerRunInput(
   await notifyRealtime(realtime, committed.threadId, committed.seq);
   if (committed.syncedRunIds.length) onSyncedRuns?.(committed.syncedRunIds);
   return true;
+}
+
+export class QuestionNotWithdrawableError extends Error {
+  constructor() {
+    super("Only an unanswered ordinary question on a waiting run can be withdrawn");
+    this.name = "QuestionNotWithdrawableError";
+  }
+}
+
+export interface QuestionWithdrawalCommit {
+  withdrawn: boolean;
+  runId: string;
+  threadId: string;
+  eventSeq: number | null;
+}
+
+/** Cancel exactly one obsolete question; the caller snapshots and tears down its run's work. */
+export async function withdrawQuestionInTransaction(
+  tx: Prisma.TransactionClient,
+  actor: Pick<Actor, "spaceId" | "userId">,
+  input: WithdrawDecisionInput,
+): Promise<QuestionWithdrawalCommit> {
+  const candidate = await tx.message.findFirst({
+    where: {
+      id: input.messageId,
+      botId: input.botId,
+      role: "bot",
+      thread: { spaceId: actor.spaceId, userId: actor.userId },
+    },
+    select: { threadId: true, runId: true },
+  });
+  if (!candidate?.runId) throw new IsolationError();
+
+  // Match answers' thread-first lock order. The run lock also fences worker claims
+  // that do not take the thread lock; recheck every guard only after both locks.
+  await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidate.threadId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM runs WHERE id = ${candidate.runId} FOR UPDATE`;
+  const run = await tx.run.findFirst({
+    where: {
+      id: candidate.runId,
+      threadId: candidate.threadId,
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      botId: input.botId,
+      bot: { spaceId: actor.spaceId, userId: actor.userId, archivedAt: null },
+      thread: {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        OR: [
+          { botId: input.botId, bot: { archivedAt: null } },
+          {
+            groupId: { not: null },
+            group: { spaceId: actor.spaceId, userId: actor.userId, archivedAt: null },
+          },
+        ],
+      },
+    },
+    select: { id: true, taskId: true, status: true },
+  });
+  const message = await tx.message.findFirst({
+    where: {
+      id: input.messageId,
+      threadId: candidate.threadId,
+      runId: candidate.runId,
+      botId: input.botId,
+      role: "bot",
+    },
+    select: { blocks: true },
+  });
+  if (!run || !message) throw new IsolationError();
+  const parsed = MessageBlockSchema.array().safeParse(message.blocks);
+  const asks = parsed.success ? parsed.data.filter((block) => block.kind === "ask") : [];
+  const ask = asks[0];
+  if (
+    asks.length !== 1 ||
+    !ask ||
+    ask.status === "answered" ||
+    ask.answer !== undefined ||
+    ask.answeredBy ||
+    ask.syncedFrom ||
+    ask.draftFinal !== undefined ||
+    ask.approvalEffectId ||
+    isApprovalAskBlock(ask) ||
+    isSecretAskBlock(ask) ||
+    ask.credential ||
+    ask.instructionUpdate
+  ) {
+    throw new QuestionNotWithdrawableError();
+  }
+  if (run.status === "cancelled") {
+    return {
+      withdrawn: false,
+      runId: run.id,
+      threadId: candidate.threadId,
+      eventSeq: null,
+    };
+  }
+  if (run.status !== "waiting_input") throw new QuestionNotWithdrawableError();
+  // Cancellation ends the whole run, not just this card. Other pending decisions
+  // must remain answerable; answered cards in this run are only history.
+  const otherMessages = await tx.message.findMany({
+    where: { runId: run.id, id: { not: input.messageId } },
+    select: { blocks: true },
+  });
+  if (otherMessages.some((other) => pendingAskBlock(other.blocks))) {
+    throw new QuestionNotWithdrawableError();
+  }
+
+  await cancelRunsInTransaction(tx, [run], new Date());
+  const event = await appendEventInTransaction(tx, {
+    spaceId: actor.spaceId,
+    threadId: candidate.threadId,
+    botId: input.botId,
+    type: "run.cancelled",
+    runId: run.id,
+    payload: { messageId: input.messageId, reason: input.reason, withdrawnByUserId: actor.userId },
+  });
+  await tx.event.deleteMany({ where: { runId: run.id, type: "thread.progress" } });
+  return {
+    withdrawn: true,
+    runId: run.id,
+    threadId: candidate.threadId,
+    eventSeq: event.seq,
+  };
 }
 
 /** Answer a waiting question ask with composer free-text. Approval and secret cards stay on the card path. */

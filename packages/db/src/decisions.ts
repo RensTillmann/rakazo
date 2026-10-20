@@ -16,7 +16,7 @@ export type PendingDecisionRow = {
 
 type DecisionActor = Pick<Actor, "spaceId" | "userId">;
 
-function pendingAskBlock(blocks: unknown): MessageBlock | null {
+export function pendingAskBlock(blocks: unknown): MessageBlock | null {
   if (!Array.isArray(blocks)) return null;
   for (const block of blocks as MessageBlock[]) {
     if (block?.kind === "ask" && block.status !== "answered") return block;
