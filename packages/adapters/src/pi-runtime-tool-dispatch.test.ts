@@ -1632,6 +1632,27 @@ describe("Pi connector tool dispatch", () => {
       expect(fakeAgentState.followUpMessages).toEqual([]);
       expect(events.at(-1)).toEqual({ type: "done", text: "NO_RESPONSE" });
     });
+
+    it("announces a later turn's first text when no tool event came between the turns", async () => {
+      fakeAgentState.replies = ["The report.", "That's the output of my first command."];
+      // A finished background shell comes back as a follow-up, not as a tool event.
+      fakeAgentState.followUpMessages = [{ role: "user", content: "shell finished" }];
+      const events = await runSilent({ allowSilentEmpty: true });
+
+      expect(
+        events.filter(
+          (event) =>
+            typeof event === "object" &&
+            event !== null &&
+            "type" in event &&
+            (event.type === "text" || event.type === "assistant_turn"),
+        ),
+      ).toEqual([
+        { type: "text", text: "The report." },
+        { type: "assistant_turn" },
+        { type: "text", text: "That's the output of my first command." },
+      ]);
+    });
   });
 
   it("keeps FYI bot-message wakes silent when the model produces nothing", async () => {

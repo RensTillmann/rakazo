@@ -727,6 +727,15 @@ export class PiAgentRuntime implements AgentRuntime {
           pendingThinking = "";
           if (text) queue.push({ type: "thinking", text });
         };
+        // Whether the current assistant message already emitted text. Its first text after
+        // earlier turns' text is announced, so the consumer keeps the turns apart even when no
+        // tool event came between them (shell follow-ups, refused tool calls).
+        let messageTextEmitted = false;
+        const pushAssistantText = (text: string) => {
+          if (!messageTextEmitted && streamed.trim()) queue.push({ type: "assistant_turn" });
+          messageTextEmitted = true;
+          queue.push({ type: "text", text });
+        };
         agent.subscribe(async (event) => {
           if (event.type === "message_end") {
             await piSession?.appendMessage(event.message);
@@ -745,6 +754,7 @@ export class PiAgentRuntime implements AgentRuntime {
           }
           if (event.type === "message_start" && event.message.role === "assistant") {
             currentMessageStreamed = "";
+            messageTextEmitted = false;
             pendingThinking = "";
           }
           if (event.type === "message_update") {
@@ -772,9 +782,9 @@ export class PiAgentRuntime implements AgentRuntime {
                 toolActivityShowing = false;
                 queue.push({ type: "progress", text: "", activity: true });
               }
+              pushAssistantText(delta);
               streamed += delta;
               currentMessageStreamed += delta;
-              queue.push({ type: "text", text: delta });
             }
           }
           if (event.type === "turn_end") {
@@ -797,8 +807,8 @@ export class PiAgentRuntime implements AgentRuntime {
                 // A provider can put the answer only on the completed message after
                 // narration already filled `streamed`, so message_end will not emit it.
                 if (messageText.trim() && !streamedFinal) {
+                  pushAssistantText(messageText);
                   streamed += messageText;
-                  queue.push({ type: "text", text: messageText });
                 }
               } else if (
                 // A provider failure is not an empty success. Do not schedule
@@ -854,8 +864,8 @@ export class PiAgentRuntime implements AgentRuntime {
               !continued &&
               (streamedThisMessage.includes(text) || sincePendingFinal.endsWith(text));
             if (textToEmit && !messageHasToolCall(event.message) && !alreadyEmitted) {
+              pushAssistantText(textToEmit);
               streamed += textToEmit;
-              queue.push({ type: "text", text: textToEmit });
             } else if (text && !streamed) {
               streamed = text;
               queue.push({ type: "text", text });
@@ -897,7 +907,7 @@ export class PiAgentRuntime implements AgentRuntime {
             tail = reply.slice(sinceFinal.length);
           }
           if (tail) {
-            queue.push({ type: "text", text: tail });
+            pushAssistantText(tail);
             streamed += tail;
           }
           queue.push({ type: "done", text: streamed });
@@ -931,7 +941,7 @@ export class PiAgentRuntime implements AgentRuntime {
                 ? terminalText.slice(sincePendingFinal.length)
                 : terminalText;
             if (missing) {
-              queue.push({ type: "text", text: missing });
+              pushAssistantText(missing);
               streamed += missing;
               toolWorkPendingFinal = false;
             }

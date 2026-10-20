@@ -1,4 +1,5 @@
 import type { MessageBlock, ThreadMessage } from "@rakazo/contracts";
+import { withoutRecipientSalutation } from "./peer-message-text";
 
 export interface PeerMessage {
   messageId: string;
@@ -100,15 +101,16 @@ export function peerRoomView(
   const sent = block.kind === "bot_message_sent";
   const peerBotId = sent ? block.toBotId : block.fromBotId;
   const peerBotName = sent ? block.toBotName : block.fromBotName;
+  const recipientName = sent ? peerBotName : threadBot.name;
   return {
     message: {
       ...message,
       role: "bot",
       botId: sent ? threadBot.id : peerBotId,
-      blocks: [{ kind: "text", text: block.text }],
+      blocks: [{ kind: "text", text: withoutRecipientSalutation(block.text, recipientName) }],
     },
     speakerName: sent ? threadBot.name : peerBotName,
-    recipientName: sent ? peerBotName : threadBot.name,
+    recipientName,
     intent: block.intent,
     peerBotId,
     peerBotName,

@@ -4576,8 +4576,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let pendingProgress = "";
         let lastProgressAt = 0;
         let hasStreamedText = false;
-        // Set by a tool call: the next text starts a new assistant turn and needs a break
-        // from the earlier text that stayed in this reply (held-back narration).
+        // Set by a tool call or a later model turn's first text: the next text starts a new
+        // assistant turn and needs a break from the earlier text that stayed in this reply
+        // (held-back narration, text-only turns of a routine run).
         let assistantTurnBreakPending = false;
         let toolCallStreak: ToolCallStreak = { key: undefined, count: 0 };
         let lastComputerFrameId: string | undefined;
@@ -7944,6 +7945,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (!scripted && pendingProgress && now - lastProgressAt >= 250) {
                 await flushProgress();
               }
+            } else if (event.type === "assistant_turn") {
+              assistantTurnBreakPending = true;
             } else if (event.type === "thinking") {
               if (!runRecordsThinking(behaviorTrigger)) continue;
               const block = thinkingBlock(redactSecrets(event.text, runSecrets));

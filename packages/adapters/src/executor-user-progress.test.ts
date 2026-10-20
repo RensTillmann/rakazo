@@ -1,4 +1,4 @@
-import type { AgentRunRequest } from "@rakazo/adapter-kit";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { loadBotMessageContext, returnBotMessageOutcome } from "./bot-messages.js";
@@ -37,6 +37,8 @@ async function runTurn(
     doneText?: string;
     splitText?: boolean;
     priorProgressText?: string;
+    /** Runtime events to play instead of narration, tool calls and the final text. */
+    script?: AgentRuntimeEvent[];
   } = {},
 ) {
   vi.mocked(loadBotMessageContext).mockResolvedValue({
@@ -62,6 +64,10 @@ async function runTurn(
     leaseFence: 0,
   };
   const runtimeRun = vi.fn(async function* (_request: AgentRunRequest) {
+    if (options.script) {
+      yield* options.script;
+      return;
+    }
     const narrations = Array.isArray(narration) ? narration : [narration];
     for (const [index, text] of narrations.entries()) {
       for (const chunk of options.splitText ? [...text] : [text]) {
@@ -324,6 +330,33 @@ describe.each([
     expect(finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")).toEqual([
       { kind: "text", text: "Checked: all clear." },
     ]);
+  });
+
+  // Incident 20 Oct 02:07Z (Jill, "Work bot:jill tracker issues"): the turns' tool calls never
+  // reached the executor as `tool` events (finished shells came back as follow-ups), so only the
+  // runtime's turn marker separates the report from the later turns' comments.
+  it("keeps a paragraph break between model turns with no tool event between them", async () => {
+    const turns = [
+      "#168 is still waiting on #163's next:customer label.",
+      "That's the output of my first command this run.",
+      "The next step is in my Progress: comment on #131.",
+    ];
+    const { finalizeRun } = await runTurn("", true, undefined, [], "fyi", {
+      trigger,
+      routineId,
+      script: [
+        { type: "text", text: turns[0]! },
+        { type: "assistant_turn" },
+        { type: "text", text: turns[1]! },
+        { type: "assistant_turn" },
+        { type: "text", text: turns[2]! },
+        { type: "done", text: turns.join("") },
+      ],
+    });
+    const text = finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text")
+      .map((block) => block.text)
+      .join("");
+    expect(text).toBe(turns.join("\n\n"));
   });
 });
 

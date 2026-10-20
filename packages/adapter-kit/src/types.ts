@@ -591,6 +591,12 @@ export type AgentRuntimeEvent =
       /** Provider-generated tool status rather than assistant-authored narration. */
       activity?: true;
     }
+  /**
+   * A later model turn starts writing text after earlier turns of this run already wrote some.
+   * Not every turn boundary has a `tool` event (a text-only turn continued by a follow-up, or
+   * a turn whose tool calls were refused before they ran); consumers keep the turns' text apart.
+   */
+  | { type: "assistant_turn" }
   | { type: "tool"; name: string; args: Record<string, unknown>; executionId: string }
   | {
       type: "ask";

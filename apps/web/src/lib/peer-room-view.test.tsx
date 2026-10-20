@@ -100,4 +100,29 @@ describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
     peerRoomView(stored, quinn);
     expect(stored).toEqual(before);
   });
+
+  it("drops a leading recipient salutation from the shown body in both chats, stored text unchanged", () => {
+    const received = message("user", [
+      {
+        kind: "bot_message_received",
+        fromBotId: "lily",
+        fromBotName: "Lily",
+        text: "quinn: QA #285 ready",
+      },
+    ]);
+    const sent = message("bot", [
+      { kind: "bot_message_sent", toBotId: "lily", toBotName: "Lily", text: "Lily, hold the docs" },
+    ]);
+    const before = structuredClone(sent);
+    const receivedBlock = peerRoomView(received, quinn)?.message.blocks[0];
+    const sentBlock = peerRoomView(sent, quinn)?.message.blocks[0];
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{sentBlock?.kind === "text" ? sentBlock.text : ""}</ChatMarkdown>,
+    );
+
+    expect(receivedBlock).toEqual({ kind: "text", text: "QA #285 ready" });
+    expect(html).toContain("Hold the docs");
+    expect(html).not.toContain("Lily,");
+    expect(sent).toEqual(before);
+  });
 });

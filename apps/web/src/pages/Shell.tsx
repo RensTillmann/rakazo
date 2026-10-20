@@ -7690,18 +7690,6 @@ const MessageView = memo(function MessageView({
                 → {peerRoute.recipientName}
                 {peerRoute.intent ? ` · ${peerIntentLabel(peerRoute.intent)}` : ""}
               </span>
-              <button
-                type="button"
-                className="hover:text-foreground hover:underline"
-                onClick={() =>
-                  onOpenPeerMessages({
-                    peerBotId: peerRoute.peerBotId,
-                    peerBotName: peerRoute.peerBotName,
-                  })
-                }
-              >
-                {t`Open conversation`}
-              </button>
               {peerReplies ? (
                 <PeerRouteRepliesToggle
                   peer={peerRoute.peerBotName}

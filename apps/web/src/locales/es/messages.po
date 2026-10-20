@@ -3719,10 +3719,6 @@ msgstr ""
 msgid "Open computer settings"
 msgstr ""
 
-#: src/pages/Shell.tsx
-msgid "Open conversation"
-msgstr ""
-
 #: src/components/markdown-link-prompt.tsx
 msgid "Open external link?"
 msgstr "¿Abrir enlace externo?"
