@@ -1,0 +1,58 @@
+import { describe, expect, it } from "vitest";
+import {
+  composerMentionQuery,
+  composerOccurrenceMentions,
+  editComposerOccurrences,
+  insertComposerOccurrence,
+} from "./composer-occurrences.js";
+
+const bot = { kind: "bot" as const, id: "bot-a", name: "Avery" };
+
+describe("inline composer occurrences", () => {
+  it("completes at the caret in the middle, retaining punctuation and Unicode", () => {
+    const text = "É🙂 ask @Av; then continue.";
+    const caret = text.indexOf(";");
+    const result = insertComposerOccurrence(text, caret, caret, bot, []);
+    expect(result?.text).toBe("É🙂 ask @Avery; then continue.");
+    expect(result?.caret).toBe("É🙂 ask @Avery".length);
+    expect(result?.occurrences[0]?.start).toBe("É🙂 ask ".length);
+  });
+
+  it("retains repeat positions but deduplicates routing IDs", () => {
+    const first = insertComposerOccurrence("Ask @Av", 7, 7, bot, [])!;
+    const text = `${first.text}then @Av`;
+    const second = insertComposerOccurrence(
+      text,
+      text.length,
+      text.length,
+      bot,
+      first.occurrences,
+    )!;
+    expect(second.text).toBe("Ask @Avery then @Avery ");
+    expect(second.occurrences).toHaveLength(2);
+    expect(composerOccurrenceMentions(second.occurrences)).toEqual([bot]);
+  });
+
+  it("shifts identities when editing before a mention and drops edited/deleted mentions", () => {
+    const first = insertComposerOccurrence("Ask @Av", 7, 7, bot, [])!;
+    const next = `🙂 ${first.text}`;
+    const shifted = editComposerOccurrences(first.text, next, first.occurrences);
+    expect(shifted[0]?.start).toBe(first.occurrences[0]!.start + 3);
+    expect(editComposerOccurrences(next, next.replace("@Avery", "@Other"), shifted)).toEqual([]);
+    expect(editComposerOccurrences(next, next.replace("@Avery", ""), shifted)).toEqual([]);
+  });
+
+  it("replaces a selected range and keeps following occurrences correctly offset", () => {
+    const text = "@Av replace this; @Avery";
+    const existing = [{ start: text.lastIndexOf("@"), end: text.length, mention: bot }];
+    const result = insertComposerOccurrence(text, 3, text.indexOf(";"), bot, existing)!;
+    expect(result.text).toBe("@Avery; @Avery");
+    expect(result.occurrences.map(({ start }) => start)).toEqual([0, 8]);
+  });
+
+  it("recognises Unicode queries and ignores email-like text", () => {
+    expect(composerMentionQuery("Hi @Él", 6)?.query).toBe("Él");
+    expect(composerMentionQuery("person@Av", 9)).toBeNull();
+    expect(insertComposerOccurrence("plain", 5, 5, bot, [])).toBeNull();
+  });
+});
