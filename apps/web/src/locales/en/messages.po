@@ -103,6 +103,16 @@ msgstr "{0} will still respond to direct mentions."
 msgid "{0}'s screen"
 msgstr "{0}'s screen"
 
+#. placeholder {0}: Math.round(fiveHour)
+#: src/components/UsageBars.tsx
+msgid "{0}% used · 5 hours"
+msgstr "{0}% used · 5 hours"
+
+#. placeholder {0}: Math.round(weekly)
+#: src/components/UsageBars.tsx
+msgid "{0}% used this week"
+msgstr "{0}% used this week"
+
 #: src/components/DecisionDock.tsx
 msgid "{addedCount} new decisions waiting"
 msgstr "{addedCount} new decisions waiting"
@@ -170,10 +180,6 @@ msgstr "{hours}h ago"
 #: src/lib/relative-time.ts
 msgid "{minutes}m ago"
 msgstr "{minutes}m ago"
-
-#: src/components/UsageBars.tsx
-msgid "{modelProvider} account allowance unavailable"
-msgstr "{modelProvider} account allowance unavailable"
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -388,6 +394,10 @@ msgstr "Account ID"
 msgid "Account label"
 msgstr "Account label"
 
+#: src/components/UsageBars.tsx
+msgid "Account usage"
+msgstr "Account usage"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
 msgstr "Accounts"
@@ -408,6 +418,11 @@ msgstr "Actions for {0}"
 msgid "Actions for space"
 msgstr "Actions for space"
 
+#: src/components/UsageBars.tsx
+msgid "active"
+msgstr "active"
+
+#: src/components/UsageBars.tsx
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
@@ -694,10 +709,6 @@ msgstr "Answered: {0} (same question)"
 msgid "Answered: {answer}"
 msgstr "Answered: {answer}"
 
-#: src/components/UsageBars.tsx
-msgid "Anthropic Claude · account allowance"
-msgstr "Anthropic Claude · account allowance"
-
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr "Any model, with your own key"
@@ -771,8 +782,8 @@ msgid "Artifacts"
 msgstr "Artifacts"
 
 #: src/components/UsageBars.tsx
-msgid "as of {allowanceTime}"
-msgstr "as of {allowanceTime}"
+msgid "as of {age}"
+msgstr "as of {age}"
 
 #: src/components/UsageBars.tsx
 msgid "as of {time}"
@@ -909,6 +920,10 @@ msgstr "Back"
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "Back to sign in"
+
+#: src/components/UsageBars.tsx
+msgid "Backup"
+msgstr "Backup"
 
 #: src/pages/ModelBackupsSettings.tsx
 msgid "Backup models"
@@ -1205,14 +1220,6 @@ msgstr "Choose a new password"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "Choose file"
-
-#: src/components/UsageBars.tsx
-msgid "Claude 5 hours {fiveHourPct}% used"
-msgstr "Claude 5 hours {fiveHourPct}% used"
-
-#: src/components/UsageBars.tsx
-msgid "Claude week {weeklyPct}% used"
-msgstr "Claude week {weeklyPct}% used"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -3103,6 +3110,10 @@ msgstr "Loading memory settings…"
 msgid "Loading model catalog…"
 msgstr "Loading model catalog…"
 
+#: src/components/UsageBars.tsx
+msgid "Loading model list"
+msgstr "Loading model list"
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
 msgstr "Loading preview…"
@@ -3381,6 +3392,10 @@ msgstr "Model \"{modelId}\" was not listed."
 #: src/pages/Onboarding.tsx
 msgid "Model id"
 msgstr "Model id"
+
+#: src/components/UsageBars.tsx
+msgid "Model list incomplete"
+msgstr "Model list incomplete"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
@@ -4006,6 +4021,10 @@ msgstr "Preview isn't available for this file type — download it to view it."
 #: src/components/DecisionDock.tsx
 msgid "Previous decision"
 msgstr "Previous decision"
+
+#: src/components/UsageBars.tsx
+msgid "Primary"
+msgstr "Primary"
 
 #: src/pages/Board.tsx
 msgid "Priority"
@@ -4755,6 +4774,10 @@ msgstr "Shared chat with {GROUP_MEMBER_MIN}-{GROUP_MEMBER_MAX} bots. They all re
 msgid "Shared documents"
 msgstr "Shared documents"
 
+#: src/components/UsageBars.tsx
+msgid "Shared provider account allowance"
+msgstr "Shared provider account allowance"
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared skills"
 msgstr "Shared skills"
@@ -5495,6 +5518,10 @@ msgstr "Usage"
 #: src/components/UsageBars.tsx
 msgid "Usage / Details"
 msgstr "Usage / Details"
+
+#: src/components/UsageBars.tsx
+msgid "Usage unavailable"
+msgstr "Usage unavailable"
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'
 #. placeholder {0}: deviceTimezone.replaceAll("_", " ")

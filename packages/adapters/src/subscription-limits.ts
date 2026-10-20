@@ -2,11 +2,16 @@ import type { Models } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { SecretStore, SubscriptionLimitReading } from "@rakazo/adapter-kit";
 import type { PrismaClient } from "@rakazo/db";
+import * as z from "zod";
+import type { StoredModelSecret } from "./pi-oauth.js";
 import {
   ANTHROPIC_OAUTH_PROVIDER,
+  CHATGPT_OAUTH_PROVIDER,
+  oauthCredentialAccountId,
   parseModelSecret,
   refreshExpiredModelCredential,
 } from "./pi-oauth.js";
+import { fetchZaiQuotaUsage } from "./zai-usage.js";
 
 /**
  * RAKAZO_SUBSCRIPTION_LIMITS (fleet patch): capture Anthropic's subscription-window headers on
@@ -64,7 +69,8 @@ type UsageWindow = { utilization?: unknown; resets_at?: unknown } | null | undef
 
 function oauthWindow(window: UsageWindow): { util: number | null; resetAt: Date | null } {
   const raw = window?.utilization;
-  const util = typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw / 100 : null;
+  const util =
+    typeof raw === "number" && Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw / 100 : null;
   const reset = typeof window?.resets_at === "string" ? new Date(window.resets_at) : null;
   return { util, resetAt: reset && !Number.isNaN(reset.getTime()) ? reset : null };
 }
@@ -90,7 +96,55 @@ export function parseOAuthUsageResponse(
   };
 }
 
+const CodexUsageWindowSchema = z.object({
+  used_percent: z.number().min(0).max(100),
+  limit_window_seconds: z.union([z.literal(18_000), z.literal(604_800)]),
+  reset_at: z.number().int().positive(),
+});
+const CodexUsageResponseSchema = z.object({
+  rate_limit: z.object({
+    primary_window: z.unknown().optional(),
+    secondary_window: z.unknown().optional(),
+  }),
+});
+
+/** Wham primary/secondary are ordering, not durations: Pro can have only a weekly primary. */
+export function parseCodexUsageResponse(
+  body: unknown,
+  now: Date = new Date(),
+): SubscriptionLimitReading | null {
+  const parsed = CodexUsageResponseSchema.safeParse(body);
+  if (!parsed.success) return null;
+  const limits = parsed.data.rate_limit;
+  const reading: SubscriptionLimitReading = {
+    provider: CHATGPT_OAUTH_PROVIDER,
+    fiveHourUtil: null,
+    fiveHourResetAt: null,
+    sevenDayUtil: null,
+    sevenDayResetAt: null,
+    status: null,
+    observedAt: now,
+  };
+  for (const window of [limits.primary_window, limits.secondary_window]) {
+    const parsedWindow = CodexUsageWindowSchema.safeParse(window);
+    if (!parsedWindow.success) continue;
+    const used = parsedWindow.data.used_percent;
+    const resetAt = new Date(parsedWindow.data.reset_at * 1000);
+    if (!Number.isFinite(resetAt.getTime()) || resetAt.getTime() <= now.getTime()) continue;
+    if (parsedWindow.data.limit_window_seconds === 18_000) {
+      reading.fiveHourUtil = used / 100;
+      reading.fiveHourResetAt = resetAt;
+    } else if (parsedWindow.data.limit_window_seconds === 604_800) {
+      reading.sevenDayUtil = used / 100;
+      reading.sevenDayResetAt = resetAt;
+    }
+  }
+  return reading.fiveHourUtil === null && reading.sevenDayUtil === null ? null : reading;
+}
+
 export const OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
+/** Codex's read-only account allowance endpoint: https://github.com/openai/codex/issues/10869 */
+export const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 export const OAUTH_USAGE_CACHE_MS = 10 * 60_000;
 export const OAUTH_USAGE_BACKOFF_MS = 15 * 60_000;
 const OAUTH_USAGE_TIMEOUT_MS = 10_000;
@@ -100,128 +154,221 @@ export type OAuthUsageResult =
   | { kind: "rate_limited" }
   | { kind: "failed" };
 
-/** The token goes only into the Authorization header; it is never logged or returned. */
-export async function fetchAnthropicOAuthUsage(
-  accessToken: string,
-  options: { fetch?: typeof fetch; now?: () => Date } = {},
+/** Tokens and account identifiers stay in request headers, never the returned reading. */
+async function fetchOAuthUsage(
+  url: string,
+  headers: Record<string, string>,
+  parse: (body: unknown, now: Date) => SubscriptionLimitReading | null,
+  options: { fetch?: typeof fetch; now?: () => Date },
 ): Promise<OAuthUsageResult> {
-  const fetcher = options.fetch ?? globalThis.fetch;
   try {
-    const response = await fetcher(OAUTH_USAGE_URL, {
+    const response = await (options.fetch ?? globalThis.fetch)(url, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "anthropic-beta": "oauth-2025-04-20,claude-code-20250219",
-        Accept: "application/json",
-      },
+      headers: { ...headers, Accept: "application/json" },
       signal: AbortSignal.timeout(OAUTH_USAGE_TIMEOUT_MS),
     });
     if (response.status === 429) return { kind: "rate_limited" };
     if (!response.ok) return { kind: "failed" };
-    const reading = parseOAuthUsageResponse(await response.json(), options.now?.() ?? new Date());
+    const reading = parse(await response.json(), options.now?.() ?? new Date());
     return reading ? { kind: "reading", reading } : { kind: "failed" };
   } catch {
     return { kind: "failed" };
   }
 }
 
+export function fetchAnthropicOAuthUsage(
+  accessToken: string,
+  options: { fetch?: typeof fetch; now?: () => Date } = {},
+): Promise<OAuthUsageResult> {
+  return fetchOAuthUsage(
+    OAUTH_USAGE_URL,
+    {
+      Authorization: `Bearer ${accessToken}`,
+      "anthropic-beta": "oauth-2025-04-20,claude-code-20250219",
+    },
+    parseOAuthUsageResponse,
+    options,
+  );
+}
+
+export function fetchCodexOAuthUsage(
+  accessToken: string,
+  accountId: string,
+  options: { fetch?: typeof fetch; now?: () => Date } = {},
+): Promise<OAuthUsageResult> {
+  return fetchOAuthUsage(
+    CODEX_USAGE_URL,
+    {
+      Authorization: `Bearer ${accessToken}`,
+      "ChatGPT-Account-Id": accountId,
+      "OAI-Product-Sku": "codex",
+    },
+    parseCodexUsageResponse,
+    options,
+  );
+}
+
 const MIN_TOKEN_VALIDITY_MS = 60_000;
 
-/**
- * The newest Anthropic subscription (OAuth) credential of this user, refreshed when about to
- * expire. Read server-side only; undefined when the user has none.
- */
-export async function loadAnthropicSubscriptionToken(
-  prisma: Pick<PrismaClient, "userModelCredential" | "secret">,
-  secrets: Pick<SecretStore, "load" | "put">,
-  scope: { userId: string; spaceId: string },
-  now: () => number = Date.now,
-): Promise<string | undefined> {
-  const credential = await prisma.userModelCredential.findFirst({
-    where: { userId: scope.userId, provider: ANTHROPIC_OAUTH_PROVIDER },
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    select: { secretId: true },
-  });
-  if (!credential) return undefined;
-  const read = async () => {
-    const row = await prisma.secret.findFirst({
-      where: { id: credential.secretId, userId: scope.userId },
-      select: { id: true, ciphertext: true },
-    });
+type SubscriptionScope = { userId: string; spaceId: string };
+type SubscriptionPrisma = Pick<PrismaClient, "userModelCredential" | "secret">;
+type SubscriptionSecrets = Pick<SecretStore, "load" | "put">;
+type SubscriptionSecret = { id: string; ciphertext: string };
+type SubscriptionCredential = Extract<StoredModelSecret, { kind: "oauth" | "api_key" }>;
+export type SubscriptionAccountReading = SubscriptionLimitReading & { label: string };
+
+/** Reuses the runtime's locked refresh and account-identity safeguard. */
+async function loadSubscriptionCredential(
+  prisma: SubscriptionPrisma,
+  secrets: SubscriptionSecrets,
+  scope: SubscriptionScope,
+  secret: SubscriptionSecret,
+  provider: string,
+  now: () => number,
+): Promise<SubscriptionCredential | undefined> {
+  const decrypt = async (row: SubscriptionSecret | null) => {
     if (!row) return undefined;
     try {
       const parsed = parseModelSecret(await secrets.load(row.ciphertext, row.id));
-      return parsed.kind === "oauth" ? parsed.credential : undefined;
+      if (provider === "zai") return parsed.kind === "api_key" ? parsed : undefined;
+      return parsed.kind === "oauth" ? parsed : undefined;
     } catch {
       return undefined;
     }
   };
-  let oauth = await read();
-  if (!oauth) return undefined;
-  if (oauth.expires - now() < MIN_TOKEN_VALIDITY_MS) {
+  let parsed = await decrypt(secret);
+  if (!parsed) return undefined;
+  if (parsed.kind === "api_key") return parsed;
+  if (parsed.credential.expires - now() < MIN_TOKEN_VALIDITY_MS) {
     try {
-      await refreshExpiredModelCredential(
-        prisma,
-        secrets,
-        scope,
-        credential.secretId,
-        ANTHROPIC_OAUTH_PROVIDER,
-        { signal: AbortSignal.timeout(OAUTH_USAGE_TIMEOUT_MS) },
-      );
+      await refreshExpiredModelCredential(prisma, secrets, scope, secret.id, provider, {
+        signal: AbortSignal.timeout(OAUTH_USAGE_TIMEOUT_MS),
+      });
     } catch {
       return undefined;
     }
-    oauth = await read();
-    if (!oauth || oauth.expires - now() < MIN_TOKEN_VALIDITY_MS) return undefined;
+    parsed = await decrypt(
+      await prisma.secret.findFirst({
+        where: { id: secret.id, userId: scope.userId, spaceId: null },
+        select: { id: true, ciphertext: true },
+      }),
+    );
+    if (parsed?.kind !== "oauth" || parsed.credential.expires - now() < MIN_TOKEN_VALIDITY_MS) {
+      return undefined;
+    }
   }
-  return oauth.access;
+  return parsed;
 }
 
 /**
- * Idle refresh for the usage bars: at most one `/api/oauth/usage` call per user per 10 min,
- * none for 15 min after a 429. Concurrent callers share one request.
+ * Read-through allowance cache for connected credentials only. Every read checks ownership and
+ * secret reference before using cached data; reconnect creates a new reference, token refresh
+ * preserves it. All endpoints share the 10-minute throttle, 15-minute backoff and single flight.
  */
 export class SubscriptionUsageRefresher {
   private readonly lastAttempt = new Map<string, number>();
   private readonly backoffUntil = new Map<string, number>();
   private readonly inFlight = new Map<string, Promise<SubscriptionLimitReading | null>>();
+  private readonly readings = new Map<string, SubscriptionLimitReading>();
 
   constructor(private readonly options: { fetch?: typeof fetch; now?: () => number } = {}) {}
 
-  /** `key` scopes cache and backoff (one per user); `loadToken` runs only when a call is due. */
-  refresh(
+  async read(
+    prisma: SubscriptionPrisma,
+    secrets: SubscriptionSecrets,
+    scope: SubscriptionScope,
+  ): Promise<SubscriptionAccountReading[]> {
+    const credentials = await prisma.userModelCredential.findMany({
+      where: {
+        userId: scope.userId,
+        provider: { in: [ANTHROPIC_OAUTH_PROVIDER, CHATGPT_OAUTH_PROVIDER, "zai"] },
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      select: { provider: true, label: true, secretId: true },
+    });
+    if (!credentials.length) return [];
+    const rows = await prisma.secret.findMany({
+      where: {
+        id: { in: credentials.map((row) => row.secretId) },
+        userId: scope.userId,
+        spaceId: null,
+      },
+      select: { id: true, ciphertext: true },
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const seen = new Set<string>();
+    const results = await Promise.all(
+      credentials.map(async (credential) => {
+        if (seen.has(credential.provider)) return null;
+        seen.add(credential.provider);
+        const secret = byId.get(credential.secretId);
+        if (!secret) return null;
+        const key = JSON.stringify([scope.userId, scope.spaceId, credential.provider, secret.id]);
+        const reading = await this.refresh(key, credential.provider, () =>
+          loadSubscriptionCredential(
+            prisma,
+            secrets,
+            scope,
+            secret,
+            credential.provider,
+            this.options.now ?? Date.now,
+          ),
+        );
+        return reading ? { ...reading, label: credential.label } : null;
+      }),
+    );
+    return results.filter((reading): reading is SubscriptionAccountReading => reading !== null);
+  }
+
+  private refresh(
     key: string,
-    loadToken: () => Promise<string | undefined>,
+    provider: string,
+    loadCredential: () => Promise<SubscriptionCredential | undefined>,
   ): Promise<SubscriptionLimitReading | null> {
     const now = (this.options.now ?? Date.now)();
     const existing = this.inFlight.get(key);
     if (existing) return existing;
-    if ((this.backoffUntil.get(key) ?? 0) > now) return Promise.resolve(null);
+    const cached = this.readings.get(key) ?? null;
+    if ((this.backoffUntil.get(key) ?? 0) > now) return Promise.resolve(cached);
     const last = this.lastAttempt.get(key);
-    if (last !== undefined && now - last < OAUTH_USAGE_CACHE_MS) return Promise.resolve(null);
+    if (last !== undefined && now - last < OAUTH_USAGE_CACHE_MS) return Promise.resolve(cached);
     this.lastAttempt.set(key, now);
     const run = (async () => {
-      const token = await loadToken();
-      if (!token) return null;
-      const result = await fetchAnthropicOAuthUsage(token, {
+      const credential = await loadCredential();
+      if (!credential) return null;
+      const options = {
         ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
         now: () => new Date((this.options.now ?? Date.now)()),
-      });
+      };
+      let result: OAuthUsageResult;
+      if (provider === "zai" && credential.kind === "api_key") {
+        result = await fetchZaiQuotaUsage(credential.key, options);
+      } else if (credential.kind === "oauth") {
+        const accountId =
+          provider === CHATGPT_OAUTH_PROVIDER
+            ? oauthCredentialAccountId(credential.credential)
+            : undefined;
+        result =
+          provider === CHATGPT_OAUTH_PROVIDER
+            ? accountId
+              ? await fetchCodexOAuthUsage(credential.credential.access, accountId, options)
+              : { kind: "failed" }
+            : await fetchAnthropicOAuthUsage(credential.credential.access, options);
+      } else {
+        result = { kind: "failed" };
+      }
       if (result.kind === "rate_limited") {
         this.backoffUntil.set(key, (this.options.now ?? Date.now)() + OAUTH_USAGE_BACKOFF_MS);
-        return null;
       }
-      return result.kind === "reading" ? result.reading : null;
+      if (result.kind === "reading") this.readings.set(key, result.reading);
+      return result.kind === "reading" ? result.reading : cached;
     })()
-      .catch(() => null)
+      .catch(() => cached)
       .finally(() => this.inFlight.delete(key));
     this.inFlight.set(key, run);
     return run;
   }
 }
-
-/** A reading older than this triggers the idle `/api/oauth/usage` refresh. */
-export const SUBSCRIPTION_READING_STALE_MS = 10 * 60_000;
 
 /** One bar: 0..100 used. Once the window's reset passed, it reads 0% (reset). */
 export function subscriptionWindow(

@@ -103,6 +103,16 @@ msgstr "{0} ימשיך להגיב לאזכורים ישירים."
 msgid "{0}'s screen"
 msgstr "המסך של {0}"
 
+#. placeholder {0}: Math.round(fiveHour)
+#: src/components/UsageBars.tsx
+msgid "{0}% used · 5 hours"
+msgstr ""
+
+#. placeholder {0}: Math.round(weekly)
+#: src/components/UsageBars.tsx
+msgid "{0}% used this week"
+msgstr ""
+
 #: src/components/DecisionDock.tsx
 msgid "{addedCount} new decisions waiting"
 msgstr ""
@@ -170,10 +180,6 @@ msgstr "לפני {hours} שע׳"
 #: src/lib/relative-time.ts
 msgid "{minutes}m ago"
 msgstr "לפני {minutes} דק׳"
-
-#: src/components/UsageBars.tsx
-msgid "{modelProvider} account allowance unavailable"
-msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -388,6 +394,10 @@ msgstr "מזהה חשבון"
 msgid "Account label"
 msgstr "תווית חשבון"
 
+#: src/components/UsageBars.tsx
+msgid "Account usage"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
 msgstr "חשבונות"
@@ -408,6 +418,11 @@ msgstr "פעולות עבור {0}"
 msgid "Actions for space"
 msgstr "פעולות למרחב"
 
+#: src/components/UsageBars.tsx
+msgid "active"
+msgstr ""
+
+#: src/components/UsageBars.tsx
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
@@ -694,10 +709,6 @@ msgstr ""
 msgid "Answered: {answer}"
 msgstr "נענה: {answer}"
 
-#: src/components/UsageBars.tsx
-msgid "Anthropic Claude · account allowance"
-msgstr ""
-
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr "כל מודל, עם מפתח משלך"
@@ -771,7 +782,7 @@ msgid "Artifacts"
 msgstr "תוצרים"
 
 #: src/components/UsageBars.tsx
-msgid "as of {allowanceTime}"
+msgid "as of {age}"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -909,6 +920,10 @@ msgstr "חזרה"
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "חזרה להתחברות"
+
+#: src/components/UsageBars.tsx
+msgid "Backup"
+msgstr ""
 
 #: src/pages/ModelBackupsSettings.tsx
 msgid "Backup models"
@@ -1205,14 +1220,6 @@ msgstr "בחירת סיסמה חדשה"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "בחירת קובץ"
-
-#: src/components/UsageBars.tsx
-msgid "Claude 5 hours {fiveHourPct}% used"
-msgstr ""
-
-#: src/components/UsageBars.tsx
-msgid "Claude week {weeklyPct}% used"
-msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -3103,6 +3110,10 @@ msgstr "טוען הגדרות זיכרון…"
 msgid "Loading model catalog…"
 msgstr "טוען קטלוג מודלים…"
 
+#: src/components/UsageBars.tsx
+msgid "Loading model list"
+msgstr ""
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
 msgstr "טוען תצוגה מקדימה…"
@@ -3381,6 +3392,10 @@ msgstr "המודל \"{modelId}\" לא הופיע ברשימה."
 #: src/pages/Onboarding.tsx
 msgid "Model id"
 msgstr "מזהה מודל"
+
+#: src/components/UsageBars.tsx
+msgid "Model list incomplete"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
@@ -4005,6 +4020,10 @@ msgstr "תצוגה מקדימה אינה זמינה לסוג הקובץ הזה �
 
 #: src/components/DecisionDock.tsx
 msgid "Previous decision"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Primary"
 msgstr ""
 
 #: src/pages/Board.tsx
@@ -4755,6 +4774,10 @@ msgstr "צ׳אט משותף עם {GROUP_MEMBER_MIN}-{GROUP_MEMBER_MAX} בוטי�
 msgid "Shared documents"
 msgstr "מסמכים משותפים"
 
+#: src/components/UsageBars.tsx
+msgid "Shared provider account allowance"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared skills"
 msgstr "מיומנויות משותפות"
@@ -5494,6 +5517,10 @@ msgstr "שימוש"
 
 #: src/components/UsageBars.tsx
 msgid "Usage / Details"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Usage unavailable"
 msgstr ""
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'

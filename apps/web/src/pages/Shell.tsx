@@ -2144,16 +2144,31 @@ function SpaceShell() {
       ? snapshot
       : null;
   const headerModelScope = `${userId ?? "anonymous"}:${currentSpaceId ?? "primary"}`;
-  const headerMetadata = useVisibleResource(
+  const headerMe = useVisibleResource(
     async () => {
-      const [me, backups] = await Promise.all([rpc.me(), rpc.models.backups()]);
-      if (currentSpaceId && me.spaceId !== currentSpaceId) return null;
-      return { me, backups };
+      const me = await rpc.me();
+      return currentSpaceId && me.spaceId !== currentSpaceId ? null : me;
     },
-    { key: `header-model:${headerModelScope}`, event: MODEL_SETTINGS_CHANGED_EVENT },
+    { key: `header-me:${headerModelScope}`, event: MODEL_SETTINGS_CHANGED_EVENT },
   );
-  const headerConfiguredProvider = active?.modelProvider ?? headerMetadata.data?.me.defaultProvider;
-  const headerConfiguredModel = active?.modelId ?? headerMetadata.data?.me.defaultModel;
+  const headerBackups = useVisibleResource(() => rpc.models.backups(), {
+    key: `header-backups:${headerModelScope}`,
+    event: MODEL_SETTINGS_CHANGED_EVENT,
+  });
+  const headerCredentials = useVisibleResource(
+    async () => {
+      const credentials = await rpc.models.credentials();
+      return credentials.flatMap((credential) => {
+        const modelId = credential.modelId?.trim();
+        return modelId
+          ? [{ provider: credential.provider, modelId, isDefault: credential.isDefault }]
+          : [];
+      });
+    },
+    { key: `header-credentials:${headerModelScope}`, event: MODEL_SETTINGS_CHANGED_EVENT },
+  );
+  const headerConfiguredProvider = active?.modelProvider ?? headerMe.data?.defaultProvider;
+  const headerConfiguredModel = active?.modelId ?? headerMe.data?.defaultModel;
   const headerRun = activeSnapshot?.run;
   const headerRunningModel =
     !inGroup &&
@@ -2171,20 +2186,13 @@ function SpaceShell() {
     : active?.modelId
       ? t`Bot override`
       : t`Space default`;
-  const headerModelLabel = inGroup
-    ? t`Models by participant`
-    : headerProvider && headerModelId
-      ? `${headerModelId} · ${headerModelSource}`
-      : t`Model unavailable`;
   const headerConfiguredLabel =
     headerConfiguredProvider && headerConfiguredModel
       ? `${headerConfiguredProvider}/${headerConfiguredModel}`
       : t`Unavailable`;
-  const headerBackupLabel = headerMetadata.data
-    ? headerMetadata.data.backups.length
-      ? headerMetadata.data.backups
-          .map((backup) => `${backup.provider}/${backup.modelId}`)
-          .join(", ")
+  const headerBackupLabel = headerBackups.data
+    ? headerBackups.data.length
+      ? headerBackups.data.map((backup) => `${backup.provider}/${backup.modelId}`).join(", ")
       : t`None`
     : t`Unavailable`;
   const headerModelDetails = [
@@ -4249,8 +4257,8 @@ function SpaceShell() {
             className="absolute bottom-20 start-0 top-16 z-20 w-8 touch-none md:hidden"
           />
         ) : null}
-        <div className="app-drag flex flex-wrap items-center justify-between gap-x-2 border-b border-sidebar-border px-3 py-2 md:px-[22px]">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="app-drag grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b border-sidebar-border px-3 py-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:px-[22px]">
+          <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-2">
             {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
             {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
             <button
@@ -4300,14 +4308,8 @@ function SpaceShell() {
                 </span>
               </span>
             </button>
-            <span
-              className="ms-auto min-w-0 max-w-[50%] break-words text-end text-[11px] text-muted-foreground"
-              data-testid="header-model"
-            >
-              {headerModelLabel}
-            </span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="col-start-2 row-start-1 flex items-center gap-1 md:col-start-3">
             {bootstrapMe?.phoneCallsEnabled && !inGroup && active ? (
               <button
                 type="button"
@@ -4394,6 +4396,15 @@ function SpaceShell() {
             model={headerModelDetails}
             modelProvider={inGroup ? null : headerProvider}
             modelId={inGroup ? null : headerModelId}
+            models={headerCredentials.data ?? []}
+            modelsStatus={
+              headerCredentials.error
+                ? "partial"
+                : headerCredentials.data === null
+                  ? "loading"
+                  : undefined
+            }
+            backups={headerBackups.data ?? []}
           />
         </div>
         <CallReturnBar />

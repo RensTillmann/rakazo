@@ -103,6 +103,16 @@ msgstr "{0} по-прежнему будет отвечать на прямые 
 msgid "{0}'s screen"
 msgstr "Экран {0}"
 
+#. placeholder {0}: Math.round(fiveHour)
+#: src/components/UsageBars.tsx
+msgid "{0}% used · 5 hours"
+msgstr ""
+
+#. placeholder {0}: Math.round(weekly)
+#: src/components/UsageBars.tsx
+msgid "{0}% used this week"
+msgstr ""
+
 #: src/components/DecisionDock.tsx
 msgid "{addedCount} new decisions waiting"
 msgstr ""
@@ -170,10 +180,6 @@ msgstr "{hours} ч назад"
 #: src/lib/relative-time.ts
 msgid "{minutes}m ago"
 msgstr "{minutes} мин назад"
-
-#: src/components/UsageBars.tsx
-msgid "{modelProvider} account allowance unavailable"
-msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -388,6 +394,10 @@ msgstr "ID аккаунта"
 msgid "Account label"
 msgstr "Ярлык аккаунта"
 
+#: src/components/UsageBars.tsx
+msgid "Account usage"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
 msgstr "Аккаунты"
@@ -408,6 +418,11 @@ msgstr "Действия для {0}"
 msgid "Actions for space"
 msgstr "Действия для пространства"
 
+#: src/components/UsageBars.tsx
+msgid "active"
+msgstr ""
+
+#: src/components/UsageBars.tsx
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
@@ -694,10 +709,6 @@ msgstr ""
 msgid "Answered: {answer}"
 msgstr "Ответ: {answer}"
 
-#: src/components/UsageBars.tsx
-msgid "Anthropic Claude · account allowance"
-msgstr ""
-
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr ""
@@ -771,7 +782,7 @@ msgid "Artifacts"
 msgstr ""
 
 #: src/components/UsageBars.tsx
-msgid "as of {allowanceTime}"
+msgid "as of {age}"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -909,6 +920,10 @@ msgstr "Назад"
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "Вернуться ко входу"
+
+#: src/components/UsageBars.tsx
+msgid "Backup"
+msgstr ""
 
 #: src/pages/ModelBackupsSettings.tsx
 msgid "Backup models"
@@ -1205,14 +1220,6 @@ msgstr "Выберите новый пароль"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "Выбрать файл"
-
-#: src/components/UsageBars.tsx
-msgid "Claude 5 hours {fiveHourPct}% used"
-msgstr ""
-
-#: src/components/UsageBars.tsx
-msgid "Claude week {weeklyPct}% used"
-msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -3103,6 +3110,10 @@ msgstr "Загрузка настроек памяти…"
 msgid "Loading model catalog…"
 msgstr "Загрузка каталога моделей…"
 
+#: src/components/UsageBars.tsx
+msgid "Loading model list"
+msgstr ""
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
 msgstr "Загрузка предварительного просмотра…"
@@ -3381,6 +3392,10 @@ msgstr "Модель \"{modelId}\" отсутствует в списке."
 #: src/pages/Onboarding.tsx
 msgid "Model id"
 msgstr "Идентификатор модели"
+
+#: src/components/UsageBars.tsx
+msgid "Model list incomplete"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
@@ -4005,6 +4020,10 @@ msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "Previous decision"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Primary"
 msgstr ""
 
 #: src/pages/Board.tsx
@@ -4755,6 +4774,10 @@ msgstr "Общий чат с {GROUP_MEMBER_MIN}-{GROUP_MEMBER_MAX} ботами.
 msgid "Shared documents"
 msgstr "Общие документы"
 
+#: src/components/UsageBars.tsx
+msgid "Shared provider account allowance"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared skills"
 msgstr "Общие навыки"
@@ -5494,6 +5517,10 @@ msgstr "Использование"
 
 #: src/components/UsageBars.tsx
 msgid "Usage / Details"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Usage unavailable"
 msgstr ""
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'

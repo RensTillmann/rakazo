@@ -2,7 +2,7 @@ import * as z from "zod";
 
 /** One subscription window. `usedPct` is 0..100; a window whose reset has passed reads 0. */
 export const SubscriptionWindowSchema = z.object({
-  usedPct: z.number().nullable(),
+  usedPct: z.number().min(0).max(100).nullable(),
   resetsAt: z.iso.datetime().nullable(),
   /** True when `resetsAt` already passed and `usedPct` was zeroed for that reason. */
   reset: z.boolean(),
@@ -32,19 +32,22 @@ export const ExtraUsageBarSchema = z.object({
 });
 export type ExtraUsageBar = z.infer<typeof ExtraUsageBarSchema>;
 
+/** Connected provider's shared subscription allowance, not a per-model budget. */
+export const SubscriptionAccountUsageSchema = z.object({
+  provider: z.string(),
+  label: z.string(),
+  fiveHour: SubscriptionWindowSchema,
+  sevenDay: SubscriptionWindowSchema,
+  status: z.string().nullable(),
+  observedAt: z.iso.datetime(),
+  ageSeconds: z.number().nonnegative(),
+});
+export type SubscriptionAccountUsage = z.infer<typeof SubscriptionAccountUsageSchema>;
+
 /** Fleet `usage.limits` (RAKAZO_SUBSCRIPTION_LIMITS); `enabled: false` hides the bar. */
 export const UsageLimitsSchema = z.object({
   enabled: z.boolean(),
-  claude: z
-    .object({
-      provider: z.string().optional(),
-      fiveHour: SubscriptionWindowSchema,
-      sevenDay: SubscriptionWindowSchema,
-      status: z.string().nullable(),
-      observedAt: z.iso.datetime(),
-      ageSeconds: z.number(),
-    })
-    .nullable(),
+  accounts: z.array(SubscriptionAccountUsageSchema),
   extra: z.array(ExtraUsageBarSchema),
 });
 export type UsageLimits = z.infer<typeof UsageLimitsSchema>;

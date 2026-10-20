@@ -35,7 +35,6 @@ import type {
   TicketChangeNotifier,
 } from "@rakazo/adapters";
 import {
-  ANTHROPIC_OAUTH_PROVIDER,
   acquireComputerExecutionLease,
   applyCodexLiveCatalog,
   applyTeachingDesktopInput,
@@ -80,7 +79,6 @@ import {
   listBotSecretMetadata,
   listPiCatalog,
   listScratchpadItems,
-  loadAnthropicSubscriptionToken,
   McpOAuthBroker,
   mapScratchpadItem,
   modelCredentialAuthKindsForSpace,
@@ -110,7 +108,6 @@ import {
   resolveBotWorkspacePath,
   revokeScreenControl,
   routineRunModelPin,
-  SUBSCRIPTION_READING_STALE_MS,
   SubscriptionUsageRefresher,
   sanitizeComposioError,
   savePushToken,
@@ -216,7 +213,6 @@ import {
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
-  latestSubscriptionLimitReading,
   listBoards,
   listFleetUsageBars,
   listPendingDecisions,
@@ -230,7 +226,6 @@ import {
   parseComputerMode,
   pendingDecisionCountsByThread,
   pushSessionExpiresAt,
-  recordSubscriptionLimitReading,
   releaseSpaceDeletionClaim,
   renameSpaceForMember,
   renewSpaceDeletionClaim,
@@ -598,7 +593,7 @@ export interface RouterDeps {
   oauthLogins: PiOAuthLogins;
   /** Live Codex catalog seam; defaults to the shared per-process cache. */
   codexCatalog?: CodexLiveCatalog;
-  /** Fleet: idle `/api/oauth/usage` refresher (10 min cache, 429 backoff); injectable for tests. */
+  /** Fleet: actor/credential-scoped subscription endpoint cache; injectable for tests. */
   subscriptionUsage?: SubscriptionUsageRefresher;
   /** Site icons for links; defaults to the per-process cache that fetches them. */
   favicons?: FaviconResolver;
@@ -6287,38 +6282,27 @@ export function createRouter(deps: RouterDeps) {
         };
       }),
       limits: authed.usage.limits.handler(async ({ context }) => {
-        if (!subscriptionLimitsEnabled()) return { enabled: false, claude: null, extra: [] };
-        let reading = await latestSubscriptionLimitReading(deps.prisma, ANTHROPIC_OAUTH_PROVIDER);
-        if (!reading || Date.now() - reading.observedAt.getTime() > SUBSCRIPTION_READING_STALE_MS) {
-          // Idle refresh with the user's own subscription credential; the token stays here.
-          const fresh = await subscriptionUsage.refresh(context.actor.userId, () =>
-            loadAnthropicSubscriptionToken(deps.prisma, deps.secrets, {
-              userId: context.actor.userId,
-              spaceId: context.actor.spaceId,
-            }),
-          );
-          if (fresh) {
-            await recordSubscriptionLimitReading(deps.prisma, fresh);
-            reading = fresh;
-          }
-        }
+        if (!subscriptionLimitsEnabled()) return { enabled: false, accounts: [], extra: [] };
+        const readings = await subscriptionUsage.read(deps.prisma, deps.secrets, {
+          userId: context.actor.userId,
+          spaceId: context.actor.spaceId,
+        });
         const extra = await listFleetUsageBars(deps.prisma);
         const now = new Date();
         return {
           enabled: true,
-          claude: reading
-            ? {
-                provider: reading.provider,
-                fiveHour: subscriptionWindow(reading.fiveHourUtil, reading.fiveHourResetAt, now),
-                sevenDay: subscriptionWindow(reading.sevenDayUtil, reading.sevenDayResetAt, now),
-                status: reading.status,
-                observedAt: reading.observedAt.toISOString(),
-                ageSeconds: Math.max(
-                  0,
-                  Math.round((now.getTime() - reading.observedAt.getTime()) / 1000),
-                ),
-              }
-            : null,
+          accounts: readings.map((reading) => ({
+            provider: reading.provider,
+            label: reading.label,
+            fiveHour: subscriptionWindow(reading.fiveHourUtil, reading.fiveHourResetAt, now),
+            sevenDay: subscriptionWindow(reading.sevenDayUtil, reading.sevenDayResetAt, now),
+            status: reading.status,
+            observedAt: reading.observedAt.toISOString(),
+            ageSeconds: Math.max(
+              0,
+              Math.round((now.getTime() - reading.observedAt.getTime()) / 1000),
+            ),
+          })),
           extra: extra.map((bar) => ({ ...bar, updatedAt: bar.updatedAt?.toISOString() ?? null })),
         };
       }),

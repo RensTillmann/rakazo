@@ -103,6 +103,16 @@ msgstr ""
 msgid "{0}'s screen"
 msgstr ""
 
+#. placeholder {0}: Math.round(fiveHour)
+#: src/components/UsageBars.tsx
+msgid "{0}% used · 5 hours"
+msgstr ""
+
+#. placeholder {0}: Math.round(weekly)
+#: src/components/UsageBars.tsx
+msgid "{0}% used this week"
+msgstr ""
+
 #: src/components/DecisionDock.tsx
 msgid "{addedCount} new decisions waiting"
 msgstr ""
@@ -170,10 +180,6 @@ msgstr "{hours} घंटे पहले"
 #: src/lib/relative-time.ts
 msgid "{minutes}m ago"
 msgstr "{minutes} मिनट पहले"
-
-#: src/components/UsageBars.tsx
-msgid "{modelProvider} account allowance unavailable"
-msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -388,6 +394,10 @@ msgstr "खाता आईडी"
 msgid "Account label"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "Account usage"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
 msgstr ""
@@ -408,6 +418,11 @@ msgstr "{0} के लिए कार्रवाइयां"
 msgid "Actions for space"
 msgstr ""
 
+#: src/components/UsageBars.tsx
+msgid "active"
+msgstr ""
+
+#: src/components/UsageBars.tsx
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
@@ -694,10 +709,6 @@ msgstr ""
 msgid "Answered: {answer}"
 msgstr "उत्तर: {answer}"
 
-#: src/components/UsageBars.tsx
-msgid "Anthropic Claude · account allowance"
-msgstr ""
-
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr ""
@@ -771,7 +782,7 @@ msgid "Artifacts"
 msgstr ""
 
 #: src/components/UsageBars.tsx
-msgid "as of {allowanceTime}"
+msgid "as of {age}"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -909,6 +920,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "साइन इन पर वापस जाएँ"
+
+#: src/components/UsageBars.tsx
+msgid "Backup"
+msgstr ""
 
 #: src/pages/ModelBackupsSettings.tsx
 msgid "Backup models"
@@ -1205,14 +1220,6 @@ msgstr "नया पासवर्ड चुनें"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "फ़ाइल चुनें"
-
-#: src/components/UsageBars.tsx
-msgid "Claude 5 hours {fiveHourPct}% used"
-msgstr ""
-
-#: src/components/UsageBars.tsx
-msgid "Claude week {weeklyPct}% used"
-msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -3103,6 +3110,10 @@ msgstr "मेमोरी सेटिंग्स लोड हो रही �
 msgid "Loading model catalog…"
 msgstr "मॉडल कैटलॉग लोड हो रहा है…"
 
+#: src/components/UsageBars.tsx
+msgid "Loading model list"
+msgstr ""
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
 msgstr "प्रीव्यू लोड हो रहा है…"
@@ -3381,6 +3392,10 @@ msgstr "मॉडल \"{modelId}\" सूची में नहीं था।
 #: src/pages/Onboarding.tsx
 msgid "Model id"
 msgstr "मॉडल आईडी"
+
+#: src/components/UsageBars.tsx
+msgid "Model list incomplete"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
@@ -4005,6 +4020,10 @@ msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "Previous decision"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Primary"
 msgstr ""
 
 #: src/pages/Board.tsx
@@ -4755,6 +4774,10 @@ msgstr ""
 msgid "Shared documents"
 msgstr "साझा दस्तावेज़"
 
+#: src/components/UsageBars.tsx
+msgid "Shared provider account allowance"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared skills"
 msgstr "साझा स्किल्स"
@@ -5494,6 +5517,10 @@ msgstr "उपयोग"
 
 #: src/components/UsageBars.tsx
 msgid "Usage / Details"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Usage unavailable"
 msgstr ""
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'

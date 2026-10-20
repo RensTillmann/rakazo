@@ -81,13 +81,13 @@ function fixture(stored: StoredReading | null) {
       },
     ]),
   };
-  const refresh = vi.fn(async () => null);
+  const read = vi.fn(async () => (stored ? [{ ...stored, label: "Anthropic" }] : []));
   const deps = {
     prisma: prisma as unknown as PrismaClient,
     events: { notify: vi.fn() },
     jobs: { enqueue: vi.fn() },
     secrets: { load: vi.fn(), put: vi.fn() },
-    subscriptionUsage: { refresh } as unknown as SubscriptionUsageRefresher,
+    subscriptionUsage: { read } as unknown as SubscriptionUsageRefresher,
     env: {
       webOrigin: "https://rakazo.example.test",
       sandboxProvider: "fake",
@@ -98,7 +98,7 @@ function fixture(stored: StoredReading | null) {
     },
   } as unknown as RouterDeps;
   const client = createRouterClient(createRouter(deps), { context: { actor } });
-  return { client, prisma, refresh };
+  return { client, prisma, read, deps };
 }
 
 afterEach(() => {
@@ -110,47 +110,33 @@ describe("usage.limits", () => {
     const { client, prisma } = fixture(reading(new Date()));
     await expect(client.usage.limits()).resolves.toEqual({
       enabled: false,
-      claude: null,
+      accounts: [],
       extra: [],
     });
     expect(prisma.subscriptionLimitReading.findFirst).not.toHaveBeenCalled();
   });
 
-  it("returns the latest reading with its age, zeroes a passed window and adds fleet bars", async () => {
+  it("returns account age and zeroes a passed allowance window", async () => {
     vi.stubEnv("RAKAZO_SUBSCRIPTION_LIMITS", "true");
-    const { client, refresh } = fixture(reading(new Date(Date.now() - 60_000)));
+    const { client } = fixture(reading(new Date(Date.now() - 60_000)));
     const result = UsageLimitsSchema.parse(await client.usage.limits());
-    expect(refresh).not.toHaveBeenCalled();
-    expect(result.claude?.fiveHour).toMatchObject({ usedPct: 42, reset: false });
-    expect(result.claude?.sevenDay).toMatchObject({ usedPct: 0, reset: true });
-    expect(result.claude?.ageSeconds).toBeGreaterThanOrEqual(59);
-    expect(result.extra).toEqual([
-      {
-        name: "hindsight",
-        usedPct: 20.5,
-        label: "Hindsight · this month",
-        detail: "$4.10 of $20",
-        updatedAt: "2026-10-19T09:00:00.000Z",
-        tone: null,
-      },
-    ]);
+    expect(result.accounts[0]?.fiveHour).toMatchObject({ usedPct: 42, reset: false });
+    expect(result.accounts[0]?.sevenDay).toMatchObject({ usedPct: 0, reset: true });
+    expect(result.accounts[0]?.ageSeconds).toBeGreaterThanOrEqual(59);
   });
 
-  it("refreshes a stale reading through the OAuth endpoint and stores it", async () => {
+  it("does not read or persist provider-global allowance readings", async () => {
     vi.stubEnv("RAKAZO_SUBSCRIPTION_LIMITS", "true");
-    const { client, prisma, refresh } = fixture(reading(new Date(Date.now() - 11 * 60_000)));
-    const fresh = { ...reading(new Date()), fiveHourUtil: 0.5 };
-    refresh.mockResolvedValueOnce(fresh as never);
-    const result = await client.usage.limits();
-    expect(refresh).toHaveBeenCalledWith(actor.userId, expect.any(Function));
-    expect(prisma.subscriptionLimitReading.create).toHaveBeenCalledOnce();
-    expect(result.claude?.fiveHour.usedPct).toBe(50);
+    const { client, prisma } = fixture(reading(new Date()));
+    await client.usage.limits();
+    expect(prisma.subscriptionLimitReading.findFirst).not.toHaveBeenCalled();
+    expect(prisma.subscriptionLimitReading.create).not.toHaveBeenCalled();
   });
 
-  it("returns no Claude bars when there is no reading and no refresh", async () => {
+  it("returns no account allowance when the actor has no measured credential", async () => {
     vi.stubEnv("RAKAZO_SUBSCRIPTION_LIMITS", "true");
     const { client } = fixture(null);
-    expect((await client.usage.limits()).claude).toBeNull();
+    expect((await client.usage.limits()).accounts).toEqual([]);
   });
 });
 

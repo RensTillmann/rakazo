@@ -103,6 +103,16 @@ msgstr "{0} répondra toujours aux mentions directes."
 msgid "{0}'s screen"
 msgstr "Écran de {0}"
 
+#. placeholder {0}: Math.round(fiveHour)
+#: src/components/UsageBars.tsx
+msgid "{0}% used · 5 hours"
+msgstr ""
+
+#. placeholder {0}: Math.round(weekly)
+#: src/components/UsageBars.tsx
+msgid "{0}% used this week"
+msgstr ""
+
 #: src/components/DecisionDock.tsx
 msgid "{addedCount} new decisions waiting"
 msgstr ""
@@ -170,10 +180,6 @@ msgstr "il y a {hours} h"
 #: src/lib/relative-time.ts
 msgid "{minutes}m ago"
 msgstr "il y a {minutes} min"
-
-#: src/components/UsageBars.tsx
-msgid "{modelProvider} account allowance unavailable"
-msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -388,6 +394,10 @@ msgstr "ID de compte"
 msgid "Account label"
 msgstr "Libellé du compte"
 
+#: src/components/UsageBars.tsx
+msgid "Account usage"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Accounts"
 msgstr "Comptes"
@@ -408,6 +418,11 @@ msgstr "Actions pour {0}"
 msgid "Actions for space"
 msgstr "Actions pour l'espace"
 
+#: src/components/UsageBars.tsx
+msgid "active"
+msgstr ""
+
+#: src/components/UsageBars.tsx
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
@@ -694,10 +709,6 @@ msgstr ""
 msgid "Answered: {answer}"
 msgstr "Répondu : {answer}"
 
-#: src/components/UsageBars.tsx
-msgid "Anthropic Claude · account allowance"
-msgstr ""
-
 #: src/pages/Paywall.tsx
 msgid "Any model, with your own key"
 msgstr ""
@@ -771,7 +782,7 @@ msgid "Artifacts"
 msgstr "Artefacts"
 
 #: src/components/UsageBars.tsx
-msgid "as of {allowanceTime}"
+msgid "as of {age}"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -909,6 +920,10 @@ msgstr "Retour"
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "Retour à la connexion"
+
+#: src/components/UsageBars.tsx
+msgid "Backup"
+msgstr ""
 
 #: src/pages/ModelBackupsSettings.tsx
 msgid "Backup models"
@@ -1205,14 +1220,6 @@ msgstr "Choisissez un nouveau mot de passe"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "Choisir un fichier"
-
-#: src/components/UsageBars.tsx
-msgid "Claude 5 hours {fiveHourPct}% used"
-msgstr ""
-
-#: src/components/UsageBars.tsx
-msgid "Claude week {weeklyPct}% used"
-msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -3103,6 +3110,10 @@ msgstr "Chargement des paramètres de mémoire…"
 msgid "Loading model catalog…"
 msgstr "Chargement du catalogue de modèles…"
 
+#: src/components/UsageBars.tsx
+msgid "Loading model list"
+msgstr ""
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
 msgstr "Chargement de l'aperçu…"
@@ -3381,6 +3392,10 @@ msgstr "Le modèle \"{modelId}\" n'est pas dans la liste."
 #: src/pages/Onboarding.tsx
 msgid "Model id"
 msgstr "ID du modèle"
+
+#: src/components/UsageBars.tsx
+msgid "Model list incomplete"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
@@ -4005,6 +4020,10 @@ msgstr "L'aperçu n'est pas disponible pour ce type de fichier — téléchargez
 
 #: src/components/DecisionDock.tsx
 msgid "Previous decision"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Primary"
 msgstr ""
 
 #: src/pages/Board.tsx
@@ -4755,6 +4774,10 @@ msgstr "Conversation partagée avec {GROUP_MEMBER_MIN} à {GROUP_MEMBER_MAX} bot
 msgid "Shared documents"
 msgstr "Documents partagés"
 
+#: src/components/UsageBars.tsx
+msgid "Shared provider account allowance"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared skills"
 msgstr "Compétences partagées"
@@ -5494,6 +5517,10 @@ msgstr "Utilisation"
 
 #: src/components/UsageBars.tsx
 msgid "Usage / Details"
+msgstr ""
+
+#: src/components/UsageBars.tsx
+msgid "Usage unavailable"
 msgstr ""
 
 #. Switches the saved timezone to this device's, e.g. 'Use Pacific/Auckland'

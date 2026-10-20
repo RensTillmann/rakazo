@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ExtraUsageBarSummarySchema, ThreadUsageSchema } from "./usage-limits.js";
+import {
+  ExtraUsageBarSummarySchema,
+  SubscriptionAccountUsageSchema,
+  ThreadUsageSchema,
+  UsageLimitsSchema,
+} from "./usage-limits.js";
 
 describe("usage status availability", () => {
   it("distinguishes unavailable counts from a known zero", () => {
@@ -31,5 +36,36 @@ describe("usage status availability", () => {
       ThreadUsageSchema.parse({ ...usage, lastModel: { provider: "provider", model: "model" } })
         .lastModel,
     ).toEqual({ provider: "provider", model: "model" });
+  });
+});
+
+describe("connected subscription accounts", () => {
+  const unknownWindow = { usedPct: null, resetsAt: null, reset: false };
+  const account = {
+    provider: "openai-codex",
+    label: "OpenAI Codex",
+    fiveHour: unknownWindow,
+    sevenDay: { usedPct: 0, resetsAt: "2026-10-27T00:00:00Z", reset: false },
+    status: null,
+    observedAt: "2026-10-20T00:00:00Z",
+    ageSeconds: 0,
+  };
+
+  it("distinguishes absent accounts, unavailable windows and measured zero", () => {
+    const limits = UsageLimitsSchema.parse({ enabled: true, accounts: [account], extra: [] });
+    expect(limits.accounts[0]?.fiveHour.usedPct).toBeNull();
+    expect(limits.accounts[0]?.sevenDay.usedPct).toBe(0);
+    expect(UsageLimitsSchema.parse({ enabled: true, accounts: [], extra: [] }).accounts).toEqual(
+      [],
+    );
+  });
+
+  it.each([-1, 100.1, NaN, Infinity])("rejects out-of-range measured allowance %s", (usedPct) => {
+    expect(
+      SubscriptionAccountUsageSchema.safeParse({
+        ...account,
+        sevenDay: { ...account.sevenDay, usedPct },
+      }).success,
+    ).toBe(false);
   });
 });
