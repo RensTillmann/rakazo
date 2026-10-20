@@ -44,24 +44,31 @@ type Bar = {
   key: string;
   label: string;
   usedPct: number | null;
+  /** Fleet bars that are not a percentage (a count, a health state) colour by this instead. */
+  tone?: UsageTone | null;
   detail: string | null;
   stale: string | null;
 };
 
 function UsageMeter({ bar }: { bar: Bar }) {
   const pct = bar.usedPct === null ? null : Math.min(100, Math.max(0, bar.usedPct));
+  // A tone without a percentage: the whole track in that colour, and no "N%" or "–".
+  const tone = pct === null ? (bar.tone ?? null) : null;
   return (
     <span className="flex min-w-0 items-center gap-1.5" data-testid={`usage-bar-${bar.key}`}>
       <span className="truncate">{bar.label}</span>
       <span className="relative h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-foreground/10">
         <span
-          className={`absolute inset-y-0 start-0 rounded-full ${TONE_CLASS[usageTone(pct)]}`}
-          style={{ width: `${pct ?? 0}%` }}
+          data-tone={tone ?? usageTone(pct)}
+          className={`absolute inset-y-0 start-0 rounded-full ${TONE_CLASS[tone ?? usageTone(pct)]}`}
+          style={{ width: tone ? "100%" : `${pct ?? 0}%` }}
         />
       </span>
-      <span className="shrink-0 tabular-nums text-foreground/80">
-        {pct === null ? "–" : `${Math.round(pct)}%`}
-      </span>
+      {tone ? null : (
+        <span className="shrink-0 tabular-nums text-foreground/80">
+          {pct === null ? "–" : `${Math.round(pct)}%`}
+        </span>
+      )}
       {bar.detail ? <span className="truncate">{bar.detail}</span> : null}
       {bar.stale ? <span className="shrink-0 italic">{bar.stale}</span> : null}
     </span>
@@ -129,6 +136,7 @@ export function UsageTopBar({ refreshKey }: { refreshKey?: string | null }) {
       key: extra.name,
       label: extra.label ?? extra.name,
       usedPct: extra.usedPct,
+      tone: extra.tone ?? null,
       detail: extra.detail,
       stale: (() => {
         if (!extra.updatedAt || age <= STALE_AFTER_SECONDS) return null;

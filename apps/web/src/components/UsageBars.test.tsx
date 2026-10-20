@@ -98,6 +98,42 @@ describe("UsageTopBar", () => {
     expect(hindsight?.querySelector(".bg-red-500")).not.toBeNull();
   });
 
+  it("colours a fleet bar without a percentage by its tone, with no % or dash", async () => {
+    limits.mockResolvedValue({
+      enabled: true,
+      claude: null,
+      extra: [
+        {
+          name: "waiting-on-rens",
+          usedPct: null,
+          label: "15 waiting on you · oldest 4½ days",
+          detail: "9 not asked as a card yet · list: https://example.test",
+          updatedAt: new Date().toISOString(),
+          tone: "high",
+        },
+        {
+          name: "fleet-health",
+          usedPct: null,
+          label: "Fleet health",
+          detail: "all OK",
+          updatedAt: null,
+        },
+      ],
+    } satisfies UsageLimits);
+    await render(<UsageTopBar />);
+    const waiting = host.querySelector('[data-testid="usage-bar-waiting-on-rens"]');
+    const fill = waiting?.querySelector<HTMLElement>(".bg-red-500");
+    expect(fill).not.toBeNull();
+    expect(fill?.style.width).toBe("100%");
+    expect(waiting?.textContent).toBe(
+      "15 waiting on you · oldest 4½ days9 not asked as a card yet · list: https://example.test",
+    );
+    // No tone and no percentage: today's look, a dash and an empty track.
+    const health = host.querySelector('[data-testid="usage-bar-fleet-health"]');
+    expect(health?.textContent).toContain("–");
+    expect(health?.querySelector<HTMLElement>(".bg-emerald-500")?.style.width).toBe("0%");
+  });
+
   it("renders nothing when the setting is off", async () => {
     limits.mockResolvedValue({ enabled: false, claude: null, extra: [] } satisfies UsageLimits);
     await render(<UsageTopBar />);

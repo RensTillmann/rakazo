@@ -106,17 +106,24 @@ export async function latestSubscriptionLimitReading(
   };
 }
 
+export type FleetUsageTone = "ok" | "warn" | "high";
+
 export interface FleetUsageBarRow {
   name: string;
   usedPct: number | null;
   label: string | null;
   detail: string | null;
   updatedAt: Date | null;
+  /** The bar's colour when it is not a percentage (used_pct NULL); null when the row sets none. */
+  tone: FleetUsageTone | null;
 }
+
+const FLEET_TONES: readonly string[] = ["ok", "warn", "high"];
 
 /**
  * Fleet: every row of `fleet.usage_bars`, written by the fleet service. The schema belongs to
  * another role, so a missing schema or table (or no read grant) simply means no extra bars.
+ * `tone` is read through `to_jsonb(b)` so a table without that column yet still lists its bars.
  */
 export async function listFleetUsageBars(
   prisma: Pick<PrismaClient, "$queryRawUnsafe">,
@@ -129,8 +136,12 @@ export async function listFleetUsageBars(
         label: string | null;
         detail: string | null;
         updated_at: Date | null;
+        tone: string | null;
       }[]
-    >("SELECT name, used_pct, label, detail, updated_at FROM fleet.usage_bars ORDER BY name");
+    >(
+      "SELECT name, used_pct, label, detail, updated_at, to_jsonb(b)->>'tone' AS tone " +
+        "FROM fleet.usage_bars b ORDER BY name",
+    );
     return rows.map((row) => {
       const used = row.used_pct === null || row.used_pct === undefined ? NaN : Number(row.used_pct);
       return {
@@ -139,6 +150,7 @@ export async function listFleetUsageBars(
         label: row.label,
         detail: row.detail,
         updatedAt: row.updated_at,
+        tone: row.tone && FLEET_TONES.includes(row.tone) ? (row.tone as FleetUsageTone) : null,
       };
     });
   } catch {

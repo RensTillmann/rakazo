@@ -3613,6 +3613,10 @@ msgstr "Нет в каталоге плагинов"
 msgid "Not now"
 msgstr "Не сейчас"
 
+#: src/pages/Shell.tsx
+msgid "Not sent — @{unsentTo} doesn't see this reply"
+msgstr ""
+
 #: src/components/FlagMessageDialog.tsx
 msgid "Note (optional)"
 msgstr ""

@@ -134,15 +134,32 @@ describe("subscription limit readings", () => {
   it("lists fleet usage bars and treats a missing table as none", async () => {
     const updated = new Date("2026-10-19T09:00:00Z");
     const hindsight = { label: "Hindsight · this month", detail: "$4.10 of $20" };
-    const ok = {
-      $queryRawUnsafe: vi.fn(async () => [
-        { name: "hindsight", used_pct: "20.5", ...hindsight, updated_at: updated },
-        { name: "other", used_pct: null, label: null, detail: null, updated_at: null },
-      ]),
-    } as unknown as Pick<PrismaClient, "$queryRawUnsafe">;
+    const query = vi.fn(async () => [
+      { name: "hindsight", used_pct: "20.5", ...hindsight, updated_at: updated, tone: null },
+      { name: "other", used_pct: null, label: null, detail: null, updated_at: null },
+      {
+        name: "waiting-on-rens",
+        used_pct: null,
+        label: "3 waiting",
+        detail: null,
+        updated_at: null,
+        tone: "high",
+      },
+      { name: "odd", used_pct: null, label: null, detail: null, updated_at: null, tone: "purple" },
+    ]);
+    const ok = { $queryRawUnsafe: query } as unknown as Pick<PrismaClient, "$queryRawUnsafe">;
     await expect(listFleetUsageBars(ok)).resolves.toEqual([
-      { name: "hindsight", usedPct: 20.5, ...hindsight, updatedAt: updated },
-      { name: "other", usedPct: null, label: null, detail: null, updatedAt: null },
+      { name: "hindsight", usedPct: 20.5, ...hindsight, updatedAt: updated, tone: null },
+      { name: "other", usedPct: null, label: null, detail: null, updatedAt: null, tone: null },
+      {
+        name: "waiting-on-rens",
+        usedPct: null,
+        label: "3 waiting",
+        detail: null,
+        updatedAt: null,
+        tone: "high",
+      },
+      { name: "odd", usedPct: null, label: null, detail: null, updatedAt: null, tone: null },
     ]);
     const missing = {
       $queryRawUnsafe: vi.fn(async () => {

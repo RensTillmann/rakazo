@@ -16,6 +16,8 @@ export const ExtraUsageBarSchema = z.object({
   label: z.string().nullable(),
   detail: z.string().nullable(),
   updatedAt: z.iso.datetime().nullable(),
+  /** The colour of a bar that is not a percentage (`usedPct` null): a count, a health state. */
+  tone: z.enum(["ok", "warn", "high"]).nullable().optional(),
 });
 export type ExtraUsageBar = z.infer<typeof ExtraUsageBarSchema>;
 

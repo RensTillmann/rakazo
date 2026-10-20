@@ -2,7 +2,7 @@ import { ChatMarkdown, MentionBotsContext } from "@rakazo/chat-ui/web";
 import type { ThreadMessage } from "@rakazo/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { peerRoomView } from "./peer-messages.js";
+import { peerRoomView, unsentPeerReplyTo } from "./peer-messages.js";
 
 const quinn = { id: "quinn", name: "Quinn" };
 
@@ -165,5 +165,81 @@ describe("peer messages drawn as room messages in a bot's 1:1 chat", () => {
     expect(html).toContain("@Lily Hold the docs");
     expect(html).not.toContain("Lily,");
     expect(sent).toEqual(before);
+  });
+});
+
+describe("a peer run's own reply the waking bot never gets", () => {
+  function inRun(
+    id: string,
+    seq: number,
+    role: ThreadMessage["role"],
+    blocks: ThreadMessage["blocks"],
+    runId = "run_riona",
+  ): ThreadMessage {
+    const createdAt = "2026-10-20T01:43:00Z";
+    return { id, threadId: "t_riona", seq, role, blocks, runId, createdAt };
+  }
+  function from(intent?: "request" | "question" | "result" | "status" | "fyi"): ThreadMessage {
+    return inRun("m_jill", 116, "user", [
+      {
+        kind: "bot_message_received",
+        fromBotId: "jill",
+        fromBotName: "Jill",
+        text: "Riona, #285: draft PRs are open for you to verify.",
+        ...(intent ? { intent } : {}),
+      },
+    ]);
+  }
+  const marker = from("fyi");
+  const reply = inRun("m_reply", 118, "bot", [
+    { kind: "thinking", text: "Jill's message is about #285." },
+    { kind: "text", text: "I took no action on Jill's message." },
+  ]);
+
+  it("names the bot whose fyi, result or status got a reply it never sees, stored unchanged", () => {
+    const before = structuredClone(reply);
+
+    expect(unsentPeerReplyTo(reply, marker, [marker, reply])).toBe("Jill");
+    expect(unsentPeerReplyTo(reply, from("result"), [from("result"), reply])).toBe("Jill");
+    expect(unsentPeerReplyTo(reply, from("status"), [from("status"), reply])).toBe("Jill");
+    expect(reply).toEqual(before);
+  });
+
+  it("names nobody for a request or question, whose reply goes back as a bot message", () => {
+    for (const asked of [from("request"), from("question"), from(undefined)]) {
+      expect(unsentPeerReplyTo(reply, asked, [asked, reply])).toBeUndefined();
+    }
+  });
+
+  it("names the bot once per run, on its last text reply", () => {
+    const last = inRun("m_last", 120, "bot", [{ kind: "text", text: "I need a job assigned." }]);
+    const thoughts = inRun("m_thoughts", 121, "bot", [{ kind: "thinking", text: "Done." }]);
+    const transcript = [marker, reply, last, thoughts];
+
+    expect(unsentPeerReplyTo(reply, marker, transcript)).toBeUndefined();
+    expect(unsentPeerReplyTo(last, marker, transcript)).toBe("Jill");
+    expect(unsentPeerReplyTo(thoughts, marker, transcript)).toBeUndefined();
+  });
+
+  it("names nobody when a person took part in the run before the reply", () => {
+    const steered = inRun("m_rens", 117, "user", [{ kind: "text", text: "Use the test site" }]);
+    const asked = inRun("m_ask", 117, "bot", [{ kind: "ask", text: "Which site?" }]);
+    const later = inRun("m_later", 119, "user", [{ kind: "text", text: "Thanks" }]);
+
+    expect(unsentPeerReplyTo(reply, marker, [marker, steered, reply])).toBeUndefined();
+    expect(unsentPeerReplyTo(reply, marker, [marker, asked, reply])).toBeUndefined();
+    expect(unsentPeerReplyTo(reply, marker, [marker, reply, later])).toBe("Jill");
+  });
+
+  it("names nobody when the marker is not a bot message for the run or the reply has no text", () => {
+    const person = inRun("m_person", 116, "user", [{ kind: "text", text: "Riona, check #285" }]);
+    const otherRun = { ...marker, runId: "run_other" };
+    const thoughtsOnly = inRun("m_reply", 118, "bot", [
+      { kind: "thinking", text: "Nothing to say." },
+    ]);
+
+    expect(unsentPeerReplyTo(reply, person, [person, reply])).toBeUndefined();
+    expect(unsentPeerReplyTo(reply, otherRun, [otherRun, reply])).toBeUndefined();
+    expect(unsentPeerReplyTo(thoughtsOnly, marker, [marker, thoughtsOnly])).toBeUndefined();
   });
 });

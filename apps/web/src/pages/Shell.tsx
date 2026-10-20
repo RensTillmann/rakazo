@@ -253,7 +253,7 @@ import { localTimezone } from "../lib/local-timezone";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import { parseModelOptionKey } from "../lib/model-catalog";
-import { type PeerRoomView, peerRoomView } from "../lib/peer-messages";
+import { type PeerRoomView, peerRoomView, unsentPeerReplyTo } from "../lib/peer-messages";
 import {
   ATTACHMENT_ACCEPT,
   isFileDrag,
@@ -5745,6 +5745,18 @@ const Transcript = memo(function Transcript({
     }
     return routes;
   }, [messages, threadBotId, threadBotName]);
+  // A peer run's reply the waking bot never gets (its message was not a request or question).
+  const unsentPeerReplies = useMemo(() => {
+    const unsent = new Map<string, string>();
+    if (!threadBotId) return unsent;
+    for (const message of messages) {
+      const markerId = transcript.markerOf.get(message.id);
+      const marker = markerId ? messageById.get(markerId) : undefined;
+      const botName = marker ? unsentPeerReplyTo(message, marker, messages) : undefined;
+      if (botName) unsent.set(message.id, botName);
+    }
+    return unsent;
+  }, [messages, messageById, threadBotId, transcript]);
   // Fleet patch: a routine run's own output folds to one "Routine log" row in a bot's 1:1 chat.
   const showRoutineOutput = useSyncExternalStore(
     subscribeRoutineOutput,
@@ -6127,6 +6139,7 @@ const Transcript = memo(function Transcript({
                         memberName={memberName}
                         peerBot={peerBot}
                         peerRoute={peerRoute}
+                        unsentTo={unsentPeerReplies.get(message.id)}
                         replyParent={
                           message.replyToMessageId
                             ? messageById.get(message.replyToMessageId)
@@ -7602,6 +7615,7 @@ const MessageView = memo(function MessageView({
   onSpeak,
   onOpenComputer,
   showToolActivity,
+  unsentTo,
 }: {
   artifactTarget: ArtifactTarget;
   canAnswer: boolean;
@@ -7629,6 +7643,8 @@ const MessageView = memo(function MessageView({
   onSpeak: () => void;
   onOpenComputer: (botId?: string) => void;
   showToolActivity: boolean;
+  /** The bot that never gets this peer-run reply; draws a "Not sent" line naming it. */
+  unsentTo?: string;
 }) {
   const { t } = useLingui();
   const isNarration =
@@ -7697,6 +7713,15 @@ const MessageView = memo(function MessageView({
         }
         onJump={onJumpToMessage}
       />
+      {unsentTo ? (
+        <div
+          data-testid="peer-reply-unsent"
+          className="mb-1 text-[12px] text-muted-foreground"
+          dir="auto"
+        >
+          <LinkifiedText>{t`Not sent — @${unsentTo} doesn't see this reply`}</LinkifiedText>
+        </div>
+      ) : null}
     </>
   );
   if (isNarration) {

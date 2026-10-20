@@ -131,6 +131,7 @@ describe("usage.limits", () => {
         label: "Hindsight · this month",
         detail: "$4.10 of $20",
         updatedAt: "2026-10-19T09:00:00.000Z",
+        tone: null,
       },
     ]);
   });

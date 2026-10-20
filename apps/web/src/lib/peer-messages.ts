@@ -1,4 +1,5 @@
 import type { MessageBlock, ThreadMessage } from "@rakazo/contracts";
+import { isPeerReceiptBlocks, messageReaction } from "@rakazo/core";
 import { withoutRecipientSalutation, withRecipientMention } from "./peer-message-text";
 
 export interface PeerMessage {
@@ -116,4 +117,47 @@ export function peerRoomView(
     peerBotId,
     peerBotName,
   };
+}
+
+/**
+ * The bot that never gets a peer run's own reply, for a "Not sent" line on it in the replying
+ * bot's 1:1 chat. `marker` is the bot message that woke the run (the reply folds under it).
+ * A request or question gets the run's final reply back as a bot message of its own (its
+ * auto-outcome, already drawn with an @mention), so only other intents (fyi, result, status)
+ * leave the reply unsent. Undefined unless `reply` is the run's last text reply in `transcript`,
+ * and when a person took part in the run before it (a message of theirs or an ask card), since
+ * it may then answer them. Display only; stored messages are unchanged.
+ */
+export function unsentPeerReplyTo(
+  reply: ThreadMessage,
+  marker: ThreadMessage,
+  transcript: readonly ThreadMessage[],
+): string | undefined {
+  const woke = marker.blocks.length === 1 ? marker.blocks[0] : undefined;
+  if (woke?.kind !== "bot_message_received") return undefined;
+  // Same default as the server's `returnBotMessageOutcome`: no intent counts as a request.
+  const intent = woke.intent ?? "request";
+  if (intent === "request" || intent === "question") return undefined;
+  if (reply.role !== "bot" || !reply.runId || reply.runId !== marker.runId) return undefined;
+  for (const message of transcript) {
+    if (message.runId !== reply.runId || message.id === reply.id) continue;
+    const personInput =
+      (message.role === "user" &&
+        !message.inbound &&
+        !isPeerReceiptBlocks(message.blocks) &&
+        !messageReaction(message)) ||
+      message.blocks.some((block) => block.kind === "ask");
+    if (message.seq < reply.seq && personInput) return undefined;
+    // One line per run, on its last text reply.
+    if (
+      message.seq > reply.seq &&
+      message.role === "bot" &&
+      message.blocks.some((block) => block.kind === "text" && block.text.trim())
+    ) {
+      return undefined;
+    }
+  }
+  return reply.blocks.some((block) => block.kind === "text" && block.text.trim())
+    ? woke.fromBotName
+    : undefined;
 }
