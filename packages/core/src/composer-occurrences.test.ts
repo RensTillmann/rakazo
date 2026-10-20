@@ -99,3 +99,24 @@ describe("mention edit boundaries", () => {
     },
   );
 });
+
+it.each(["-next", "_next", "next", "2", "é", "界", "𐐀", "@Other"])(
+  "separates picker completion from suffix %s and routes the selected recipient",
+  (suffix) => {
+    const bob = { kind: "bot" as const, id: "bob", name: "Bob" };
+    const result = insertComposerOccurrence(`Ask @Bo${suffix}`, 7, 7, bob, [])!;
+    expect(result.text).toBe(`Ask @Bob ${suffix}`);
+    expect(result.caret).toBe(9);
+    expect(composerOccurrenceMentions(result.occurrences)).toEqual([bob]);
+    expect(
+      resolveGroupTargetBotIds({
+        text: result.text,
+        members: [
+          { id: "alice", name: "Alice" },
+          { id: "bob", name: "Bob" },
+        ],
+        explicitMentions: composerOccurrenceMentions(result.occurrences).map((m) => m.id),
+      }),
+    ).toEqual(["bob"]);
+  },
+);

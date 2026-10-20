@@ -58,7 +58,7 @@ export function insertComposerOccurrence(
   if (!query) return null;
   const label = `@${mention.name}`;
   const suffix = text.slice(selectionEnd);
-  const spacer = suffix.length === 0 || /^[\p{L}\p{N}_@]/u.test(suffix) ? " " : "";
+  const spacer = suffix.length === 0 || /^[\p{L}\p{N}_@-]/u.test(suffix) ? " " : "";
   const inserted = label + spacer;
   const next = text.slice(0, query.start) + inserted + suffix;
   const delta = query.start + inserted.length - selectionEnd;

@@ -2,7 +2,7 @@
 
 import { i18n } from "@lingui/core";
 import type { AgentSkillCatalogEntry, ThreadMessage } from "@rakazo/contracts";
-import type { ComposerMention } from "@rakazo/core";
+import { type ComposerMention, resolveGroupTargetBotIds } from "@rakazo/core";
 import type { ComponentProps, ReactNode } from "react";
 import { act, createRef } from "react";
 import type { Root } from "react-dom/client";
@@ -689,4 +689,40 @@ it("drops an extended mention across reload and failed-send retry", async () => 
   pressEnter(restored);
   await act(async () => {});
   expect(onSend.mock.calls[1]?.[1]).toEqual([]);
+});
+
+it("retains the picker recipient before a hyphen through reload and failed-send retry", async () => {
+  const draftKey = "group:hyphen-completion";
+  const first = renderComposer(vi.fn(), { draftKey });
+  type(first, "Ask @Bo-next");
+  act(() => {
+    first.focus();
+    first.setSelectionRange(7, 7);
+    document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
+  });
+  pressEnter(first);
+  expect(first.value).toBe("Ask @Bob -next");
+  act(() => root?.unmount());
+  container?.remove();
+  const onSend = vi.fn().mockResolvedValue(false);
+  const restored = renderComposer(onSend, { draftKey });
+  expect(restored.value).toBe("Ask @Bob -next");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    pressEnter(restored);
+    await act(async () => {});
+    const [text, mentions] = onSend.mock.calls[attempt]!;
+    expect(text).toBe("Ask @Bob -next");
+    expect(mentions).toEqual([bob]);
+    expect(
+      resolveGroupTargetBotIds({
+        text,
+        members: [
+          { id: "bot-1", name: "Alice" },
+          { id: bob.id, name: bob.name },
+        ],
+        explicitMentions: mentions.map((mention: ComposerMention) => mention.id),
+      }),
+    ).toEqual([bob.id]);
+    expect(restored.value).toBe("Ask @Bob -next");
+  }
 });
