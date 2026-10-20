@@ -62,6 +62,24 @@ the bot has to ask again.
 
 `list_fleet`, `organize_bot` and `update_bot` need no card.
 
+## Obsolete ordinary questions
+
+An authenticated integration can call `decisions.withdraw` with `botId`, `messageId` and a nonempty
+`reason` of at most 500 characters. It withdraws only an unanswered ordinary question owned by that
+account and space on a `waiting_input` run. Approval, secret, credential and instruction-update cards
+are refused, as are answered questions and runs with another pending question.
+
+Withdrawal cancels only that old run and its work, retains the question in history, and publishes the
+normal `run.cancelled` event so the decision dock refreshes. It does not record a user answer. A real
+answer racing withdrawal wins or loses atomically; a resumed run cannot be withdrawn. Repeating a
+withdrawal returns `withdrawn: false` without another terminal event. Other active runs are untouched.
+The cancellation payload includes `messageId`, `reason` and `withdrawnByUserId`. Integrations must
+distinguish this deliberate withdrawal from an unanswered expiry rather than automatically re-asking it.
+
+After withdrawing an obsolete question, the integration may ask its corrected question normally.
+Unchanged pending questions still use the existing duplicate protection. This API is not a new
+built-in fleet-management tool and does not grant permission to perform the action being discussed.
+
 ## What a bot cannot do
 
 - Permanently delete a bot.
