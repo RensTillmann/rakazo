@@ -7,6 +7,7 @@ import {
   fetchSafeWebBytes,
   fetchSafeWebText,
   isBlockedHostname,
+  WebHttpStatusError,
 } from "./web-ssrf.js";
 
 const publicResolver = async () => [{ address: "203.0.113.10", family: 4 as const }];
@@ -98,6 +99,30 @@ describe("web SSRF policy", () => {
     });
     expect(result.url).toBe("https://example.test/final");
     expect(result.body).toContain("hello");
+  });
+
+  it("returns a 2xx status and throws a typed error with the same message otherwise", async () => {
+    const fetchMock: typeof fetch = async (input) =>
+      String(input).endsWith("/check")
+        ? new Response("bot check", { status: 202 })
+        : new Response("slow down", { status: 429 });
+
+    const accepted = await fetchSafeWebText("https://example.test/check", {
+      fetch: fetchMock,
+      resolveHostname: publicResolver,
+    });
+    expect(accepted.status).toBe(202);
+    expect(accepted.body).toBe("bot check");
+
+    const failure = fetchSafeWebText("https://example.test/limited", {
+      fetch: fetchMock,
+      resolveHostname: publicResolver,
+    });
+    await expect(failure).rejects.toBeInstanceOf(WebHttpStatusError);
+    await expect(failure).rejects.toMatchObject({
+      status: 429,
+      message: "Request failed: HTTP 429",
+    });
   });
 
   it("refuses ports outside allowedPorts on every hop", async () => {

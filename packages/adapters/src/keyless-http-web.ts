@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { Readability } from "@mozilla/readability";
 import type {
   AdapterContext,
@@ -9,7 +10,7 @@ import type {
 } from "@rakazo/adapter-kit";
 import { JSDOM } from "jsdom";
 import { clampMaxChars, clampMaxResults } from "./web-limits.js";
-import { fetchSafeWebText, type ResolveHostname } from "./web-ssrf.js";
+import { fetchSafeWebText, type ResolveHostname, WebHttpStatusError } from "./web-ssrf.js";
 
 export {
   clampMaxChars,
@@ -22,11 +23,21 @@ export {
 } from "./web-limits.js";
 
 const DEFAULT_SEARCH_ENDPOINT = "https://html.duckduckgo.com/html/";
+const SEARCH_ATTEMPTS = 2;
+const DEFAULT_SEARCH_RETRY_DELAY_MS = 1_500;
 
 export type KeylessHtmlSearchBackend = {
   id: string;
+  /** Shown to the bot when the engine blocks a search. Defaults to `id`. */
+  name?: string;
   endpoint: string;
   parse(html: string, maxResults: number): WebSearchHit[];
+  /**
+   * Whether a 200 page with no parsed hits is the engine's own results page
+   * (its "no results" notice) rather than a block or challenge page.
+   * Omitted: every 200 page counts as a results page.
+   */
+  isResultsPage?(html: string): boolean;
 };
 
 export type KeylessHttpWebOptions = {
@@ -34,6 +45,10 @@ export type KeylessHttpWebOptions = {
   resolveHostname?: ResolveHostname;
   searchBackend?: KeylessHtmlSearchBackend;
   searchTimeoutMs?: number;
+  /** Wait before the one retry of a blocked search. */
+  searchRetryDelayMs?: number;
+  /** Test seam for the retry wait. Must reject when `signal` aborts. */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   fetchTimeoutMs?: number;
   maxBufferBytes?: number;
   userAgent?: string;
@@ -42,8 +57,10 @@ export type KeylessHttpWebOptions = {
 /** HTML search backend using DuckDuckGo’s public HTML form. One keyless option, not the interface. */
 export const duckDuckGoHtmlSearchBackend: KeylessHtmlSearchBackend = {
   id: "duckduckgo-html",
+  name: "DuckDuckGo",
   endpoint: DEFAULT_SEARCH_ENDPOINT,
   parse: parseDuckDuckGoResults,
+  isResultsPage: isDuckDuckGoResultsPage,
 };
 
 /**
@@ -56,6 +73,8 @@ export class KeylessHttpWebProvider implements WebProvider {
   private readonly resolveHostname?: ResolveHostname;
   private readonly searchBackend: KeylessHtmlSearchBackend;
   private readonly searchTimeoutMs: number;
+  private readonly searchRetryDelayMs: number;
+  private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   private readonly fetchTimeoutMs: number;
   private readonly maxBufferBytes: number;
   private readonly userAgent: string;
@@ -65,6 +84,8 @@ export class KeylessHttpWebProvider implements WebProvider {
     this.resolveHostname = options.resolveHostname;
     this.searchBackend = options.searchBackend ?? duckDuckGoHtmlSearchBackend;
     this.searchTimeoutMs = options.searchTimeoutMs ?? 15_000;
+    this.searchRetryDelayMs = options.searchRetryDelayMs ?? DEFAULT_SEARCH_RETRY_DELAY_MS;
+    this.sleep = options.sleep ?? ((ms, signal) => delay(ms, undefined, { signal }));
     this.fetchTimeoutMs = options.fetchTimeoutMs ?? 15_000;
     this.maxBufferBytes = options.maxBufferBytes ?? 5 * 1024 * 1024;
     this.userAgent =
@@ -86,21 +107,57 @@ export class KeylessHttpWebProvider implements WebProvider {
     };
   }
 
+  /**
+   * A non-200 answer, or a 200 page that is neither results nor the engine's
+   * "no results" notice, is a block (DuckDuckGo serves a 202 bot check). Retry
+   * once after a pause, then fail loudly so the bot never mistakes a block for
+   * "nothing exists".
+   */
   async search(request: WebSearchRequest, context: AdapterContext): Promise<WebSearchHit[]> {
     const query = request.query.trim();
     if (!query) throw new Error("query is required");
     const maxResults = clampMaxResults(request.maxResults);
     const searchUrl = new URL(this.searchBackend.endpoint);
     searchUrl.searchParams.set("q", query);
-    const { body } = await fetchSafeWebText(searchUrl.href, {
-      fetch: this.fetchImpl,
-      resolveHostname: this.resolveHostname,
-      timeoutMs: this.searchTimeoutMs,
-      maxBytes: 1024 * 1024,
-      userAgent: this.userAgent,
-      signal: request.signal ?? context.signal,
-    });
-    return this.searchBackend.parse(body, maxResults);
+    const signal = request.signal ?? context.signal;
+    let blocked = "";
+    for (let attempt = 0; attempt < SEARCH_ATTEMPTS; attempt += 1) {
+      if (attempt > 0) await this.sleep(this.searchRetryDelayMs, signal);
+      const page = await this.fetchSearchPage(searchUrl.href, signal);
+      if (page.status === 200) {
+        const hits = this.searchBackend.parse(page.body, maxResults);
+        if (hits.length > 0 || (this.searchBackend.isResultsPage?.(page.body) ?? true)) {
+          return hits;
+        }
+        blocked = "HTTP 200 without a results page";
+      } else {
+        blocked = `HTTP ${page.status}`;
+      }
+    }
+    const engine = this.searchBackend.name ?? this.searchBackend.id;
+    throw new Error(
+      `${engine} blocked the search (${blocked}); try again in a minute or use web_fetch on a known URL`,
+    );
+  }
+
+  private async fetchSearchPage(
+    url: string,
+    signal: AbortSignal | undefined,
+  ): Promise<{ status: number; body: string }> {
+    try {
+      const { status, body } = await fetchSafeWebText(url, {
+        fetch: this.fetchImpl,
+        resolveHostname: this.resolveHostname,
+        timeoutMs: this.searchTimeoutMs,
+        maxBytes: 1024 * 1024,
+        userAgent: this.userAgent,
+        signal,
+      });
+      return { status, body };
+    } catch (error) {
+      if (error instanceof WebHttpStatusError) return { status: error.status, body: "" };
+      throw error;
+    }
   }
 
   async fetch(request: WebFetchRequest, context: AdapterContext): Promise<WebFetchResult> {
@@ -150,6 +207,18 @@ export function parseDuckDuckGoResults(html: string, maxResults: number): WebSea
     if (results.length >= maxResults) break;
   }
   return results;
+}
+
+/**
+ * DuckDuckGo HTML marks real results with `a.result__a`. A genuine empty search
+ * (checked live 20 Oct 2026 with a quoted random token) is still a results page:
+ * `<div class="result results_links ... result--no-result">` holding
+ * `<span class='no-results'>` "No results found for …". The 202 bot-check page
+ * has neither.
+ */
+export function isDuckDuckGoResultsPage(html: string): boolean {
+  const dom = new JSDOM(html, { url: DEFAULT_SEARCH_ENDPOINT });
+  return dom.window.document.querySelector("a.result__a, .result--no-result") !== null;
 }
 
 function unwrapDuckDuckGoUrl(rawUrl: string): string {

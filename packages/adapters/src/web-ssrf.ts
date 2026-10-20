@@ -91,7 +91,24 @@ export function isBlockedHostname(hostname: string): boolean {
   return false;
 }
 
-type SafeWebResponse<Body> = { url: string; body: Body; contentType: string | null };
+type SafeWebResponse<Body> = {
+  url: string;
+  body: Body;
+  contentType: string | null;
+  /** Final 2xx status. Some sites (DuckDuckGo's bot check: 202) answer non-200 without failing. */
+  status: number;
+};
+
+/** The final response was not 2xx. Message stays `Request failed: HTTP <status>` for callers. */
+export class WebHttpStatusError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`Request failed: HTTP ${status}`);
+    this.name = "WebHttpStatusError";
+    this.status = status;
+  }
+}
 
 export async function fetchSafeWebText(
   url: string,
@@ -210,7 +227,7 @@ async function followRedirects(
 
   if (!response.ok) {
     await cancelResponseBody(response, state.signal);
-    throw new Error(`Request failed: HTTP ${response.status}`);
+    throw new WebHttpStatusError(response.status);
   }
 
   const contentLength = response.headers.get("content-length");
@@ -223,7 +240,12 @@ async function followRedirects(
     ? await readBodyPrefix(response, state.maxBytes, state.signal)
     : await readBodyCapped(response, state.maxBytes, state.signal);
 
-  return { url: validated.href, body, contentType: response.headers.get("content-type") };
+  return {
+    url: validated.href,
+    body,
+    contentType: response.headers.get("content-type"),
+    status: response.status,
+  };
 }
 
 async function cancelResponseBody(response: Response, signal: AbortSignal): Promise<void> {

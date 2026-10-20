@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { FakeWebProvider } from "./fake-web.js";
 import {
   extractReadableText,
+  isDuckDuckGoResultsPage,
   KeylessHttpWebProvider,
   parseDuckDuckGoResults,
 } from "./keyless-http-web.js";
@@ -19,6 +20,46 @@ const ctx: AdapterContext = {
 };
 
 const publicResolver = async () => [{ address: "203.0.113.10", family: 4 as const }];
+
+const resultsHtml = `
+  <div class="result">
+    <a class="result__a" href="https://example.test/a">Alpha</a>
+    <div class="result__snippet">Snippet A</div>
+  </div>`;
+
+// Stand-in for DuckDuckGo's 202 bot-check page: no result links, no "no results" notice.
+const botCheckHtml = `<html><body><form id="challenge-form"><p>Unfortunately, bots use DuckDuckGo too.</p></form></body></html>`;
+
+// Trimmed from a live DuckDuckGo HTML response for a query with no matches (20 Oct 2026).
+const noResultsHtml = `
+  <div class="serp__results"><div id="links" class="results">
+    <div class="result results_links results_links_deep web-result result--no-result">
+      <div class="links_main links_deep result__body">
+        <div class="no-results__container result__title"><span class='no-results'>
+          <div class="no-results__message"><h1>No results found for <strong>&quot;xq7z&quot;</strong></h1></div>
+        </span></div>
+      </div>
+    </div>
+  </div></div>`;
+
+function scriptedSearch(responses: Array<[status: number, html: string]>) {
+  const requests: string[] = [];
+  const sleeps: number[] = [];
+  const fetchMock: typeof fetch = async (input) => {
+    requests.push(String(input));
+    const next = responses.shift();
+    if (!next) throw new Error("unexpected extra search request");
+    return new Response(next[1], { status: next[0], headers: { "content-type": "text/html" } });
+  };
+  const provider = new KeylessHttpWebProvider({
+    fetch: fetchMock,
+    resolveHostname: publicResolver,
+    sleep: async (ms) => {
+      sleeps.push(ms);
+    },
+  });
+  return { provider, requests, sleeps };
+}
 
 describe("web provider factory", () => {
   it("defaults to keyless-http", () => {
@@ -85,6 +126,60 @@ describe("keyless HTTP web provider", () => {
     }).join("");
     expect(parseDuckDuckGoResults(html, 3)).toHaveLength(3);
   });
+
+  it("retries once after a 202 bot-check page and returns the retry's results", async () => {
+    const { provider, requests, sleeps } = scriptedSearch([
+      [202, botCheckHtml],
+      [200, resultsHtml],
+    ]);
+    await expect(provider.search({ query: "alpha", maxResults: 5 }, ctx)).resolves.toEqual([
+      { title: "Alpha", url: "https://example.test/a", snippet: "Snippet A" },
+    ]);
+    expect(requests).toHaveLength(2);
+    expect(sleeps).toEqual([1_500]);
+  });
+
+  it("fails with a clear error when DuckDuckGo blocks the search twice", async () => {
+    const { provider, requests, sleeps } = scriptedSearch([
+      [202, botCheckHtml],
+      [202, botCheckHtml],
+    ]);
+    await expect(webSearchFromTool(provider, ctx, { query: "alpha" })).resolves.toEqual({
+      error:
+        "DuckDuckGo blocked the search (HTTP 202); try again in a minute or use web_fetch on a known URL",
+    });
+    expect(requests).toHaveLength(2);
+    expect(sleeps).toEqual([1_500]);
+  });
+
+  it("treats a 200 page without results markup and an error status as blocks", async () => {
+    const { provider, requests } = scriptedSearch([
+      [200, botCheckHtml],
+      [429, "slow down"],
+    ]);
+    await expect(provider.search({ query: "alpha" }, ctx)).rejects.toThrow(
+      "DuckDuckGo blocked the search (HTTP 429); try again in a minute or use web_fetch on a known URL",
+    );
+    expect(requests).toHaveLength(2);
+  });
+
+  it("returns [] for DuckDuckGo's genuine no-results page without retrying", async () => {
+    expect(isDuckDuckGoResultsPage(noResultsHtml)).toBe(true);
+    expect(isDuckDuckGoResultsPage(botCheckHtml)).toBe(false);
+    const { provider, requests, sleeps } = scriptedSearch([[200, noResultsHtml]]);
+    await expect(webSearchFromTool(provider, ctx, { query: "xq7z" })).resolves.toEqual({
+      results: [],
+    });
+    expect(requests).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+  });
+
+  it("returns normal results on the first request without waiting", async () => {
+    const { provider, requests, sleeps } = scriptedSearch([[200, resultsHtml]]);
+    await expect(provider.search({ query: "alpha" }, ctx)).resolves.toHaveLength(1);
+    expect(requests).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+  });
 });
 
 describe("web tool apply with fake provider", () => {
@@ -121,6 +216,23 @@ describe("web tool apply with fake provider", () => {
     fake.searchError = new Error("boom");
     await expect(webSearchFromTool(fake, ctx, { query: "q" })).resolves.toEqual({
       error: "boom",
+    });
+  });
+
+  it("includes the network cause in the tool error", async () => {
+    const fake = new FakeWebProvider();
+    fake.searchError = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("getaddrinfo ENOTFOUND html.duckduckgo.com"), {
+        code: "ENOTFOUND",
+      }),
+    });
+    await expect(webSearchFromTool(fake, ctx, { query: "q" })).resolves.toEqual({
+      error: "fetch failed: ENOTFOUND",
+    });
+
+    fake.searchError = new TypeError("fetch failed", { cause: new Error("other side closed") });
+    await expect(webSearchFromTool(fake, ctx, { query: "q" })).resolves.toEqual({
+      error: "fetch failed: other side closed",
     });
   });
 });

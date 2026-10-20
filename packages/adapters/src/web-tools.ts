@@ -19,7 +19,7 @@ export async function webSearchFromTool(
     );
     return { results };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
+    return { error: toolErrorMessage(error) };
   }
 }
 
@@ -41,6 +41,28 @@ export async function webFetchFromTool(
     );
     return result;
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
+    return { error: toolErrorMessage(error) };
   }
+}
+
+const MAX_CAUSE_CHARS = 200;
+
+/**
+ * Undici reports every network failure as a bare `fetch failed`; the reason
+ * (ENOTFOUND, UND_ERR_CONNECT_TIMEOUT, …) lives on `cause`. Prefer the cause's
+ * code: it names the failure without echoing request details.
+ */
+function toolErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause: unknown = error.cause;
+  let detail = "";
+  if (cause instanceof Error) {
+    const code = "code" in cause ? cause.code : undefined;
+    detail = typeof code === "string" && code ? code : cause.message;
+  } else if (typeof cause === "string") {
+    detail = cause;
+  }
+  detail = detail.trim().slice(0, MAX_CAUSE_CHARS);
+  if (!detail || error.message.includes(detail)) return error.message;
+  return `${error.message}: ${detail}`;
 }
