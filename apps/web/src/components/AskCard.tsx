@@ -30,6 +30,7 @@ import { errorText } from "../lib/user-error";
 import { ApprovalDetail } from "./ApprovalDetail";
 import { HoldToTalkControls, HoldToTalkStrip, useHoldToTalk } from "./composer/HoldToTalk";
 import { ReplyReview, useApprovalReview } from "./ReplyReview";
+import { TodoChecklist } from "./TodosControl";
 
 /** `pendingAction` while a typed answer (with its files) is being sent; never an action id. */
 const TYPED_ANSWER_ACTION = "\u0000typed";
@@ -104,12 +105,15 @@ export function AnsweredByLine({
 
 export function AskCard({
   block,
+  messageId,
   canAnswer,
   onAnswer,
   voice,
   attachmentMaxBytes,
 }: {
   block: AskBlock;
+  /** The card's message; once answered, the to-dos it handed over show under it. */
+  messageId?: string;
   canAnswer: boolean;
   /**
    * `files` only for a question card's typed answer, and only when `attachmentMaxBytes` is set.
@@ -405,23 +409,26 @@ export function AskCard({
           </Button>
         </form>
       ) : block.status === "answered" ? (
-        <div
-          className={`mt-3.5 text-[13.5px] font-medium ${block.answer === "deny" ? "text-muted-foreground" : "text-success"}`}
-        >
-          {block.instructionUpdate
-            ? block.answer === "deny"
-              ? t`Dismissed`
-              : t`Allowed once`
-            : formatAnsweredState(
-                block.answer,
-                Boolean(approvalActions),
-                secretInput,
-                approvalActions?.find((action) => action.id === block.answer)?.outcome,
-                askActions,
-                Boolean(block.syncedFrom),
-              )}
-          {block.answeredBy ? <AnsweredByLine answeredBy={block.answeredBy} /> : null}
-        </div>
+        <>
+          <div
+            className={`mt-3.5 text-[13.5px] font-medium ${block.answer === "deny" ? "text-muted-foreground" : "text-success"}`}
+          >
+            {block.instructionUpdate
+              ? block.answer === "deny"
+                ? t`Dismissed`
+                : t`Allowed once`
+              : formatAnsweredState(
+                  block.answer,
+                  Boolean(approvalActions),
+                  secretInput,
+                  approvalActions?.find((action) => action.id === block.answer)?.outcome,
+                  askActions,
+                  Boolean(block.syncedFrom),
+                )}
+            {block.answeredBy ? <AnsweredByLine answeredBy={block.answeredBy} /> : null}
+          </div>
+          {messageId && block.prerequisites ? <TodoChecklist messageId={messageId} /> : null}
+        </>
       ) : block.status === "retired" ? (
         <div className="mt-3.5 text-[13.5px] text-muted-foreground" role="status">
           <span className="font-medium">

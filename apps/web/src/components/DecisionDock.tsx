@@ -417,6 +417,7 @@ export function DecisionDock({
                 >
                   <AskCard
                     block={decision.block}
+                    messageId={decision.messageId}
                     canAnswer
                     onAnswer={(text, username, files, draftFinal) =>
                       answer(decision, text, username, files, draftFinal)

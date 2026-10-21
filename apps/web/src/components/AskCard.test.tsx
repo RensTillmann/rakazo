@@ -7,9 +7,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AnsweredByLine, type AskBlock, AskCard } from "./AskCard";
+import { UserTodosProvider } from "./TodosControl";
 
 // vi.mock factories run before module code, so the shared lingui stub is hoisted with them.
-const { joinTemplate, dictationMock, reviewRpc } = vi.hoisted(() => ({
+const { joinTemplate, dictationMock, reviewRpc, listTodos } = vi.hoisted(() => ({
   joinTemplate: (strings: TemplateStringsArray, ...values: unknown[]) =>
     strings.reduce(
       (text, part, index) => text + part + (index < values.length ? String(values[index]) : ""),
@@ -22,6 +23,7 @@ const { joinTemplate, dictationMock, reviewRpc } = vi.hoisted(() => ({
     stop: () => {},
   },
   reviewRpc: { approvals: { review: vi.fn(async (): Promise<ApprovalReview | null> => null) } },
+  listTodos: vi.fn(),
 }));
 
 vi.mock("@lingui/core/macro", () => ({ t: joinTemplate }));
@@ -29,7 +31,7 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: joinTemplate }),
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("../lib/rpc", () => ({ rpc: {} }));
+vi.mock("../lib/rpc", () => ({ rpc: { todos: { list: listTodos } } }));
 vi.mock("../lib/dictation", () => ({ dictation: dictationMock }));
 vi.mock("../lib/space-rpc", () => ({ useSpaceRpc: () => reviewRpc }));
 
@@ -142,6 +144,67 @@ describe("AskCard free-text option", () => {
     );
     expect(html).toContain("adds 2 to-dos");
     expect(html).toContain('title="Add the DNS record\nAdd the MX record"');
+  });
+
+  it("shows the to-dos it handed over once answered, and not while pending", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const todo = (id: string, groupId: string, title: string) => ({
+      id,
+      botId: "josy",
+      botName: "Josy",
+      threadId: "t-josy",
+      groupId,
+      groupTitle: "Reply?",
+      release: "all",
+      requirementKey: id,
+      title,
+      steps: "Open the registrar",
+      why: null,
+      caseNumber: null,
+      blocks: [],
+      priority: null,
+      position: 0,
+      verification: "automatic",
+      status: "open",
+      statusDetail: null,
+      evidence: null,
+      revision: 1,
+      checkRequestedAt: null,
+      checkedAt: null,
+      createdAt: "2026-10-21T08:00:00.000Z",
+      updatedAt: "2026-10-21T08:00:00.000Z",
+    });
+    listTodos.mockResolvedValue({
+      todos: [todo("t1", "msg-1", "Add the DNS record"), todo("t2", "msg-2", "Other card")],
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const card = (status: "pending" | "answered") => (
+      <UserTodosProvider scope="user-1:primary" enabled>
+        <AskCard
+          block={{ ...withPrerequisites([dns]), status, answer: "self" } as AskBlock}
+          messageId="msg-1"
+          canAnswer
+          onAnswer={async () => {}}
+        />
+      </UserTodosProvider>
+    );
+    await act(async () => root.render(card("answered")));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const checklist = container.querySelector('[data-testid="todo-checklist"]');
+    expect(checklist?.querySelector('input[type="checkbox"]')?.getAttribute("aria-label")).toBe(
+      "Mark “Add the DNS record” as done",
+    );
+    expect(checklist?.textContent).not.toContain("Other card");
+    await act(async () => root.render(card("pending")));
+    expect(container.querySelector('[data-testid="todo-checklist"]')).toBeNull();
+    expect(container.textContent).toContain("adds 1 to-do");
+    act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
   });
 
   describe("typing an answer", () => {

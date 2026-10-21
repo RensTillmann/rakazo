@@ -30,6 +30,7 @@ import type {
   ThinkingLevel,
   ThreadMessage,
   ThreadSnapshot,
+  UserTodo,
   VoiceStatus,
 } from "@rakazo/contracts";
 import {
@@ -179,6 +180,7 @@ import {
   FleetFeedback,
   type FleetFeedbackContext,
   fleetFeedbackContext,
+  todoFeedbackContext,
 } from "../components/FleetFeedback";
 import { FleetPauseControls } from "../components/FleetPauseControls";
 import { InboundDeliveryCard } from "../components/InboundDeliveryCard";
@@ -186,7 +188,7 @@ import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { RosterAttentionBadge } from "../components/RosterAttentionBadge";
 import { RoutineLogFoldable } from "../components/RoutineLogRow";
 import { ThinkingText } from "../components/ThinkingText";
-import { TodosControl } from "../components/TodosControl";
+import { TodosSidebarButton, UserTodosProvider } from "../components/TodosControl";
 import {
   LIVE_TOOL_STEP_WINDOW,
   StandaloneToolActivity,
@@ -2275,6 +2277,10 @@ function SpaceShell() {
   const [feedbackContext, setFeedbackContext] = useState<FleetFeedbackContext>(() =>
     fleetFeedbackContext(),
   );
+  const openTodoFeedback = useCallback((todo: UserTodo | null) => {
+    setFeedbackContext(todoFeedbackContext(todo));
+    setFeedbackOpen(true);
+  }, []);
   // The 3s sidebar poll carries each chat's waiting-card count; the dock refetches when one moves.
   const pendingDecisionsKey = useMemo(
     () => pendingDecisionSignature([...bots, ...groups]),
@@ -4095,6 +4101,7 @@ function SpaceShell() {
             <Trans>Integrations</Trans>
           </span>
         </button>
+        <TodosSidebarButton rail={botsSidebarRail} />
         <Popover
           open={menuOpen}
           onOpenChange={(open) => {
@@ -4406,7 +4413,6 @@ function SpaceShell() {
           </div>
           <div className="col-span-2 row-start-4 flex flex-wrap items-center gap-2 md:col-span-3 md:row-start-3">
             {userId ? <FleetPauseControls key={`${userId}:${currentSpaceId ?? "primary"}`} spaceId={currentSpaceId} /> : null}
-            {userId ? <TodosControl key={`${userId}:${currentSpaceId ?? "primary"}`} /> : null}
           <button
             type="button"
             onClick={() => {
@@ -5746,7 +5752,13 @@ function SpaceShell() {
     <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "organic"}>
       <MentionBotsContext.Provider value={mentionBots}>
         <MentionOpenBotContext.Provider value={mentionOpenBot}>
-          {shell}
+          <UserTodosProvider
+            scope={`${userId ?? ""}:${currentSpaceId ?? "primary"}`}
+            enabled={Boolean(userId)}
+            onFeedback={openTodoFeedback}
+          >
+            {shell}
+          </UserTodosProvider>
         </MentionOpenBotContext.Provider>
       </MentionBotsContext.Provider>
     </AvatarStyleProvider>
@@ -8267,6 +8279,7 @@ const MessageView = memo(function MessageView({
             <AskCard
               key={i}
               block={block}
+              messageId={message.id}
               canAnswer={canAnswer}
               onAnswer={(text, username, _files, draftFinal) =>
                 onAnswer(message, text, username, draftFinal)

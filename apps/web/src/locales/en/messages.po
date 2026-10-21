@@ -1004,6 +1004,10 @@ msgstr "Billing"
 msgid "Blocked"
 msgstr "Blocked"
 
+#: src/components/TodosControl.tsx
+msgid "blocks {ref}"
+msgstr "blocks {ref}"
+
 #: src/pages/Board.tsx
 #: src/pages/Shell.tsx
 msgid "Board"
@@ -2727,6 +2731,7 @@ msgstr "Feedback"
 
 #: src/components/DecisionDock.tsx
 #: src/components/FleetFeedback.tsx
+#: src/components/TodosControl.tsx
 #: src/pages/Shell.tsx
 msgid "Feedback to Elena"
 msgstr "Feedback to Elena"
@@ -3421,8 +3426,8 @@ msgid "Manual setup required"
 msgstr "Manual setup required"
 
 #: src/components/TodosControl.tsx
-msgid "Mark '{title}' as done"
-msgstr "Mark '{title}' as done"
+msgid "Mark “{title}” as done"
+msgstr "Mark “{title}” as done"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
@@ -3845,6 +3850,7 @@ msgid "no longer needed"
 msgstr "no longer needed"
 
 #: src/components/AskCard.tsx
+#: src/components/TodosControl.tsx
 msgid "No longer needed"
 msgstr "No longer needed"
 
@@ -5720,8 +5726,12 @@ msgid "To-dos"
 msgstr "To-dos"
 
 #: src/components/TodosControl.tsx
-msgid "To-dos: {count}"
-msgstr "To-dos: {count}"
+msgid "To-dos {done}"
+msgstr "To-dos {done}"
+
+#: src/components/TodosControl.tsx
+msgid "To-dos, {count} open"
+msgstr "To-dos, {count} open"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
@@ -5820,11 +5830,8 @@ msgstr "Unassigned"
 msgid "Unavailable"
 msgstr "Unavailable"
 
-#: src/components/TodosControl.tsx
-msgid "unblocks {botName}"
-msgstr "unblocks {botName}"
-
 #: src/components/AskCard.tsx
+#: src/components/TodosControl.tsx
 msgid "Undo"
 msgstr "Undo"
 
@@ -6110,10 +6117,6 @@ msgstr "What to watch"
 #: src/components/FlagMessageDialog.tsx
 msgid "What went wrong, or what should be different?"
 msgstr "What went wrong, or what should be different?"
-
-#: src/components/TodosControl.tsx
-msgid "What your bots need you to do."
-msgstr "What your bots need you to do."
 
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"

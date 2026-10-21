@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { FLAG_NOTE_MAX_LENGTH, type PendingDecision } from "@rakazo/contracts";
+import { FLAG_NOTE_MAX_LENGTH, type PendingDecision, type UserTodo } from "@rakazo/contracts";
 import {
   Button,
   Dialog,
@@ -26,6 +26,13 @@ export type FleetFeedbackContext = {
   effectId?: string;
   ticket?: string;
   caseId?: string;
+  /** Where in the app feedback was opened, when not a card or chat. */
+  area?: string;
+  todoId?: string;
+  /** The to-do's short title and state, so Elena can tell which item is meant. */
+  todo?: string;
+  todoStatus?: string;
+  bot?: string;
 };
 
 /** Only references, never card bodies, drafts, credentials, URL queries or fragments. */
@@ -46,6 +53,23 @@ export function fleetFeedbackContext(decision?: PendingDecision): FleetFeedbackC
     ...(ask?.approvalEffectId ? { effectId: ask.approvalEffectId } : {}),
     ...(ticket ? { ticket } : {}),
     ...(caseId ? { caseId } : {}),
+  };
+}
+
+/** Feedback from the to-do list (`null`) or about one to-do: references plus its short title. */
+export function todoFeedbackContext(todo: UserTodo | null): FleetFeedbackContext {
+  const { page } = fleetFeedbackContext();
+  if (!todo) return { page, area: "to-dos" };
+  return {
+    page,
+    area: "to-dos",
+    botId: todo.botId,
+    threadId: todo.threadId,
+    todoId: todo.id,
+    todo: todo.title,
+    todoStatus: todo.status,
+    bot: todo.botName,
+    ...(todo.caseNumber ? { caseId: todo.caseNumber } : {}),
   };
 }
 
