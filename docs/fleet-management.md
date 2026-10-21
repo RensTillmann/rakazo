@@ -71,6 +71,34 @@ secret values are redacted before display. Push notifications are still shortene
 substitute for reviewing the full card. This does not change authorization or mark external setup
 complete.
 
+## Reply cards and who acts
+
+A reply card is an `ask_user` card with `draft` (the reply), `inquiry` (the customer's full inquiry and
+material context, at most 20,000 characters) and `source` (`{ ref, version }`, the conversation and the
+latest message the draft answers). The card shows the inquiry and the reply in full; long text folds
+behind "Show all" and is never cut. The reply stays editable until the card is answered. The answer is
+bound to the reply as sent (`draftFinal`, when edited) and to the source version: the bot is told to act
+on it only while that version is still the latest.
+
+A newer version of the same `source.ref` from the same bot in the same chat replaces the older open
+card: its run alone is cancelled (like `decisions.withdraw`), the card is retired with "Replaced by a
+newer card for … (version a → b)" and never answered, and a click from an old tab changes nothing. The
+same version is still refused as a duplicate. A card that loses its run lease replaces nothing.
+
+Every open card says under its buttons who acts and what a click does: approvals ("<bot> runs this only
+if you allow it …", with a tooltip per button), instruction updates, space creation, questions, reply
+cards and secret requests. No card speaks of an unnamed operator or developer.
+
+When the user edits a reply before answering, one learning note goes to the feedback bot
+(`RAKAZO_FLAG_BOT`, Elena) through the forward path, with the original and the sent text. The nonce is
+the card, so it is sent once; it approves, sends and changes nothing. Without `RAKAZO_FLAG_BOT` no note
+is sent. A note that fails after the answer committed is logged, not retried.
+
+Withdrawal approvals recorded before source binding are reconciled on every reconciler pass from their
+exact route-bound envelope only: an ended source invalidates the request (its card is then retired), a
+live one gets its source recorded so a later answer, withdrawal or stop ends it at once. A request
+without such an envelope is never given a guessed source.
+
 ## Obsolete ordinary questions
 
 An authenticated integration can call `decisions.withdraw` with `botId`, `messageId` and a nonempty
