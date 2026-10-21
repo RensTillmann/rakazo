@@ -37,7 +37,7 @@ import {
   expireComputerExecutionLeases,
   FLAG_STEERING_ORIGIN,
   IsolationError,
-  invalidateRunSourceApprovalEffects,
+  endRunCardsInTransaction,
   lockOwnedGroup,
   QuestionNotWithdrawableError,
   touchGroupUpdatedAt,
@@ -259,7 +259,7 @@ export async function cancelSupersededQueuedRuns(
   // Keep source invalidation in the cancellation transaction, after the status
   // fence wins and before task cleanup. A stale queued snapshot cannot cancel
   // a run already claimed by a worker or invalidate its dependencies.
-  await invalidateRunSourceApprovalEffects(
+  await endRunCardsInTransaction(
     tx,
     superseded.map((run) => run.id),
   );
@@ -1547,7 +1547,10 @@ export async function withdrawQuestion(
   const { commit, work } = await deps.prisma
     .$transaction(async (tx) => {
       const commit = await withdrawQuestionInTransaction(tx, actor, input);
-      const work = commit.withdrawn ? await snapshotCancelledRunWork(tx, [commit.runId]) : null;
+      // Only a run this withdrawal cancelled has work to tear down; an orphan card's run ended earlier.
+      const work = commit.runCancelled
+        ? await snapshotCancelledRunWork(tx, [commit.runId])
+        : null;
       return { commit, work };
     })
     .catch((error) => {
@@ -1588,7 +1591,7 @@ export async function stopThreadRuns(
     const ids = cancelled.map((run) => run.id);
     // Cancellation holds the source-run locks until commit. Invalidate before
     // cleanup so bound requests cannot outlive Stop or execute from stale cards.
-    await invalidateRunSourceApprovalEffects(tx, ids);
+    await endRunCardsInTransaction(tx, ids);
     await tx.steeringMessage.deleteMany({
       where: {
         botId: { in: target.kind === "bot" ? [target.botId] : target.memberBotIds },

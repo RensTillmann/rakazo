@@ -73,7 +73,8 @@ describe("source-bound approvals at the shared cancellation seam", () => {
     const f = fixture();
     await cancelRunsInTransaction(f.tx, runs, now);
     // Cancellation never settles a running attempt: only its worker's drain may (Q35).
-    expect(f.order).toEqual(["cancel", "sources", "invalidate", "tasks"]);
+    // Then the runs' still-open cards are looked up (and retired) before task cleanup.
+    expect(f.order).toEqual(["cancel", "sources", "invalidate", "sources", "tasks"]);
     expect(f.attempts).not.toHaveBeenCalled();
     expect(f.effects.slice(0, 2).map((e) => e.status)).toEqual(["invalidated", "invalidated"]);
     expect(f.invalidate).toHaveBeenCalledWith(

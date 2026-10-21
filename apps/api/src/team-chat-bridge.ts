@@ -10,7 +10,7 @@ import type { MessageBlock } from "@rakazo/contracts";
 import { ATTACHMENT_MAX_COUNT, AutomatedSenderPoliciesSchema } from "@rakazo/contracts";
 import { botMessageMaxHops, messageBlockForArtifact, promptTextForAttachments } from "@rakazo/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
-import { invalidateRunSourceApprovalEffects } from "@rakazo/db";
+import { endRunCardsInTransaction } from "@rakazo/db";
 import { claimMaintenanceEffect, lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import type { MessagingReceipts } from "./messaging-receipts.js";
@@ -1509,7 +1509,7 @@ export class TeamChatBridge {
           // The cancellation update holds each won source-run lock. Keep
           // invalidation and task cleanup inside this transaction; a lost CAS
           // must not cancel a task belonging to a now-terminal run.
-          await invalidateRunSourceApprovalEffects(
+          await endRunCardsInTransaction(
             tx,
             cancelled.map((run) => run.id),
           );

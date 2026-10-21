@@ -697,6 +697,40 @@ describe("AskCard reply context and who acts", () => {
     expect(card.querySelector('[data-testid="ask-who-acts"]')).toBeNull();
   });
 
+  it.each([
+    ["a withdrawn question", "Withdrawn: The customer replied by mail.", {}],
+    ["a question whose run ended", "Its run ended without an answer", {}],
+    [
+      "an approval whose run ended",
+      "Its run ended without an answer",
+      {
+        approvalEffectId: "effect-1",
+        actions: [
+          { id: "allow", label: "Allow once" },
+          { id: "deny", label: "Deny" },
+        ],
+      },
+    ],
+  ])("shows %s as no longer needed, with its reason and no buttons", (_name, reason, extra) => {
+    const card = text(
+      render({
+        kind: "ask",
+        text: "Case 383 · which repository?",
+        actions: [
+          { id: "choice-1", label: "rakazo" },
+          { id: "choice-2", label: "fleet" },
+        ],
+        ...extra,
+        status: "retired",
+        retiredReason: reason,
+      } as AskBlock),
+    );
+    expect(card.textContent).toContain("No longer needed");
+    expect(card.textContent).toContain(reason);
+    expect(card.querySelectorAll("button")).toHaveLength(0);
+    expect(card.querySelector('[data-testid="ask-who-acts"]')).toBeNull();
+  });
+
   const whoActs = (html: string) =>
     text(html).querySelector('[data-testid="ask-who-acts"]')?.textContent;
 

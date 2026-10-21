@@ -1234,12 +1234,18 @@ export class QuestionNotWithdrawableError extends Error {
 
 export interface QuestionWithdrawalCommit {
   withdrawn: boolean;
+  /** This withdrawal cancelled the run; false when the run had already ended. */
+  runCancelled: boolean;
   runId: string;
   threadId: string;
   eventSeq: number | null;
 }
 
-/** Cancel exactly one obsolete question; the caller snapshots and tears down its run's work. */
+/**
+ * Withdraw exactly one obsolete question: its run is cancelled and the card retired as
+ * "Withdrawn: <reason>". A card left open on a run that already ended is retired the same way,
+ * without touching the run. The caller snapshots and tears down the work of a run it cancelled.
+ */
 export async function withdrawQuestionInTransaction(
   tx: Prisma.TransactionClient,
   actor: Pick<Actor, "spaceId" | "userId">,
@@ -1296,6 +1302,15 @@ export async function withdrawQuestionInTransaction(
   const parsed = MessageBlockSchema.array().safeParse(message.blocks);
   const asks = parsed.success ? parsed.data.filter((block) => block.kind === "ask") : [];
   const ask = asks[0];
+  const unchanged = {
+    withdrawn: false,
+    runCancelled: false,
+    runId: run.id,
+    threadId: candidate.threadId,
+    eventSeq: null,
+  };
+  // Withdrawn (or otherwise retired) already: repeating changes nothing.
+  if (asks.length === 1 && ask?.status === "retired") return unchanged;
   if (
     asks.length !== 1 ||
     !ask ||
@@ -1312,13 +1327,27 @@ export async function withdrawQuestionInTransaction(
   ) {
     throw new QuestionNotWithdrawableError();
   }
-  if (run.status === "cancelled") {
-    return {
-      withdrawn: false,
-      runId: run.id,
+  const cardReason = `Withdrawn: ${input.reason}`;
+  if (run.status === "cancelled" || run.status === "completed" || run.status === "failed") {
+    // An orphan: the run ended but its card was left waiting. Retire just the card.
+    const at = new Date().toISOString();
+    const blocks = parsed.success
+      ? parsed.data.map((block) =>
+          block === ask
+            ? { ...ask, status: "retired" as const, retiredReason: cardReason, retiredAt: at }
+            : block,
+        )
+      : [];
+    await tx.message.update({ where: { id: input.messageId }, data: { blocks } });
+    await invalidateSourceApprovalEffects(tx, actor.spaceId, input.messageId);
+    const event = await appendEventInTransaction(tx, {
+      spaceId: actor.spaceId,
       threadId: candidate.threadId,
-      eventSeq: null,
-    };
+      botId: input.botId,
+      type: "thread.message.updated",
+      payload: { messageId: input.messageId, role: "bot", blocks },
+    });
+    return { ...unchanged, withdrawn: true, eventSeq: event.seq };
   }
   if (run.status !== "waiting_input") throw new QuestionNotWithdrawableError();
   // Cancellation ends the whole run, not just this card. Other pending decisions
@@ -1331,7 +1360,7 @@ export async function withdrawQuestionInTransaction(
     throw new QuestionNotWithdrawableError();
   }
 
-  await cancelRunsInTransaction(tx, [run], new Date());
+  await cancelRunsInTransaction(tx, [run], new Date(), cardReason);
   await invalidateSourceApprovalEffects(tx, actor.spaceId, input.messageId);
   const event = await appendEventInTransaction(tx, {
     spaceId: actor.spaceId,
@@ -1342,12 +1371,7 @@ export async function withdrawQuestionInTransaction(
     payload: { messageId: input.messageId, reason: input.reason, withdrawnByUserId: actor.userId },
   });
   await tx.event.deleteMany({ where: { runId: run.id, type: "thread.progress" } });
-  return {
-    withdrawn: true,
-    runId: run.id,
-    threadId: candidate.threadId,
-    eventSeq: event.seq,
-  };
+  return { ...unchanged, withdrawn: true, runCancelled: true, eventSeq: event.seq };
 }
 
 /** Answer a waiting question ask with composer free-text. Approval and secret cards stay on the card path. */
@@ -1481,8 +1505,8 @@ export async function pauseRunForInput(
 /**
  * Fleet: a new reply card for `source` replaces this bot's older open question cards in the same
  * thread that answer another version of the same conversation. Each older card is withdrawn like
- * `decisions.withdraw` (its run alone is cancelled, its dependents invalidated) and marked
- * `retired` with the reason, never answered. In `find` mode nothing is written and the time of
+ * `decisions.withdraw`: its run alone is cancelled, its dependents invalidated, and the card is
+ * retired as "Withdrawn: Replaced by …", never answered. In `find` mode nothing is written and the time of
  * an open card for the same version is returned, so the caller can refuse the duplicate. Runs
  * inside the new card's transaction, under its thread lock.
  */
@@ -1525,9 +1549,9 @@ async function replaceOlderSourceCardsInTransaction(
       }
       if (mode === "find") continue;
       const reason = `Replaced by a newer card for ${input.source.ref} (version ${ask.source.version} → ${input.source.version}).`;
-      let withdrawn: QuestionWithdrawalCommit;
       try {
-        withdrawn = await withdrawQuestionInTransaction(
+        // Retires the card as "Withdrawn: <reason>" and refreshes open tabs.
+        await withdrawQuestionInTransaction(
           tx,
           { spaceId: input.spaceId, userId: run.userId },
           { botId: input.botId, messageId: card.id, reason },
@@ -1539,26 +1563,6 @@ async function replaceOlderSourceCardsInTransaction(
         }
         throw error;
       }
-      if (!withdrawn.withdrawn) continue;
-      const blocks = parsed.data.map((block) =>
-        block === ask
-          ? {
-              ...ask,
-              status: "retired" as const,
-              retiredReason: reason,
-              retiredAt: new Date().toISOString(),
-            }
-          : block,
-      );
-      await tx.message.update({ where: { id: card.id }, data: { blocks } });
-      await appendEventInTransaction(tx, {
-        spaceId: input.spaceId,
-        threadId: input.threadId,
-        botId: input.botId,
-        // The run is cancelled now; the card update belongs to the thread, not to that run.
-        type: "thread.message.updated",
-        payload: { messageId: card.id, role: "bot", blocks },
-      });
     }
   }
   return null;

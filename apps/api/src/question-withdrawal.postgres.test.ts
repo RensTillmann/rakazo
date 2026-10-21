@@ -122,6 +122,17 @@ describePostgres("withdrawing an obsolete question (PostgreSQL)", () => {
       );
       return response!;
     }
+    async function stop() {
+      const { response } = await handler.handle(
+        new Request("http://127.0.0.1/rpc/threads/stop", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ json: { botId: bot.id } }),
+        }),
+        { prefix: "/rpc", context: { actor } },
+      );
+      return response!;
+    }
     async function answer() {
       return events.answerRunInput({
         spaceId: id, threadId: thread.id, runId: started.run.id, messageId: message.id,
@@ -129,7 +140,7 @@ describePostgres("withdrawing an obsolete question (PostgreSQL)", () => {
       });
     }
     return { ...started, actor, bot, thread, message, computer, events, notifications, sandbox, ref,
-      context, startRun, ask, withdraw, answer };
+      context, startRun, ask, withdraw, answer, stop };
   }
 
   it("withdraws only the obsolete question, keeps its history, and permits a fresh same-case ask", async () => {
@@ -155,7 +166,16 @@ describePostgres("withdrawing an obsolete question (PostgreSQL)", () => {
     expect(await prisma.attempt.findUniqueOrThrow({ where: { id: f.attempt.id } })).toMatchObject({
       status: "waiting_input", finishedAt: expect.any(Date),
     });
-    expect(await prisma.message.findUniqueOrThrow({ where: { id: f.message.id } })).toEqual(f.message);
+    // The question stays in history, retired with the withdrawal reason (never answered).
+    const withdrawnCard = await prisma.message.findUniqueOrThrow({ where: { id: f.message.id } });
+    expect(withdrawnCard.blocks).toEqual([
+      expect.objectContaining({
+        kind: "ask",
+        status: "retired",
+        retiredReason: `Withdrawn: ${REASON}`,
+      }),
+    ]);
+    expect(withdrawnCard.blocks).not.toEqual([expect.objectContaining({ answer: expect.anything() })]);
     expect(await prisma.message.count({ where: { threadId: f.thread.id, role: "user" } })).toBe(0);
     expect(await prisma.externalEffect.count({ where: { runId: f.run.id } })).toBe(0);
     const cancelled = await prisma.event.findMany({ where: { runId: f.run.id, type: "run.cancelled" } });
@@ -248,7 +268,25 @@ describePostgres("withdrawing an obsolete question (PostgreSQL)", () => {
     expect(await prisma.message.findUniqueOrThrow({ where: { id: history.id } })).toEqual(history);
   });
 
-  it.each(["queued", "running", "completed", "failed"])("refuses an unanswered card on a %s run", async (status) => {
+  it.each(["completed", "failed", "cancelled"])(
+    "retires an orphan card left open on a %s run without touching the run",
+    async (status) => {
+      const f = await setup();
+      await prisma.run.update({ where: { id: f.run.id }, data: { status } });
+      const response = await f.withdraw();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ json: { withdrawn: true, runId: f.run.id } });
+      expect(await prisma.run.findUniqueOrThrow({ where: { id: f.run.id } })).toMatchObject({ status });
+      expect((await prisma.message.findUniqueOrThrow({ where: { id: f.message.id } })).blocks).toEqual([
+        expect.objectContaining({ status: "retired", retiredReason: `Withdrawn: ${REASON}` }),
+      ]);
+      expect(await prisma.event.count({ where: { runId: f.run.id, type: "run.cancelled" } })).toBe(0);
+      const repeated = await f.withdraw();
+      expect(await repeated.json()).toEqual({ json: { withdrawn: false, runId: f.run.id } });
+    },
+  );
+
+  it.each(["queued", "running"])("refuses an unanswered card on a %s run", async (status) => {
     const f = await setup();
     await prisma.run.update({ where: { id: f.run.id }, data: { status } });
     expect((await f.withdraw()).status).toBe(409);
@@ -337,5 +375,25 @@ describePostgres("withdrawing an obsolete question (PostgreSQL)", () => {
     const f = await setup();
     expect((await f.withdraw({ reason })).status).toBe(400);
     expect(await prisma.run.findUniqueOrThrow({ where: { id: f.run.id } })).toMatchObject({ status: "waiting_input" });
+  });
+
+  it("Stop retires the waiting card with its run, and every tab sees it", async () => {
+    const f = await setup();
+    expect((await f.stop()).status).toBe(200);
+    expect(await prisma.run.findUniqueOrThrow({ where: { id: f.run.id } })).toMatchObject({
+      status: "cancelled",
+    });
+    const card = await prisma.message.findUniqueOrThrow({ where: { id: f.message.id } });
+    expect(card.blocks).toEqual([
+      expect.objectContaining({ status: "retired", retiredReason: "Its run ended without an answer" }),
+    ]);
+    const updated = await prisma.event.findMany({
+      where: { threadId: f.thread.id, type: "thread.message.updated" },
+    });
+    expect(updated.map((event) => (event.payload as { messageId?: string }).messageId)).toContain(
+      f.message.id,
+    );
+    expect(await listPendingDecisions(prisma, f.actor)).toEqual([]);
+    expect(await f.answer()).toBe(false);
   });
 });

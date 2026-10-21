@@ -44,7 +44,7 @@ import {
   type createRepos,
   expireComputerExecutionLeases,
   IsolationError,
-  invalidateRunSourceApprovalEffects,
+  endRunCardsInTransaction,
   type PrismaClient,
   type ThreadEvents,
 } from "@rakazo/db";
@@ -128,7 +128,7 @@ async function cancelActiveRuns(
       select: { id: true },
     });
     const runIds = cancelled.map((run) => run.id);
-    await invalidateRunSourceApprovalEffects(tx, runIds);
+    await endRunCardsInTransaction(tx, runIds);
     if (runIds.length > 0) {
       await tx.event.deleteMany({
         where: { type: "thread.progress", runId: { in: runIds } },

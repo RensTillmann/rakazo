@@ -1,7 +1,7 @@
 import type { MessageBlock } from "@rakazo/contracts";
 import type { StuckWorkStatus } from "@rakazo/core";
 import { ACTIVE_RUN_STATUSES, stuckWorkExpiredNonce, stuckWorkStatusMessage } from "@rakazo/core";
-import { invalidateRunSourceApprovalEffects } from "./approval-invalidation.js";
+import { endRunCardsInTransaction } from "./approval-retire.js";
 import type { Prisma } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
 import {
@@ -59,7 +59,7 @@ export async function expireStuckRun(
   });
   if (cancelled.count !== 1) return null;
 
-  await invalidateRunSourceApprovalEffects(tx, [input.runId]);
+  await endRunCardsInTransaction(tx, [input.runId]);
 
   await tx.attempt.updateMany({
     where: {

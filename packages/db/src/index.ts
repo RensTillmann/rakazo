@@ -9,8 +9,12 @@ export {
   invalidateRunSourceApprovalEffects,
 } from "./approval-invalidation.js";
 export {
+  ENDED_RUN_CARD_REASON,
+  endRunCardsInTransaction,
   RETIRED_APPROVAL_REASON,
   type RetiredApprovalCard,
+  type RetiredEndedRunCard,
+  retireEndedRunCards,
   retireInvalidatedApprovalCards,
 } from "./approval-retire.js";
 export * from "./artifact-versions.js";
