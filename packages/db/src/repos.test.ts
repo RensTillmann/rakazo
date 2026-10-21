@@ -93,7 +93,7 @@ describe("createRepos.listBots", () => {
           thread: expect.objectContaining({
             include: expect.objectContaining({
               runs: expect.objectContaining({
-                where: { trigger: { notIn: ["bot_message", "tickets"] } },
+                where: { trigger: { notIn: ["bot_message", "tickets", "todo_check"] } },
                 orderBy: [{ createdAt: "desc" }, { id: "desc" }],
                 take: 1,
                 select: { id: true, status: true },
@@ -141,7 +141,7 @@ describe("createRepos.listBots", () => {
     // The routine-log name lookup is a separate query; the peer classification still runs once.
     expect(classificationCalls(prisma.run.findMany)).toEqual([
       {
-        where: { id: { in: ["run-one", "run-two"] }, trigger: { in: ["bot_message", "tickets"] } },
+        where: { id: { in: ["run-one", "run-two"] }, trigger: { in: ["bot_message", "tickets", "todo_check"] } },
         select: { id: true, trigger: true },
       },
     ]);
@@ -187,7 +187,7 @@ describe("createRepos.listBots", () => {
     expect(calls[1]).toEqual({
       where: {
         id: { in: ["peer-old", "user-old"] },
-        trigger: { in: ["bot_message", "tickets"] },
+        trigger: { in: ["bot_message", "tickets", "todo_check"] },
       },
       select: { id: true, trigger: true },
     });

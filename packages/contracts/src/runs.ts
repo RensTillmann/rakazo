@@ -17,6 +17,8 @@ export const RUN_TRIGGERS = [
   "cloud_agent",
   "created",
   "tickets",
+  /** Fleet: a coordinator's scheduled, context-bounded check of one to-do. */
+  "todo_check",
 ] as const;
 export const RunTriggerSchema = z.enum(RUN_TRIGGERS);
 export type RunTrigger = z.infer<typeof RunTriggerSchema>;

@@ -35,7 +35,13 @@ const TERMINAL: RunStatus[] = ["completed", "failed", "cancelled"];
  * Routine and webhook runs are not the conversation. The creation intro has no tools;
  * a message that lands during it waits, and the continuation after the intro finishes answers it.
  */
-const NON_CONVERSATIONAL_RUN_TRIGGERS = new Set(["routine", "webhook", "created", "tickets"]);
+const NON_CONVERSATIONAL_RUN_TRIGGERS = new Set([
+  "routine",
+  "webhook",
+  "created",
+  "tickets",
+  "todo_check",
+]);
 
 /**
  * Background triggers do internal work that must not leak into the chat: the
@@ -43,7 +49,8 @@ const NON_CONVERSATIONAL_RUN_TRIGGERS = new Set(["routine", "webhook", "created"
  * their steps/text. Ticket work reports through board comments and its status.
  * Existing ask and approval cards can still request user input.
  */
-export const BACKGROUND_RUN_TRIGGERS = ["tickets"] as const;
+// Fleet: a scheduled to-do check reports through the To-dos list, never in the chat.
+export const BACKGROUND_RUN_TRIGGERS = ["tickets", "todo_check"] as const;
 const BACKGROUND_RUN_TRIGGER_SET = new Set<string>(BACKGROUND_RUN_TRIGGERS);
 
 export function isBackgroundRunTrigger(trigger: string | null | undefined): boolean {

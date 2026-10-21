@@ -251,6 +251,13 @@ describe("deliveries that run one routine", () => {
     expect(runBehaviorTrigger({ trigger: "user", routineId: "routine-1" })).toBe("user");
     expect(runBehaviorTrigger({ trigger: "routine", routineId: "routine-1" })).toBe("routine");
   });
+
+  it("lets a scheduled to-do check finish quietly like a routine run", () => {
+    const check = runBehaviorTrigger({ trigger: "todo_check", routineId: null });
+    expect(check).toBe("routine");
+    expect(runAllowsSilentEmpty(check)).toBe(true);
+    expect(runPromotesMidTurnNarration(check)).toBe(false);
+  });
 });
 
 describe("runs answering a person's own message", () => {

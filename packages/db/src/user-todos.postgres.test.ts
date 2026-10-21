@@ -15,6 +15,7 @@ import {
   reportUserTodo,
   requestUserTodoCheck,
   retireUserTodo,
+  sweepUserTodoChecks,
   UserTodoConflictError,
 } from "./user-todo-actions.js";
 import { listUserTodos } from "./user-todos.js";
@@ -678,5 +679,119 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     expect(listed.slice(0, 2).map((todo) => todo.requirementKey)).toEqual(["z-first", "a-second"]);
     expect(listed[0]).toMatchObject({ blocks: ["Case 142"], priority: "p3", position: 0 });
     expect(listed.at(-1)).toMatchObject({ blocks: [], priority: null });
+  });
+
+  const HOUR = 60 * 60 * 1000;
+  const inHours = (hours: number) => new Date(Date.now() + hours * HOUR);
+
+  async function sweepRuns(f: Awaited<ReturnType<typeof fixture>>) {
+    return f.prisma.run.findMany({
+      where: { spaceId: f.id, trigger: "todo_check" },
+      include: { task: { select: { prompt: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  it("the hourly sweep checks only due automatic to-dos, through one bounded run each", async () => {
+    const f = await fixture();
+    const { access, badge } = await f.chooseBoth("all");
+    // Not an hour old yet: nothing is due.
+    expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id })).toEqual([]);
+
+    const started = await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(1.1) });
+    expect(started).toHaveLength(1);
+    const [run] = await sweepRuns(f);
+    expect(run).toMatchObject({ id: started[0], botId: f.bot.id, status: "queued" });
+    // Context-bounded: the to-do and its steps, not the card's question or the conversation.
+    expect(run!.task.prompt).toContain(`“${ACCESS.title}” (to-do ${access.id})`);
+    expect(run!.task.prompt).toContain(ACCESS.steps);
+    expect(run!.task.prompt).toContain(`todo_report with todo_id "${access.id}"`);
+    expect(run!.task.prompt).not.toContain("How do you want to do it?");
+    // The manual item cannot be checked by a bot, so it costs no run at all.
+    expect(run!.task.prompt).not.toContain(BADGE.title);
+    expect(await f.prisma.userTodo.findUniqueOrThrow({ where: { id: badge.id } })).toMatchObject({
+      status: "open",
+      checkRequestedAt: null,
+    });
+    expect(await f.prisma.userTodo.findUniqueOrThrow({ where: { id: access.id } })).toMatchObject({
+      status: "checking",
+    });
+    // The same hour does not start a second check.
+    expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(1.2) })).toEqual([]);
+    // No message lands in the chat: the check reports through todo_report alone.
+    expect(await f.messagesWithNonce("todo:")).toHaveLength(0);
+  });
+
+  it("a sweep and a check-now on the same item start one check and release once", async () => {
+    const f = await fixture();
+    const todo = await f.chooseTodo();
+    const results = await Promise.allSettled([
+      sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(2) }),
+      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision }),
+    ]);
+    const swept = results[0].status === "fulfilled" ? results[0].value.length : 0;
+    const clicked = results[1].status === "fulfilled" ? 1 : 0;
+    expect(swept + clicked).toBe(1);
+    const row = await f.prisma.userTodo.findUniqueOrThrow({ where: { id: todo.id } });
+    expect(row).toMatchObject({ status: "checking", revision: todo.revision + 1 });
+    expect((await sweepRuns(f)).length + (await f.messagesWithNonce("todo:")).length).toBe(1);
+
+    // Both checks may still run (a fresh check-now on the new revision); two verified reports
+    // resolve the to-do once and wake the bot once.
+    await requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: row.revision });
+    const report = () =>
+      reportUserTodo(f.prisma, {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: todo.id,
+        outcome: "verified",
+        evidence: "elena-bot has Write on acme/site",
+      });
+    const reports = await Promise.all([report(), report()]);
+    expect(reports.filter((result) => "todo" in result)).toHaveLength(1);
+    expect(await f.releases()).toHaveLength(1);
+  });
+
+  it("an unfinished or unavailable check keeps the to-do and is retried, never assumed done", async () => {
+    const f = await fixture();
+    const todo = await f.chooseTodo();
+    expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(1.5) })).toHaveLength(
+      1,
+    );
+    // The check never reported (its run failed): an hour later it is checked again, same to-do.
+    expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(3) })).toHaveLength(1);
+    const unavailable = await reportUserTodo(f.prisma, {
+      spaceId: f.id,
+      botId: f.bot.id,
+      todoId: todo.id,
+      outcome: "unavailable",
+      evidence: "No GitHub read tool in this run",
+    });
+    expect(unavailable).toMatchObject({
+      todo: { id: todo.id, status: "unavailable", statusDetail: "No GitHub read tool in this run" },
+      wake: null,
+    });
+    // Retried on the next hour, still the same to-do and still not done.
+    const retried = await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(4.5) });
+    expect(retried).toHaveLength(1);
+    expect(await f.todos()).toHaveLength(1);
+    expect((await f.todos())[0]).toMatchObject({ id: todo.id, status: "checking" });
+    expect(await f.releases()).toHaveLength(0);
+  });
+
+  it("starts no check while the global pause holds admission", async () => {
+    const f = await fixture();
+    const todo = await f.chooseTodo();
+    await f.prisma.$executeRaw`UPDATE maintenance_state SET active = true WHERE id = 'default'`;
+    try {
+      expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(2) })).toEqual([]);
+    } finally {
+      await f.prisma.$executeRaw`UPDATE maintenance_state SET active = false WHERE id = 'default'`;
+    }
+    expect(await f.prisma.userTodo.findUniqueOrThrow({ where: { id: todo.id } })).toMatchObject({
+      status: "open",
+      revision: todo.revision,
+    });
+    expect(await sweepRuns(f)).toHaveLength(0);
   });
 });

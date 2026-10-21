@@ -3,7 +3,11 @@ import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@rakazo/a
 import type { MessageBlock } from "@rakazo/contracts";
 import { stuckWorkStatusMessages } from "@rakazo/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
-import { reconcileLegacySourceBindings, retireInvalidatedApprovalCards } from "@rakazo/db";
+import {
+  reconcileLegacySourceBindings,
+  retireInvalidatedApprovalCards,
+  sweepUserTodoChecks,
+} from "@rakazo/db";
 import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import type { PoolClient } from "pg";
@@ -61,6 +65,25 @@ export async function reconcileRetiredApprovalCards(deps: {
     }
   }
   return retired.length;
+}
+
+/**
+ * Fleet: the hourly check of pending automatic to-dos. Each due to-do gets one context-bounded,
+ * read-only `todo_check` run of its requesting bot (the coordinator that asked the card); the
+ * result comes back through `todo_report` like Done — check now. A missed wake is repaired by the
+ * queued-run pass.
+ */
+export async function reconcileUserTodoChecks(deps: {
+  prisma: PrismaClient;
+  jobs: JobPublisher;
+}): Promise<number> {
+  const runIds = await sweepUserTodoChecks(deps.prisma);
+  for (const runId of runIds) {
+    await deps.jobs.enqueue(runContinueJob(runId)).catch((error: unknown) =>
+      getLogger().error("to-do check wake", error),
+    );
+  }
+  return runIds.length;
 }
 
 /**
@@ -170,6 +193,8 @@ export function createJobReconciler(
           () => reconcileCallRequests(deps),
           () => reconcileMessagingOutbound(deps.prisma),
           () => reconcileRetiredApprovalCards(deps),
+          // Held work stays held: no scheduled check starts during the global pause.
+          () => (admission.admitted ? reconcileUserTodoChecks(deps) : undefined),
           () => reconcileBackgroundEffects(deps, admission.admitted),
           () => deps.notifications instanceof ExpoPushProvider
             ? deps.notifications.reconcile(admission.admitted)

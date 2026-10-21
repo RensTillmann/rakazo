@@ -16,10 +16,26 @@ export { isOneShotRoutineCron, ONCE_ROUTINE_CRON };
 
 export const SCHEDULE_TOOL_NAMES = new Set(["schedule_create", "schedule_list", "schedule_cancel"]);
 
+/**
+ * Fleet: a scheduled to-do check only looks and reports. It never asks or reaches the user (a
+ * check it cannot do is reported `unavailable`) and never schedules more work.
+ */
+const TODO_CHECK_EXCLUDED_TOOLS = new Set([
+  "ask_user",
+  "request_takeover",
+  "request_secret",
+  "message_user",
+  "call_user",
+  "schedule_create",
+]);
+
 export function filterBuiltinToolsForRun<T extends { name: string }>(
   tools: T[],
   runTrigger: string,
 ): T[] {
+  if (runTrigger === "todo_check") {
+    return tools.filter((tool) => !TODO_CHECK_EXCLUDED_TOOLS.has(tool.name));
+  }
   return runTrigger === "routine" ? tools.filter((tool) => tool.name !== "schedule_create") : tools;
 }
 

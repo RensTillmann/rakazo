@@ -46,6 +46,7 @@ describe("instruction guardrails", () => {
     "skill",
     "created",
     "tickets",
+    "todo_check",
   ])("blocks %s runs", (trigger) => {
     expect(() =>
       validateInstructionProposal(

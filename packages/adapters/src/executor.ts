@@ -5269,6 +5269,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   autoReviewEnabled: autoReviewPref,
                   checkerConfigured,
                 });
+          // Fleet: a scheduled to-do check is read-only. Anything that would change something, or
+          // that the owner's rules would ask about, is refused instead of turned into a card.
+          if (run.trigger === "todo_check" && (requiresApprovalByDefault || plan !== "allow")) {
+            return {
+              error:
+                "This is a read-only to-do check, so this action was not run. Check only with tools that read; if you cannot check, call todo_report with outcome unavailable.",
+            };
+          }
           // Fleet: a tool-level or shell require_approval rule is never overridable from the card.
           const ruleForbidsAlways =
             approvalResolved.source === "require_approval" &&
@@ -9645,7 +9653,8 @@ export function threadContextForRun<T extends { id?: string; role: string }>(
   // Routine runs stay isolated from thread history. The creation intro does
   // too: a message that arrives during it waits and is answered afterward.
   // RAKAZO_MEMORY_RECALL_EVERY_RUN keeps the history isolation but recalls anyway.
-  if (trigger === "created" || trigger === "routine") {
+  // Fleet: a scheduled to-do check is context-bounded: its prompt carries the to-do alone.
+  if (trigger === "created" || trigger === "routine" || trigger === "todo_check") {
     return {
       messages: [] as T[],
       summary: null,
@@ -9861,6 +9870,8 @@ export const REACTION_SILENT_REPLY_GUIDANCE = `The user reacted with an emoji to
  * Approvals still follow the real trigger.
  */
 export function runBehaviorTrigger(run: { trigger: string; routineId: string | null }): string {
+  // Fleet: a scheduled to-do check finishes like a routine run (silent unless it says something).
+  if (run.trigger === "todo_check") return "routine";
   return run.trigger === "webhook" && run.routineId ? "routine" : run.trigger;
 }
 

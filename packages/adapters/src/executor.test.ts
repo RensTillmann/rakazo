@@ -1779,6 +1779,25 @@ describe("createRunExecutor", () => {
     });
   });
 
+  it("gives a scheduled to-do check no conversation, only its own prompt", () => {
+    expect(
+      threadContextForRun(
+        "todo_check",
+        {
+          messages: [{ role: "user", content: "Private customer conversation" }],
+          summary: "Earlier summary",
+          historyCompactedUpToSeq: 9,
+        },
+        false,
+      ),
+    ).toEqual({
+      messages: [],
+      summary: null,
+      historyCompactedUpToSeq: null,
+      includeSemanticRecall: false,
+    });
+  });
+
   it("keeps the current reaction out of history because its target is supplied in the prompt", () => {
     const messages = [
       { id: "parent", role: "assistant", content: "Proceed?" },

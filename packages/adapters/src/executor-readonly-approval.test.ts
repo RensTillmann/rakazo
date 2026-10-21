@@ -619,6 +619,43 @@ describe("connector read-only metadata and approval enforcement", () => {
     expect(isApprovalPausedResult(f.results[0])).toBe(true);
   });
 
+  describe("a scheduled to-do check", () => {
+    const refusal = expect.objectContaining({
+      error: expect.stringContaining("read-only to-do check"),
+    });
+
+    it("refuses a write without a card, even when the owner always allows it", async () => {
+      const f = fixture({
+        name: "demo_send_message",
+        readOnly: false,
+        trigger: "todo_check",
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "demo_send_message" }],
+      });
+      await f.run();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.results).toEqual([refusal]);
+    });
+
+    it("refuses what an owner rule would ask about", async () => {
+      const f = fixture({
+        trigger: "todo_check",
+        rules: [{ effect: "require_approval", matchKind: "tool", matchValue: "demo_get_item" }],
+      });
+      await f.run();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.results).toEqual([refusal]);
+    });
+
+    it("runs an ordinary read", async () => {
+      const f = fixture({ trigger: "todo_check" });
+      await f.run();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(f.results).toEqual([{ item: "item-1" }]);
+    });
+  });
+
   describe("with RAKAZO_WEBHOOK_HONORS_RULES on", () => {
     const previous = process.env.RAKAZO_WEBHOOK_HONORS_RULES;
     beforeEach(() => {

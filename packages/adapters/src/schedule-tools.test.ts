@@ -172,6 +172,23 @@ describe("filterBuiltinToolsForThread", () => {
     );
   });
 
+  it("never lets a scheduled to-do check ask, message or call the user", () => {
+    const names = [
+      "ask_user",
+      "request_takeover",
+      "request_secret",
+      "message_user",
+      "call_user",
+      "schedule_create",
+      "todo_report",
+      "web_fetch",
+    ].map((name) => ({ name }));
+    expect(filterBuiltinToolsForRun(names, "todo_check").map((tool) => tool.name)).toEqual([
+      "todo_report",
+      "web_fetch",
+    ]);
+  });
+
   it("composes thread then run filters without dropping group schedule tools", () => {
     const groupTools = filterBuiltinToolsForRun(
       filterBuiltinToolsForThread(tools, "group-1"),

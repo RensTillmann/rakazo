@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Actor, UserTodo, UserTodoStatus } from "@rakazo/contracts";
 import type { Prisma, PrismaClient } from "./client.js";
 import { sendUserMessageInTransaction } from "./events.js";
+import { lockMaintenanceAdmission } from "./maintenance.js";
 import { userTodoDto } from "./user-todos.js";
 
 /** The to-do changed since the caller read it, or is not in a state that takes the action. */
@@ -165,6 +166,26 @@ async function ownedTodo(
   return todo;
 }
 
+/** The one transition into `checking`, shared by Done — check now and the hourly sweep. */
+async function beginUserTodoCheck(
+  tx: Prisma.TransactionClient,
+  todo: { id: string; threadId: string; revision: number },
+  where: Prisma.UserTodoWhereInput,
+  now: Date,
+): Promise<TodoRow | null> {
+  return casUserTodo(
+    tx,
+    todo,
+    { ...where, verification: "automatic" },
+    { status: "checking", statusDetail: null, checkRequestedAt: now },
+  );
+}
+
+/** What every check asks of the requesting bot; the result goes through `todo_report` only. */
+function checkInstructions(row: { id: string }): string {
+  return `Verify with your own read-only tools whether this is actually done; do not change anything to make it pass. Then call todo_report with todo_id "${row.id}" and outcome "verified" only with positive evidence it is done, "remaining" if you checked and it is not done (name the remaining step), or "unavailable" if you could not check. Put what you observed in evidence.`;
+}
+
 /**
  * Done — check now: marks an automatic to-do `checking` and asks its bot, in a normal message
  * to its thread, to verify the steps with its own read-only tools and call `todo_report`.
@@ -176,21 +197,111 @@ export async function requestUserTodoCheck(
 ): Promise<UserTodoActionResult> {
   const todo = await ownedTodo(prisma, actor, input.todoId);
   return prisma.$transaction(async (tx) => {
-    const row = await casUserTodo(
+    const row = await beginUserTodoCheck(
       tx,
       { ...todo, revision: input.revision },
-      { verification: "automatic", status: { in: CHECKABLE } },
-      { status: "checking", statusDetail: null, checkRequestedAt: new Date() },
+      { status: { in: CHECKABLE } },
+      new Date(),
     );
     if (!row) throw new UserTodoConflictError();
     const text = [
       `Please check my to-do “${row.title}” (to-do ${row.id}). I say I did these steps:`,
       row.steps,
-      `Verify with your own read-only tools whether this is actually done; do not change anything to make it pass. Then call todo_report with todo_id "${row.id}" and outcome "verified" only with positive evidence it is done, "remaining" if you checked and it is not done (name the remaining step), or "unavailable" if you could not check. Put what you observed in evidence.`,
+      checkInstructions(row),
     ].join("\n\n");
     const wake = await postToBot(tx, row, `todo:${row.id}:check:${row.revision}`, text);
     return { todo: userTodoDto(row), wake };
   });
+}
+
+/** How long a pending automatic to-do waits between scheduled checks. */
+export const USER_TODO_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * The hourly sweep: every automatic to-do still pending (open, remaining, unavailable) whose last
+ * check request (or creation) is an hour old, and every check that has not reported for an hour,
+ * goes to `checking` through the same transition as Done — check now. Its requesting bot, the
+ * coordinator that asked the card, gets one context-bounded `todo_check` run: the prompt carries
+ * only the to-do, its steps and its last result, never the conversation; the run is read-only and
+ * reports through `todo_report`, the one completion path. Manual to-dos are never swept, so they
+ * cost no model call. Nothing starts while the global pause holds admission. Returns the runs
+ * started; the caller enqueues them.
+ */
+export async function sweepUserTodoChecks(
+  prisma: PrismaClient,
+  options: { now?: Date; limit?: number; spaceId?: string } = {},
+): Promise<string[]> {
+  const now = options.now ?? new Date();
+  const before = new Date(now.getTime() - USER_TODO_SWEEP_INTERVAL_MS);
+  const due: Prisma.UserTodoWhereInput = {
+    verification: "automatic",
+    bot: { archivedAt: null },
+    ...(options.spaceId ? { spaceId: options.spaceId } : {}),
+    OR: [
+      {
+        status: { in: ["open", "remaining", "unavailable"] },
+        OR: [
+          { checkRequestedAt: { lte: before } },
+          { checkRequestedAt: null, createdAt: { lte: before } },
+        ],
+      },
+      { status: "checking", checkRequestedAt: { lte: before } },
+    ],
+  };
+  const candidates = await prisma.userTodo.findMany({
+    where: due,
+    orderBy: [{ checkRequestedAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
+    take: options.limit ?? 20,
+    select: { id: true, threadId: true, revision: true },
+  });
+  const started: string[] = [];
+  for (const candidate of candidates) {
+    const runId = await prisma.$transaction(async (tx) => {
+      // Under the same admission lock a pause takes: nothing new starts once it holds.
+      if (!(await lockMaintenanceAdmission(tx)).admitted) return "paused" as const;
+      const row = await beginUserTodoCheck(tx, candidate, due, now);
+      if (!row) return null;
+      const bot = await tx.bot.findFirst({
+        where: { id: row.botId, spaceId: row.spaceId, archivedAt: null },
+        select: { thread: { select: { id: true } } },
+      });
+      if (!bot?.thread) return null;
+      const prompt = [
+        `Scheduled check of the user's to-do “${row.title}” (to-do ${row.id}). Only this to-do matters here; nothing else is asked of you.`,
+        ...(row.why ? [`Why it is needed: ${row.why}`] : []),
+        `The steps the user was asked to do:\n${row.steps}`,
+        ...(row.evidence ? [`Last result: ${row.evidence}`] : []),
+        checkInstructions(row),
+        "This check is read-only: actions that change anything are refused. Do not message the user.",
+      ].join("\n\n");
+      const task = await tx.task.create({
+        data: {
+          spaceId: row.spaceId,
+          botId: row.botId,
+          threadId: bot.thread.id,
+          userId: row.userId,
+          prompt,
+          status: "queued",
+        },
+      });
+      const run = await tx.run.create({
+        data: {
+          spaceId: row.spaceId,
+          botId: row.botId,
+          threadId: bot.thread.id,
+          taskId: task.id,
+          userId: row.userId,
+          status: "queued",
+          trigger: "todo_check",
+          clientNonce: `todo-sweep:${row.id}:${row.revision}`,
+        },
+      });
+      return run.id;
+    });
+    if (runId === "paused") break;
+    if (runId) started.push(runId);
+  }
+  return started;
 }
 
 /** I did it: the user's own confirmation of a manual to-do no bot can check. */
