@@ -33,6 +33,7 @@ import {
 import { messageReplyPreview } from "@rakazo/core/message-quote";
 import { approvalEffectKey } from "@rakazo/core/node/approval-effect-key";
 import { getLogger } from "@rakazo/logging";
+import { invalidateSourceApprovalEffects } from "./approval-invalidation.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
@@ -1046,6 +1047,12 @@ async function commitAnswerRunInput(
     if (task.count !== 1) throw new Error("Run task was not available to answer");
   }
 
+  // A human answer ends the support for dependent withdrawal approvals. Keep the
+  // source answer and terminal non-answer effect audit in the same transaction.
+  if (!approvalAsk && !secretAsk && !pendingAsk.approvalEffectId) {
+    await invalidateSourceApprovalEffects(tx, input.spaceId, message.id);
+  }
+
   const blocks = parsed.data.map((block) =>
     block === pendingAsk
       ? {
@@ -1270,6 +1277,7 @@ export async function withdrawQuestionInTransaction(
   }
 
   await cancelRunsInTransaction(tx, [run], new Date());
+  await invalidateSourceApprovalEffects(tx, actor.spaceId, input.messageId);
   const event = await appendEventInTransaction(tx, {
     spaceId: actor.spaceId,
     threadId: candidate.threadId,

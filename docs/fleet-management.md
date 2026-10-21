@@ -98,10 +98,15 @@ that the source is a single ordinary unanswered question, and that its exact run
 is waiting for input. Unrelated tools accepting `message_id` do not imply a dependency.
 The nullable indexed reference preserves existing effect requests and history.
 
-This identity check alone is not lifecycle fencing: automatic invalidation, old-row
-reconciliation, transactional source locks, execution-time checks and UI refresh must
-still be enforced at their lifecycle seams. The reference is not a human answer or an
-authorization grant.
+Answering or withdrawing an ordinary source question invalidates its explicitly bound
+intended/approved effects in the same database transaction. The effect result records
+`source_question_unavailable`, not a fabricated human answer. Denied, completed,
+executing and uncertain effects, unrelated sources and other spaces remain unchanged.
+
+This is not complete lifecycle fencing: legacy-row reconciliation, general cancellation
+and replacement, transactional source binding, approval-answer race protection,
+execution-time checks and dependent-card UI refresh remain to be implemented. The
+reference is not a human answer or an authorization grant.
 
 ## What a bot cannot do
 
