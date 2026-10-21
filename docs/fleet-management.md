@@ -92,11 +92,12 @@ built-in fleet-management tool and does not grant permission to perform the acti
 ## Manual prerequisites and to-dos
 
 A question card can hand manual steps to the user. `ask_user` takes `prerequisites` (1–10 items, each
-`{ key, title, steps, why?, verification: "automatic" | "manual" }`, `why` at most 600 characters, keys
-unique on the card), `option` (the
-exact label of the option that means "I'll do it") and `release` (`each` or `all`, default `all`). An
-option that is not one of the card's options, or an invalid item, is refused before the card is stored.
-The card stores the items as `prerequisites` and marks that option `todo: true`.
+`{ key, title, steps, why?, blocks?, verification: "automatic" | "manual" }`, keys unique on the card;
+`why` at most 600 characters; `blocks` up to 10 other cases or jobs that truly depend on the item, such
+as "Case 142" or "#144", never the asking bot's own waiting work), `option` (the exact label of the
+option that means "I'll do it"), `release` (`each` or `all`, default `all`) and `priority` (`p0`–`p3`).
+An option that is not one of the card's options, or an invalid item, is refused before the card is
+stored. The card stores the items as `prerequisites` and marks that option `todo: true`.
 
 Answering with that option, inside the answer's transaction, creates one `UserTodo` per item, grouped
 by the card (`sourceMessageId`). An item whose `key` already has a to-do in the space keeps that to-do's
@@ -105,20 +106,28 @@ its evidence, and a retired one starts over. The answer stays in history as an a
 intent only: nothing is marked done and nothing is approved. The resumed bot is told the to-do ids and
 not to ask again.
 
-The header's To-dos control lists the items by card: one header line (bot · topic, progress "2/3",
-retired items excluded, chip "unblocks <bot>"), then one line per item: a checkbox, a short title and,
-only when it matters, one short muted line. Clicking the title shows why it is needed, the numbered steps, who checks it,
-and chips for the bot it unblocks, the card's case and the asked date; finished and
-retired items fold into one "Done (N)" row. Ticking the box is the only action and means "I did this":
+The To-dos button in the left sidebar (also in the collapsed rail) shows the open count and opens the
+list, grouped by card: cards with an unfinished item that blocks other work first, then by priority
+(unknown after p3), then oldest asked; items keep the bot's order. A group has one header line (bot ·
+topic, progress "2/3", retired items excluded); each item is one line: a checkbox, a short title, a red
+"blocks …" chip while it blocks other work, and only when it matters one short muted line. Clicking the
+title opens why it is needed, the numbered steps, who checks it, and chips for the card's case and the
+asked date. Finished items fold into one "Done (N)" row; retired ones show ⊘ and a struck-through title.
+The answered card in the chat shows the same rows for its own items (the decision dock drops a card once
+it is answered). Feedback
+about a to-do goes through the existing Feedback to Elena flow.
 
-- An automatic item shows a pending box and becomes `checking`; a normal message in the bot's thread
-  asks the requesting bot to check the steps with its own read-only tools and call
+Ticking the checkbox (only the box toggles) means "I did this". For 5 seconds it shows a countdown and
+Undo; nothing is sent if it is undone or the tab closes. Then:
+
+- An automatic item becomes `checking` (a spinner in place of the box); a normal message in the bot's
+  thread asks the requesting bot to check the steps with its own read-only tools and call
   `todo_report(todo_id, outcome, evidence, remaining_step?)`. `verified` (positive evidence only)
   ticks the box. `remaining` (checked, not done) unticks it with "still missing: …"; `unavailable`
   (could not check) unticks it with "couldn't check — tick again to retry", and is never treated as a
   failed access check.
-- A manual item becomes `confirmed` at once, ticked and labelled "(you)" rather than verified. No bot
-  run checks it.
+- A manual item becomes `confirmed`, ticked and labelled "(you)" rather than verified. No bot run
+  checks it.
 - A box is ticked only once its item is verified or confirmed, and then cannot be unticked; a pending
   box cannot be ticked again.
 
