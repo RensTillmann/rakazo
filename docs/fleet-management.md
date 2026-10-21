@@ -92,7 +92,8 @@ built-in fleet-management tool and does not grant permission to perform the acti
 ## Manual prerequisites and to-dos
 
 A question card can hand manual steps to the user. `ask_user` takes `prerequisites` (1–10 items, each
-`{ key, title, steps, verification: "automatic" | "manual" }`, keys unique on the card), `option` (the
+`{ key, title, steps, why?, verification: "automatic" | "manual" }`, `why` at most 600 characters, keys
+unique on the card), `option` (the
 exact label of the option that means "I'll do it") and `release` (`each` or `all`, default `all`). An
 option that is not one of the card's options, or an invalid item, is refused before the card is stored.
 The card stores the items as `prerequisites` and marks that option `todo: true`.
@@ -106,7 +107,8 @@ not to ask again.
 
 The header's To-dos control lists the items by card: one header line (bot · topic, progress "2/3",
 retired items excluded, chip "unblocks <bot>"), then one line per item: a checkbox, a short title and,
-only when it matters, one short muted line. Clicking the title shows the numbered steps; finished and
+only when it matters, one short muted line. Clicking the title shows why it is needed, the numbered steps, who checks it,
+and chips for the bot it unblocks, the card's case and the asked date; finished and
 retired items fold into one "Done (N)" row. Ticking the box is the only action and means "I did this":
 
 - An automatic item shows a pending box and becomes `checking`; a normal message in the bot's thread
