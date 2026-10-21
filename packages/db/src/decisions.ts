@@ -1,5 +1,5 @@
 import type { Actor, MessageBlock } from "@rakazo/contracts";
-import { isApprovalAskBlock, isSecretAskBlock } from "@rakazo/core";
+import { isApprovalAskBlock, isOpenAskBlock, isSecretAskBlock } from "@rakazo/core";
 import type { Prisma, PrismaClient } from "./client.js";
 
 /** Fleet: one pending card whose run is paused in `waiting_input`, for the decision dock. */
@@ -19,7 +19,7 @@ type DecisionActor = Pick<Actor, "spaceId" | "userId">;
 export function pendingAskBlock(blocks: unknown): MessageBlock | null {
   if (!Array.isArray(blocks)) return null;
   for (const block of blocks as MessageBlock[]) {
-    if (block?.kind === "ask" && block.status !== "answered") return block;
+    if (block && isOpenAskBlock(block)) return block;
   }
   return null;
 }

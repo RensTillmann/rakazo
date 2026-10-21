@@ -100,6 +100,7 @@ import {
   probeOpenAiCompatibleModels,
   provisionComputer,
   queueComputerUpdate,
+  reconcileRetiredApprovalCards,
   releaseComputerExecutionLease,
   replaceComputer,
   resolveAutoReviewChecker,
@@ -2699,6 +2700,11 @@ export function createRouter(deps: RouterDeps) {
             getLogger().error("thread answer enqueue", error);
           });
         }
+        // An answered source question retires its dependent approval cards at once; the
+        // reconciler repeats this for anything missed. Failure never undoes the answer.
+        await reconcileRetiredApprovalCards({ ...deps, spaceId: context.actor.spaceId }).catch(
+          (error: unknown) => getLogger().error("retire dependent approval cards", error),
+        );
         return { ok: true as const };
       }),
       markRead: authed.threads.markRead.handler(async ({ context, input }) => {
@@ -6444,9 +6450,13 @@ export function createRouter(deps: RouterDeps) {
       list: authed.decisions.list.handler(async ({ context }) => ({
         decisions: await listPendingDecisions(deps.prisma, context.actor),
       })),
-      withdraw: authed.decisions.withdraw.handler(({ context, input }) =>
-        withdrawQuestion(deps, context.actor, input),
-      ),
+      withdraw: authed.decisions.withdraw.handler(async ({ context, input }) => {
+        const result = await withdrawQuestion(deps, context.actor, input);
+        await reconcileRetiredApprovalCards({ ...deps, spaceId: context.actor.spaceId }).catch(
+          (error: unknown) => getLogger().error("retire dependent approval cards", error),
+        );
+        return result;
+      }),
     },
     runs: {
       list: authed.runs.list.handler(async ({ context, input }) => ({

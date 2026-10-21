@@ -97,6 +97,13 @@ export function DecisionDock({
   const [large, setLarge] = useState(() => readLarge(userId));
   const [bump, setBump] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  // A click on a card that was answered elsewhere or retired: nothing was sent; say so.
+  const [staleNotice, setStaleNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!staleNotice) return;
+    const timer = window.setTimeout(() => setStaleNotice(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [staleNotice]);
   const loaded = useRef(false);
   const fetchEpoch = useRef(0);
   const rootRef = useRef<HTMLElement | null>(null);
@@ -227,8 +234,11 @@ export function DecisionDock({
         ...(artifactIds.length ? { artifactIds } : {}),
       });
     } catch (error) {
-      // Answered elsewhere or its run moved on: the card is gone, so drop it quietly.
+      // Answered elsewhere, retired or its run moved on: nothing was sent. Drop the card and say so.
       if ((error as { code?: string } | null)?.code !== "CONFLICT") throw error;
+      const notice = t`That card was already answered or no longer applies, so nothing was sent.`;
+      setStaleNotice(notice);
+      setAnnouncement(notice);
     }
     decisionsRef.current = decisionsRef.current.filter(
       (item) => item.messageId !== decision.messageId,
@@ -244,7 +254,28 @@ export function DecisionDock({
     </div>
   );
 
-  if (ordered.length === 0 || !current) return live;
+  const stale = staleNotice ? (
+    <p
+      role="status"
+      data-testid="decision-dock-stale"
+      className="rounded-lg bg-warning/10 px-3 py-2 text-[13px] text-foreground"
+    >
+      {staleNotice}
+    </p>
+  ) : null;
+
+  if (ordered.length === 0 || !current) {
+    return (
+      <>
+        {live}
+        {stale ? (
+          <div className="absolute bottom-4 end-4 z-30 max-w-sm rounded-xl border border-border bg-background p-1 shadow-lg">
+            {stale}
+          </div>
+        ) : null}
+      </>
+    );
+  }
 
   const count = ordered.length;
   const position = index + 1;
@@ -374,6 +405,7 @@ export function DecisionDock({
               large ? "sm:max-h-[min(85vh,80rem)]" : ""
             }`}
           >
+            {stale ? <div className="px-1 pb-2">{stale}</div> : null}
             {/* Every card stays mounted while cycling so a half-typed answer survives. */}
             {ordered.map((decision) =>
               decision.block.kind === "ask" ? (

@@ -5,7 +5,7 @@ import {
   MessageBlock as MessageBlockSchema,
   SecretAskPurpose,
 } from "@rakazo/contracts";
-import { isSecretAskBlock } from "@rakazo/core";
+import { isOpenAskBlock, isSecretAskBlock } from "@rakazo/core";
 import type { PrismaClient, RunSecretWriter } from "@rakazo/db";
 import { withTransactionRetry } from "@rakazo/db";
 import { type ApprovalPausedToolResult, resolveDuplicateEffectGate } from "./approval-effect.js";
@@ -140,9 +140,7 @@ export function createRunSecretWriter(secretStore: SecretStore): RunSecretWriter
             })
           : null;
         const blocks = MessageBlockSchema.array().safeParse(message?.blocks);
-        const ask = blocks.success
-          ? blocks.data.find((block) => block.kind === "ask" && block.status !== "answered")
-          : undefined;
+        const ask = blocks.success ? blocks.data.find(isOpenAskBlock) : undefined;
         if (!run || ask?.kind !== "ask" || !isSecretAskBlock(ask))
           return commit({
             store: async () => {

@@ -3955,6 +3955,13 @@ const MessageBubble = memo(function MessageBubble({
                         isApprovalAskBlock(askBlock),
                       )}
                 </Text>
+              ) : askBlock.status === "retired" ? (
+                <Text
+                  {...actionProps}
+                  style={{ color: tokens.mutedForeground, marginTop: 12, fontSize: 13.5 }}
+                >
+                  {askBlock.retiredReason ?? t("No longer needed")}
+                </Text>
               ) : canAnswer && onAnswer ? (
                 <AskActions
                   actions={askBlock.actions}

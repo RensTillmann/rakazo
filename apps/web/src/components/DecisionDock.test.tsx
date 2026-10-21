@@ -362,7 +362,7 @@ describe("DecisionDock", () => {
     expect(query('[data-testid="decision-dock-position"]')?.textContent).toBe("Decisions 1 of 1");
   });
 
-  it("drops a card answered elsewhere quietly on CONFLICT", async () => {
+  it("drops a card answered elsewhere or retired and says that nothing was sent", async () => {
     vi.mocked(rpc.threads.answer).mockRejectedValue({ code: "CONFLICT" });
     vi.mocked(rpc.decisions.list)
       .mockResolvedValueOnce({ decisions: [josy] })
@@ -370,10 +370,17 @@ describe("DecisionDock", () => {
     await render("t-josy");
     await act(async () => clickButton("Yes"));
     await act(async () => {
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
     });
     expect(query('[data-testid="decision-dock"]')).toBeNull();
+    expect(query('[data-testid="decision-dock-stale"]')?.textContent).toBe(
+      "That card was already answered or no longer applies, so nothing was sent.",
+    );
     expect(container.textContent).not.toContain("Could not submit");
+    await act(async () => {
+      vi.runAllTimers();
+    });
+    expect(query('[data-testid="decision-dock-stale"]')).toBeNull();
   });
 
   it("minimizes to a pill, remembers it per user, and announces new cards", async () => {

@@ -55,6 +55,7 @@ import {
   inferAttachmentMimeType,
   isActive,
   isExecutingRunStatus,
+  isOpenAskBlock,
   isPeerReceiptBlocks,
   isRunTerminalEvent,
   isToolActivityBlock,
@@ -8246,7 +8247,7 @@ const MessageView = memo(function MessageView({
         }
         if (block.kind === "ask") {
           // Fleet: a waiting card is answered in the decision dock; the transcript keeps a chip.
-          if (canAnswer && block.status !== "answered") {
+          if (canAnswer && isOpenAskBlock(block)) {
             return (
               <button
                 key={i}

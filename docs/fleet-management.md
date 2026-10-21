@@ -159,9 +159,19 @@ other tools do not establish source identity; their existing replay guards remai
 This claim-time recovery is not a background backfill or automatic UI refresh for
 legacy pending cards.
 
-This is not complete lifecycle fencing: automatic legacy pending-card reconciliation,
-other cancellation or replacement paths, and dependent-card UI refresh remain to be
-implemented. The reference is not a human answer or an authorization grant.
+An approval card whose effect was invalidated is retired, not left waiting. Right
+after a source question is answered or withdrawn, and on every reconciler pass (Stop,
+expiry, clears and anything missed), the card gets `status: "retired"` with a
+`retiredReason` under the same thread -> run -> effect locks an answer takes. It is
+never an answer: no `answer`, no `answeredBy`, no approval. A `thread.message.updated`
+event refreshes open tabs and the decision dock, the card leaves the dock and the
+pending counts, and every client shows "No longer needed" with the reason. The paused
+run is queued again unless another of its cards still waits; on resume its tool call
+gets the stored "no longer applies" result, as after a denial. A click from a stale tab
+gets CONFLICT, sends nothing, and the dock says so. If the approval had already won,
+the claim still revalidates the source and invalidates instead of executing.
+
+The reference is not a human answer or an authorization grant.
 
 ## What a bot cannot do
 

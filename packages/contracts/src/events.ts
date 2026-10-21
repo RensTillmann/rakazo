@@ -147,7 +147,13 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     // an ask persisted before an owner toggles the private-HTTP flag still
     // validates on replay.
     credential: botSecretDestinationSchema({ allowPrivateHttpOrigin: true }).optional(),
-    status: z.enum(["pending", "answered"]).optional(),
+    /**
+     * `retired`: closed without an answer because the request no longer applies (an approval whose
+     * source question ended). Never an answer; `retiredReason` says why for every client.
+     */
+    status: z.enum(["pending", "answered", "retired"]).optional(),
+    retiredReason: z.string().max(1000).optional(),
+    retiredAt: z.string().optional(),
     answer: z.string().optional(),
     /** Fleet: the message whose identical question card supplied this answer. */
     syncedFrom: Id.optional(),

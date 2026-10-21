@@ -10,6 +10,13 @@ type AskSnapshot = {
   activeRuns?: readonly { id: string; status: string }[];
 };
 
+/** An ask still awaiting the user: neither answered nor retired as no longer applicable. */
+export function isOpenAskBlock<T extends { kind: string; status?: string }>(
+  block: T,
+): block is T & { kind: "ask" } {
+  return block.kind === "ask" && block.status !== "answered" && block.status !== "retired";
+}
+
 /** Every pending ask whose run is paused in `waiting_input`. Cards do not block the bot, so
  * several can wait at once and each one is answerable on its own. */
 export function answerableAskMessageIds(snapshot: AskSnapshot | null): Set<string> {
@@ -22,7 +29,7 @@ export function answerableAskMessageIds(snapshot: AskSnapshot | null): Set<strin
   );
   for (const message of snapshot.messages) {
     if (!message?.runId || !waitingRunIds.has(message.runId)) continue;
-    if (message.blocks.some((block) => block.kind === "ask" && block.status !== "answered")) {
+    if (message.blocks.some(isOpenAskBlock)) {
       ids.add(message.id);
     }
   }
@@ -66,7 +73,7 @@ export function summarizeOpenAsk(
     | null
     | undefined,
 ): OpenAskSummary | null {
-  const block = message?.blocks.find((item) => item.kind === "ask" && item.status !== "answered");
+  const block = message?.blocks.find(isOpenAskBlock);
   if (!message || !block) return null;
   const flat = (block.text ?? "").replace(/\s+/g, " ").trim();
   const question =

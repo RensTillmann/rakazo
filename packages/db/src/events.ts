@@ -24,6 +24,7 @@ import {
   instructionUpdateDiff,
   isApprovalAskBlock,
   isConversationalRun,
+  isOpenAskBlock,
   isSecretAskBlock,
   messagingChannelId,
   QUEUE_HOLDING_RUN_STATUSES,
@@ -703,9 +704,7 @@ async function findPendingAsk(
   for (const message of messages) {
     const parsed = MessageBlockSchema.array().safeParse(message.blocks);
     if (!parsed.success) continue;
-    const pendingAsk = parsed.data.find(
-      (block) => block.kind === "ask" && block.status !== "answered",
-    );
+    const pendingAsk = parsed.data.find(isOpenAskBlock);
     if (pendingAsk?.kind === "ask") return { messageId: message.id, pendingAsk };
   }
   return null;
@@ -833,9 +832,7 @@ async function commitAnswerRunInput(
   });
   const parsed = MessageBlockSchema.array().safeParse(message?.blocks);
   if (!message || !parsed.success) return null;
-  const pendingAsk = parsed.data.find(
-    (block) => block.kind === "ask" && block.status !== "answered",
-  );
+  const pendingAsk = parsed.data.find(isOpenAskBlock);
   if (pendingAsk?.kind !== "ask") return null;
   const approvalAsk = isApprovalAskBlock(pendingAsk);
   const secretAsk = isSecretAskBlock(pendingAsk);

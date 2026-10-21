@@ -3788,6 +3788,10 @@ msgstr ""
 msgid "No longer active"
 msgstr "अब सक्रिय नहीं"
 
+#: src/components/AskCard.tsx
+msgid "No longer needed"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No managed app catalog is configured on this deployment."
 msgstr "इस डिप्लॉयमेंट पर कोई प्रबंधित ऐप कैटलॉग कॉन्फ़िगर नहीं है।"
@@ -5454,6 +5458,10 @@ msgstr "परीक्षण हो रहा है…"
 
 #: src/components/ApprovalDetail.tsx
 msgid "Text"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "That card was already answered or no longer applies, so nothing was sent."
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx

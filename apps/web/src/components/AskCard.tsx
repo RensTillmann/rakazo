@@ -136,7 +136,7 @@ export function AskCard({
   // Fleet: the bot's reply draft, edited in place; any answer carries the edit along.
   const [draftText, setDraftText] = useState(block.draft ?? "");
   const draftFinal = block.draft !== undefined && draftText !== block.draft ? draftText : undefined;
-  const draftEditable = canAnswer && block.status !== "answered";
+  const draftEditable = canAnswer && block.status !== "answered" && block.status !== "retired";
   // A cleared reply is never sent; any answer waits until it has text again.
   const draftEmpty = draftFinal !== undefined && !draftFinal.trim();
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
@@ -419,6 +419,15 @@ export function AskCard({
                 Boolean(block.syncedFrom),
               )}
           {block.answeredBy ? <AnsweredByLine answeredBy={block.answeredBy} /> : null}
+        </div>
+      ) : block.status === "retired" ? (
+        <div className="mt-3.5 text-[13.5px] text-muted-foreground" role="status">
+          <span className="font-medium">
+            <Trans>No longer needed</Trans>
+          </span>
+          {block.retiredReason ? (
+            <p className="mt-1 whitespace-pre-wrap">{block.retiredReason}</p>
+          ) : null}
         </div>
       ) : !canAnswer ? (
         <div className="mt-3.5 text-[13.5px] font-medium text-muted-foreground">

@@ -3,6 +3,7 @@ import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@rakazo/a
 import type { MessageBlock } from "@rakazo/contracts";
 import { stuckWorkStatusMessages } from "@rakazo/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
+import { retireInvalidatedApprovalCards } from "@rakazo/db";
 import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import type { PoolClient } from "pg";
@@ -32,6 +33,33 @@ type ControlCursor = { at: Date | null; id: string };
 export interface ReconciliationLeadership {
   tryAcquire(): Promise<boolean>;
   release(): Promise<void>;
+}
+
+/**
+ * Approval cards whose source question ended are retired (non-answer, with a reason) and their
+ * paused runs queued again; open tabs refresh from the durable event. Runs right after the
+ * source ends too (API); this pass catches stop/expiry/cleanup paths and anything missed.
+ */
+export async function reconcileRetiredApprovalCards(deps: {
+  prisma: PrismaClient;
+  jobs: JobPublisher;
+  events?: Pick<ThreadEvents, "notify">;
+  spaceId?: string;
+}): Promise<number> {
+  const retired = await retireInvalidatedApprovalCards(deps.prisma, {
+    ...(deps.spaceId ? { spaceId: deps.spaceId } : {}),
+  });
+  for (const card of retired) {
+    await deps.events?.notify(card.threadId, card.eventSeq).catch((error: unknown) =>
+      getLogger().error("retired approval card notification", error),
+    );
+    if (card.queued) {
+      await deps.jobs.enqueue(runContinueJob(card.runId)).catch((error: unknown) =>
+        getLogger().error("retired approval card run wake", error),
+      );
+    }
+  }
+  return retired.length;
 }
 
 /**
@@ -140,6 +168,7 @@ export function createJobReconciler(
         [
           () => reconcileCallRequests(deps),
           () => reconcileMessagingOutbound(deps.prisma),
+          () => reconcileRetiredApprovalCards(deps),
           () => reconcileBackgroundEffects(deps, admission.admitted),
           () => deps.notifications instanceof ExpoPushProvider
             ? deps.notifications.reconcile(admission.admitted)

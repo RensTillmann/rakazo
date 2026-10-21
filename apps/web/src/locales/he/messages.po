@@ -3788,6 +3788,10 @@ msgstr "עדיין אין צ׳אטים קבוצתיים."
 msgid "No longer active"
 msgstr "כבר לא פעיל"
 
+#: src/components/AskCard.tsx
+msgid "No longer needed"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No managed app catalog is configured on this deployment."
 msgstr "לא הוגדר קטלוג אפליקציות מנוהל בהתקנה הזו."
@@ -5454,6 +5458,10 @@ msgstr "בודק…"
 
 #: src/components/ApprovalDetail.tsx
 msgid "Text"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "That card was already answered or no longer applies, so nothing was sent."
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx

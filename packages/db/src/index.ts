@@ -7,6 +7,11 @@ export {
   invalidatePendingApprovalEffect,
   invalidateRunSourceApprovalEffects,
 } from "./approval-invalidation.js";
+export {
+  RETIRED_APPROVAL_REASON,
+  type RetiredApprovalCard,
+  retireInvalidatedApprovalCards,
+} from "./approval-retire.js";
 export * from "./artifact-versions.js";
 export * from "./billing.js";
 export * from "./board.js";

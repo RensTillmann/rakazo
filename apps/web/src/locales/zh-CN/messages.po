@@ -3788,6 +3788,10 @@ msgstr "还没有群聊。"
 msgid "No longer active"
 msgstr "已停用"
 
+#: src/components/AskCard.tsx
+msgid "No longer needed"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No managed app catalog is configured on this deployment."
 msgstr "此部署未配置托管应用目录。"
@@ -5454,6 +5458,10 @@ msgstr "正在测试…"
 
 #: src/components/ApprovalDetail.tsx
 msgid "Text"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "That card was already answered or no longer applies, so nothing was sent."
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx

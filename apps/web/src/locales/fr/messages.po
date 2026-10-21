@@ -3788,6 +3788,10 @@ msgstr "Aucune conversation de groupe pour le moment."
 msgid "No longer active"
 msgstr "Plus actif"
 
+#: src/components/AskCard.tsx
+msgid "No longer needed"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No managed app catalog is configured on this deployment."
 msgstr "Aucun catalogue d'applications géré n'est configuré sur ce déploiement."
@@ -5454,6 +5458,10 @@ msgstr "Test en cours…"
 
 #: src/components/ApprovalDetail.tsx
 msgid "Text"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "That card was already answered or no longer applies, so nothing was sent."
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx

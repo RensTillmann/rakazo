@@ -3788,6 +3788,10 @@ msgstr "아직 그룹 채팅이 없습니다."
 msgid "No longer active"
 msgstr "이미 종료된 요청입니다"
 
+#: src/components/AskCard.tsx
+msgid "No longer needed"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No managed app catalog is configured on this deployment."
 msgstr "이 서버에는 관리형 앱 목록이 설정되지 않았습니다."
@@ -5454,6 +5458,10 @@ msgstr "테스트 중…"
 
 #: src/components/ApprovalDetail.tsx
 msgid "Text"
+msgstr ""
+
+#: src/components/DecisionDock.tsx
+msgid "That card was already answered or no longer applies, so nothing was sent."
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
