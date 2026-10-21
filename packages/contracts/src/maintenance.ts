@@ -64,6 +64,12 @@ export const MaintenanceRecoveryItemSchema = z.object({
   proposed: z.object({ status: z.string(), basis: z.string() }).nullable(),
   missing: z.string().nullable(),
   ownerVerifiable: z.boolean(),
+  /** The tracker case the operation's run worked on, when its cards or to-dos name one. */
+  caseRef: z.number().int().positive().nullable(),
+  /** The bot accountable for following it up: the case coordinator, else the Fleet coordinator. */
+  coordinator: z.string().nullable(),
+  /** Only the user can settle it (record an outcome or a checked result); otherwise the system or the coordinator acts. */
+  userActionNeeded: z.boolean(),
 });
 export type MaintenanceRecoveryItem = z.infer<typeof MaintenanceRecoveryItemSchema>;
 

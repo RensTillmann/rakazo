@@ -7,6 +7,7 @@ import type {
 import { MaintenanceRecoveryCommandSchema } from "@rakazo/contracts";
 import type { Pool, PoolClient } from "pg";
 import { MaintenanceConflictError, MaintenanceOwnerRequiredError } from "./maintenance.js";
+import { caseCoordinatorNames } from "./user-todo-actions.js";
 
 export interface MaintenanceRecoveryStore {
   recoveryForOperator(operatorId: string): Promise<MaintenanceRecovery>;
@@ -206,6 +207,52 @@ async function newerFinishedAttempt(
   return result.rows[0] ?? null;
 }
 
+/** The case number of an exact card head, "Case <n> · " or "URGENT · Case <n> · ". */
+const CARD_HEAD_CASE = /^(?:URGENT · )?Case ([1-9][0-9]{0,8}) · /;
+
+/**
+ * Q21: who answers for each item, and whether only the user can settle it. The case comes from the
+ * run's own cards (exact "Case <n> · " head) or its to-dos' case link, never from free text. A case
+ * item belongs to that case's coordinator (the run's bot when it coordinates cases itself, else the
+ * default case coordinator); anything else is internal and belongs to the Fleet coordinator.
+ */
+async function accountFor(client: Queryable, items: MaintenanceRecoveryItem[]): Promise<void> {
+  const runIds = [...new Set(items.flatMap((item) => (item.runId ? [item.runId] : [])))];
+  const cases = new Map<string, number>();
+  if (runIds.length) {
+    const todos = await client.query<{ runId: string; caseRef: number }>(
+      `SELECT "runId", "caseRef" FROM "user_todos" WHERE "runId" = ANY($1) AND "caseRef" IS NOT NULL`,
+      [runIds],
+    );
+    for (const row of todos.rows) cases.set(row.runId, row.caseRef);
+    const cards = await client.query<{ runId: string; text: string }>(
+      `SELECT m."runId", b->>'text' AS "text"
+         FROM "messages" m, jsonb_array_elements(m."blocks") b
+        WHERE m."runId" = ANY($1) AND m."role" = 'bot' AND b->>'kind' = 'ask'
+        ORDER BY m."seq"`,
+      [runIds],
+    );
+    for (const row of cards.rows) {
+      const head = CARD_HEAD_CASE.exec(row.text ?? "");
+      if (head && !cases.has(row.runId)) cases.set(row.runId, Number(head[1]));
+    }
+  }
+  const coordinators = caseCoordinatorNames();
+  const fleetCoordinator =
+    process.env.RAKAZO_FLEET_COORDINATOR_BOT?.trim() || process.env.RAKAZO_FLAG_BOT?.trim() || null;
+  for (const item of items) {
+    const caseRef = item.runId ? (cases.get(item.runId) ?? null) : null;
+    const own = item.bot
+      ? coordinators.find((name) => name.toLowerCase() === item.bot!.toLowerCase())
+      : undefined;
+    item.caseRef = caseRef;
+    item.coordinator = caseRef !== null ? (own ?? coordinators[0] ?? item.bot) : fleetCoordinator;
+    // The recovery commands are the owner's: applying recorded evidence and recording a checked
+    // outcome. Draining items settle themselves; other unknowns are the coordinator's to chase.
+    item.userActionNeeded = item.state === "settleable" || item.ownerVerifiable;
+  }
+}
+
 export function createMaintenanceRecoveryStore(
   pool: Pick<Pool, "connect">,
 ): MaintenanceRecoveryStore {
@@ -221,6 +268,9 @@ export function createMaintenanceRecoveryStore(
           proposed: null,
           missing: null,
           ownerVerifiable: false,
+          caseRef: null,
+          coordinator: null,
+          userActionNeeded: false,
         } satisfies Partial<MaintenanceRecoveryItem>;
 
         const runs = await client.query(
@@ -415,6 +465,7 @@ export function createMaintenanceRecoveryStore(
             missing: uncertain ? "Its own reconciler must confirm the outcome." : null,
           });
         }
+        await accountFor(client, items);
         await client.query("COMMIT");
         return { items };
       } catch (error) {

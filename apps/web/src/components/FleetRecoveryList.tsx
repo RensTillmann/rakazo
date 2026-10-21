@@ -116,6 +116,27 @@ export function FleetRecoveryList({
               {item.bot ? <> · {item.bot}</> : null} · {item.status} ·{" "}
               <span>{stateLabel(item)}</span>
             </p>
+            <p className="text-xs" data-testid="recovery-accountable">
+              {item.caseRef ? (
+                <>
+                  <Trans>Case {item.caseRef}</Trans> ·{" "}
+                </>
+              ) : null}
+              {item.coordinator ? (
+                <>
+                  <Trans>Follow-up: {item.coordinator}</Trans> ·{" "}
+                </>
+              ) : null}
+              {item.userActionNeeded ? (
+                <span className="font-medium text-warning">
+                  <Trans>Needs you</Trans>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  <Trans>Nothing for you to do</Trans>
+                </span>
+              )}
+            </p>
             <p className="text-xs text-muted-foreground">
               {item.kind} {item.id}
               {item.runId && item.runId !== item.id ? (

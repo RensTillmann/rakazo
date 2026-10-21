@@ -52,6 +52,11 @@ suite("maintenance recovery against PostgreSQL", () => {
       CREATE TABLE "messaging_outbound" ("id" TEXT PRIMARY KEY, "status" TEXT NOT NULL);
       CREATE TABLE "routines" ("id" TEXT PRIMARY KEY, "watchState" JSONB);
       CREATE TABLE "computers" ("id" TEXT PRIMARY KEY, "state" TEXT NOT NULL);
+      CREATE TABLE "messages" (
+        "id" TEXT PRIMARY KEY, "runId" TEXT, "role" TEXT NOT NULL, "seq" INTEGER NOT NULL,
+        "blocks" JSONB NOT NULL
+      );
+      CREATE TABLE "user_todos" ("id" TEXT PRIMARY KEY, "runId" TEXT NOT NULL, "caseRef" INTEGER);
     `);
     await pool.query(
       await readFile(
@@ -67,7 +72,8 @@ suite("maintenance recovery against PostgreSQL", () => {
   beforeEach(async () => {
     await pool.query(`
       TRUNCATE "bots", "runs", "attempts", "external_effects", "events", "maintenance_recovery",
-        "cloud_agents", "external_messages", "messaging_outbound", "routines", "computers";
+        "cloud_agents", "external_messages", "messaging_outbound", "routines", "computers",
+        "messages", "user_todos";
       INSERT INTO "bots" VALUES ('isabella', 'Isabella'), ('riona', 'Riona'), ('jill', 'Jill');
     `);
   });
@@ -166,6 +172,58 @@ suite("maintenance recovery against PostgreSQL", () => {
     // Repeated observations describe the same operations, one item each.
     expect([...(await byId()).keys()]).toEqual([...items.keys()]);
     await expect(byId("outsider")).rejects.toThrow("owner required");
+  });
+
+  it("names the case, its coordinator and whether only the user can settle each item (Q21)", async () => {
+    await seedQ35Records();
+    const previous = {
+      coordinators: process.env.RAKAZO_CASE_COORDINATOR_BOTS,
+      fleet: process.env.RAKAZO_FLEET_COORDINATOR_BOT,
+    };
+    process.env.RAKAZO_CASE_COORDINATOR_BOTS = "Josy,Elena";
+    process.env.RAKAZO_FLEET_COORDINATOR_BOT = "Elena";
+    try {
+      await pool.query(`
+        INSERT INTO "messages" ("id", "runId", "role", "seq", "blocks") VALUES
+          ('m1', 'run-jill', 'bot', 1,
+            '[{"kind": "ask", "text": "Case 383 · repo: which repository?", "status": "answered"}]'),
+          ('m2', 'run-riona', 'bot', 1,
+            '[{"kind": "ask", "text": "About case 99, not a card head", "status": "pending"}]');
+        INSERT INTO "user_todos" ("id", "runId", "caseRef") VALUES ('t1', 'run-isabella', 142);
+        INSERT INTO "runs" ("id", "botId", "status", "leaseExpiresAt") VALUES
+          ('live', 'jill', 'running', (now() AT TIME ZONE 'UTC') + interval '1 hour');
+      `);
+      const items = await byId();
+      // Case from an exact card head; a worker's case goes to the default case coordinator.
+      expect(items.get("shell")).toMatchObject({
+        caseRef: 383,
+        coordinator: "Josy",
+        userActionNeeded: true,
+      });
+      // Case from a linked to-do; recorded evidence still needs the owner to apply it.
+      expect(items.get("attempt-1")).toMatchObject({
+        caseRef: 142,
+        coordinator: "Josy",
+        userActionNeeded: true,
+      });
+      // Free text never names a case: internal, so the Fleet coordinator answers for it.
+      expect(items.get("open-path")).toMatchObject({ caseRef: null, coordinator: "Elena" });
+      // Still finishing on its own: nobody needs to act.
+      expect(items.get("live")).toMatchObject({
+        state: "draining",
+        caseRef: null,
+        coordinator: "Elena",
+        userActionNeeded: false,
+      });
+    } finally {
+      for (const [key, value] of [
+        ["RAKAZO_CASE_COORDINATOR_BOTS", previous.coordinators],
+        ["RAKAZO_FLEET_COORDINATOR_BOT", previous.fleet],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("settles from evidence once, records provenance, and replays the same request", async () => {

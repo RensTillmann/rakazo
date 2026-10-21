@@ -1185,6 +1185,11 @@ msgstr "Cancelled"
 msgid "Card view"
 msgstr "Card view"
 
+#. placeholder {0}: item.caseRef
+#: src/components/FleetRecoveryList.tsx
+msgid "Case {0}"
+msgstr "Case {0}"
+
 #: src/components/TodosControl.tsx
 msgid "Case {caseRef}"
 msgstr "Case {caseRef}"
@@ -2879,6 +2884,11 @@ msgstr "Fleet: Outcome unknown"
 msgid "Fleet: Status unavailable"
 msgstr "Fleet: Status unavailable"
 
+#. placeholder {0}: item.coordinator
+#: src/components/FleetRecoveryList.tsx
+msgid "Follow-up: {0}"
+msgstr "Follow-up: {0}"
+
 #: src/components/AskCard.tsx
 msgid "For {sourceRef} · version {sourceVersion}"
 msgstr "For {sourceRef} · version {sourceVersion}"
@@ -3770,6 +3780,7 @@ msgstr "Needs input"
 msgid "Needs takeover"
 msgstr "Needs takeover"
 
+#: src/components/FleetRecoveryList.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
 msgstr "Needs you"
@@ -4008,6 +4019,10 @@ msgstr "Not sent — @{unsentTo} doesn't see this reply"
 #: src/components/FlagMessageDialog.tsx
 msgid "Note (optional)"
 msgstr "Note (optional)"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Nothing for you to do"
+msgstr "Nothing for you to do"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"

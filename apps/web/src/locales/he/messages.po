@@ -1185,6 +1185,11 @@ msgstr "בוטל"
 msgid "Card view"
 msgstr "תצוגת כרטיסים"
 
+#. placeholder {0}: item.caseRef
+#: src/components/FleetRecoveryList.tsx
+msgid "Case {0}"
+msgstr ""
+
 #: src/components/TodosControl.tsx
 msgid "Case {caseRef}"
 msgstr ""
@@ -2879,6 +2884,11 @@ msgstr ""
 msgid "Fleet: Status unavailable"
 msgstr ""
 
+#. placeholder {0}: item.coordinator
+#: src/components/FleetRecoveryList.tsx
+msgid "Follow-up: {0}"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "For {sourceRef} · version {sourceVersion}"
 msgstr ""
@@ -3770,6 +3780,7 @@ msgstr "ממתין לקלט"
 msgid "Needs takeover"
 msgstr "נדרשת השתלטות"
 
+#: src/components/FleetRecoveryList.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
 msgstr "נדרשת פעולה"
@@ -4007,6 +4018,10 @@ msgstr ""
 
 #: src/components/FlagMessageDialog.tsx
 msgid "Note (optional)"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Nothing for you to do"
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
