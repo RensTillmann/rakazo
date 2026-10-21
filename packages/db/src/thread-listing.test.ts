@@ -21,6 +21,17 @@ describe("previewFromBlocks", () => {
     ).toBe("Created Projects-CoS as a Project");
   });
 
+  it("previews a withdrawn or ended card by its retired state, not its question", () => {
+    const card = { kind: "ask", text: "Case 401 · Renew the plan?", actions: [] };
+    expect(
+      previewFromBlocks([
+        { ...card, status: "retired", retiredReason: "Withdrawn: Case 401 closed" },
+      ]),
+    ).toBe("No longer needed · Withdrawn: Case 401 closed");
+    expect(previewFromBlocks([{ ...card, status: "retired" }])).toBe("No longer needed");
+    expect(previewFromBlocks([{ ...card, status: "pending" }])).toBe("Case 401 · Renew the plan?");
+  });
+
   it("never previews the bot's thinking", () => {
     expect(
       previewFromBlocks([

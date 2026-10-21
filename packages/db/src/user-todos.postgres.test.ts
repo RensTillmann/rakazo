@@ -698,7 +698,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
   it("a verified to-do posts exactly one release message to its bot", async () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
-    await requestUserTodoCheck(
+    const { checkRunId } = await requestUserTodoCheck(
       f.prisma,
       f.actor,
       { todoId: todo.id, revision: todo.revision },
@@ -730,6 +730,16 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const steered = await f.prisma.steeringMessage.count({ where: { messageId: released.id } });
     const started = await f.prisma.run.count({ where: { sourceMessageId: released.id } });
     expect(steered + started).toBe(1);
+    // Queued behind the check run, it still shows in the chat: neither the message nor its live
+    // event belongs to the background check, whose own steps the transcript hides.
+    expect(released.runId).not.toBe(checkRunId);
+    const created = await f.prisma.event.findFirstOrThrow({
+      where: {
+        type: "thread.message.created",
+        payload: { path: ["messageId"], equals: released.id },
+      },
+    });
+    expect(created.runId).not.toBe(checkRunId);
   });
 
   it("one card creates one to-do per item, grouped by the card", async () => {

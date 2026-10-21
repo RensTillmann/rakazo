@@ -23,6 +23,7 @@ import {
   inboundSourceFromClientNonce,
   instructionUpdateDiff,
   isApprovalAskBlock,
+  isBackgroundRunTrigger,
   isConversationalRun,
   isOpenAskBlock,
   isSecretAskBlock,
@@ -587,14 +588,18 @@ export async function sendUserMessageInTransaction(
           : {}),
       },
     });
-    await tx.message.update({ where: { id: message.id }, data: { runId: busy.id } });
+    // Fleet: queued behind background work (a to-do check), the message stays in the chat;
+    // linked to that run it would be hidden with the run's own steps.
+    if (!isBackgroundRunTrigger(busy.trigger)) {
+      await tx.message.update({ where: { id: message.id }, data: { runId: busy.id } });
+    }
   }
   const event = await appendEventInTransaction(tx, {
     spaceId: input.spaceId,
     threadId: input.threadId,
     botId: input.botId,
     type: "thread.message.created",
-    runId: run?.id ?? busy?.id,
+    runId: run?.id ?? (busy && !isBackgroundRunTrigger(busy.trigger) ? busy.id : undefined),
     payload: {
       messageId: message.id,
       role: "user",

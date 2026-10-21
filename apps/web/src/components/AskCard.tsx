@@ -17,7 +17,8 @@ import {
 } from "@rakazo/core";
 import { Button, Input, Textarea } from "@rakazo/ui-web";
 import { Paperclip, Plus, X } from "lucide-react";
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { answeredByDeviceLabel } from "../lib/answered-by-label";
 import {
   ATTACHMENT_ACCEPT,
@@ -30,7 +31,7 @@ import { errorText } from "../lib/user-error";
 import { ApprovalDetail } from "./ApprovalDetail";
 import { HoldToTalkControls, HoldToTalkStrip, useHoldToTalk } from "./composer/HoldToTalk";
 import { ReplyReview, useApprovalReview } from "./ReplyReview";
-import { TodoChecklist } from "./TodosControl";
+import { TodoChecklist, TodoInstructions } from "./TodosControl";
 
 /** `pendingAction` while a typed answer (with its files) is being sent; never an action id. */
 const TYPED_ANSWER_ACTION = "\u0000typed";
@@ -559,50 +560,67 @@ export function AskCard({
       ) : askActions?.length ? (
         <div className={approvalActions ? "mt-3.5 flex flex-wrap gap-2" : "mt-3.5 space-y-1.5"}>
           {displayActions?.map((action) => (
-            <Button
-              key={action.id}
-              title={approvalActions ? approvalActionTitle(action.id, action.outcome) : undefined}
-              variant={approvalActions && action.id === "allow" ? "default" : "outline"}
-              className={`h-auto min-w-0 whitespace-normal px-3.5 py-3 text-start font-normal ${approvalActions ? "" : "w-full justify-start"}`}
-              disabled={
-                submitting || (needsFullReply && (action.id === "allow" || action.id === "always"))
-              }
-              onClick={() =>
-                action.id === "edit" && block.instructionUpdate
-                  ? setEditing(true)
-                  : void submitAnswer(action.id)
-              }
-            >
-              {pendingAction === action.id ? (
-                <Trans>Sending…</Trans>
-              ) : action.id === "edit" && block.instructionUpdate ? (
-                action.label
-              ) : approvalActions ? (
-                block.instructionUpdate ? (
-                  action.id === "allow" ? (
-                    t`Apply`
+            <Fragment key={action.id}>
+              <Button
+                title={approvalActions ? approvalActionTitle(action.id, action.outcome) : undefined}
+                variant={approvalActions && action.id === "allow" ? "default" : "outline"}
+                className={`h-auto min-w-0 whitespace-normal px-3.5 py-3 text-start font-normal ${approvalActions ? "" : "w-full justify-start"}`}
+                disabled={
+                  submitting ||
+                  (needsFullReply && (action.id === "allow" || action.id === "always"))
+                }
+                onClick={() =>
+                  action.id === "edit" && block.instructionUpdate
+                    ? setEditing(true)
+                    : void submitAnswer(action.id)
+                }
+              >
+                {pendingAction === action.id ? (
+                  <Trans>Sending…</Trans>
+                ) : action.id === "edit" && block.instructionUpdate ? (
+                  action.label
+                ) : approvalActions ? (
+                  block.instructionUpdate ? (
+                    action.id === "allow" ? (
+                      t`Apply`
+                    ) : (
+                      t`Dismiss`
+                    )
                   ) : (
-                    t`Dismiss`
+                    approvalActionLabel(action.id, action.label, action.outcome)
                   )
-                ) : (
-                  approvalActionLabel(action.id, action.label, action.outcome)
-                )
-              ) : "todo" in action && action.todo && prerequisiteCount ? (
-                <span className="flex min-w-0 flex-col items-start gap-1">
-                  <span>{action.label}</span>
-                  <span
-                    className="text-xs text-muted-foreground"
-                    title={prerequisiteItems.map((item) => item.title).join("\n")}
-                  >
-                    {prerequisiteCount === 1
-                      ? t`adds 1 to-do`
-                      : t`adds ${prerequisiteCount} to-dos`}
+                ) : "todo" in action && action.todo && prerequisiteCount ? (
+                  <span className="flex min-w-0 flex-col items-start gap-1">
+                    <span>{action.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {prerequisiteCount === 1
+                        ? t`adds 1 to-do`
+                        : t`adds ${prerequisiteCount} to-dos`}
+                    </span>
                   </span>
-                </span>
-              ) : (
-                action.label
-              )}
-            </Button>
+                ) : (
+                  action.label
+                )}
+              </Button>
+              {"todo" in action && action.todo && prerequisiteCount && !approvalActions ? (
+                // What choosing it commits the user to, before choosing.
+                <ul data-testid="todo-preview" className="space-y-1 ps-3.5 text-[13.5px]">
+                  {prerequisiteItems.map((item) => (
+                    <li key={item.key}>
+                      <span>{item.title}</span>
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-muted-foreground">
+                          <Trans>Show steps</Trans>
+                        </summary>
+                        <div className="mt-1 space-y-1">
+                          <TodoInstructions why={item.why} steps={item.steps} />
+                        </div>
+                      </details>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </Fragment>
           ))}
           {!approvalActions && !block.instructionUpdate
             ? typedAnswer(t`Or type your own answer…`)

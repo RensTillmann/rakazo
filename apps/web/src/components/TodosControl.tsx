@@ -72,6 +72,8 @@ type UserTodos = {
   /** Items whose check or confirm request is in flight. */
   requesting: ReadonlySet<string>;
   message: string | null;
+  /** The global pause holds work: a check in progress waits for resume. */
+  checksHeld: boolean;
   tick: (todo: UserTodo) => void;
   undo: (todoId: string) => void;
   /** Poll quickly while the caller is showing the list; returns the release. */
@@ -85,21 +87,25 @@ const UserTodosContext = createContext<UserTodos | null>(null);
 export function UserTodosProvider({
   scope,
   enabled,
+  version = 0,
   onFeedback,
   children,
 }: {
   scope: string;
   enabled: boolean;
+  /** Bumped when the user answered a card: the list refetches at once instead of at the next poll. */
+  version?: number;
   onFeedback?: (todo: UserTodo | null) => void;
   children: ReactNode;
 }) {
   const { t } = useLingui();
   const resource = useVisibleResource(
-    () => (enabled ? rpc.todos.list() : Promise.resolve({ todos: EMPTY })),
+    () => (enabled ? rpc.todos.list() : Promise.resolve({ todos: EMPTY, checksHeld: false })),
     { key: `todos:${enabled ? scope : "off"}` },
   );
   const { refresh } = resource;
   const todos = resource.data?.todos ?? EMPTY;
+  const checksHeld = resource.data?.checksHeld ?? false;
   const [countdown, setCountdown] = useState<ReadonlySet<string>>(() => new Set());
   const [requesting, setRequesting] = useState<ReadonlySet<string>>(() => new Set());
   const [message, setMessage] = useState<string | null>(null);
@@ -115,6 +121,10 @@ export function UserTodosProvider({
       setCountdown(new Set());
     };
   }, [scope, enabled]);
+
+  useEffect(() => {
+    if (version > 0) void refresh();
+  }, [version, refresh]);
 
   const fast =
     watchers > 0 || requesting.size > 0 || todos.some((todo) => todo.status === "checking");
@@ -192,12 +202,13 @@ export function UserTodosProvider({
       countdown,
       requesting,
       message,
+      checksHeld,
       tick,
       undo,
       watch,
       feedback: onFeedback ?? null,
     }),
-    [todos, countdown, requesting, message, tick, undo, watch, onFeedback],
+    [todos, countdown, requesting, message, checksHeld, tick, undo, watch, onFeedback],
   );
   return <UserTodosContext.Provider value={value}>{children}</UserTodosContext.Provider>;
 }
@@ -231,16 +242,18 @@ function TodoItem({ todo }: { todo: UserTodo }) {
   const detail = todo.statusDetail;
   const [line, lineTitle] =
     box === "checking"
-      ? [t`checking…`, null]
-      : box === "countdown" || box === "checked"
-        ? [null, null]
-        : todo.status === "remaining"
-          ? [detail ? t`still missing: ${detail}` : t`still missing`, detail]
-          : todo.status === "unavailable"
-            ? [t`couldn't check — tick again to retry`, detail]
-            : todo.status === "retired"
-              ? [t`no longer needed`, detail]
-              : [null, null];
+      ? [todos.checksHeld && !requesting ? t`waiting — Fleet paused` : t`checking…`, null]
+      : box === "checked" && manual
+        ? [t`Confirmed by you`, null]
+        : box === "countdown" || box === "checked"
+          ? [null, null]
+          : todo.status === "remaining"
+            ? [detail ? t`still missing: ${detail}` : t`still missing`, detail]
+            : todo.status === "unavailable"
+              ? [t`couldn't check — tick again to retry`, detail]
+              : todo.status === "retired"
+                ? [t`no longer needed`, detail]
+                : [null, null];
 
   return (
     <li data-todo-id={todo.id} className="py-1">
@@ -365,14 +378,31 @@ function TodoItem({ todo }: { todo: UserTodo }) {
             })}
           </span>
         ) : null}
-        {box === "checked" && manual ? (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            <Trans>(you)</Trans>
-          </span>
-        ) : null}
       </div>
       {open ? <TodoDetails todo={todo} /> : null}
     </li>
+  );
+}
+
+/** Why an item is needed and its numbered steps, as on the card before choosing and in the list. */
+export function TodoInstructions({ why, steps }: { why?: string | null; steps: string }) {
+  return (
+    <>
+      {why ? (
+        <p data-testid="todo-why" className="whitespace-pre-wrap">
+          {why}
+        </p>
+      ) : null}
+      <ol className="list-decimal space-y-0.5 ps-4">
+        {steps
+          .split("\n")
+          .map((step) => step.replace(/^\s*\d+[.)]\s*/, "").trim())
+          .filter(Boolean)
+          .map((step, index) => (
+            <li key={`${index}:${step}`}>{step}</li>
+          ))}
+      </ol>
+    </>
   );
 }
 
@@ -401,20 +431,7 @@ function TodoDetails({ todo }: { todo: UserTodo }) {
       title={tooltip || undefined}
       className="ms-7 mt-1.5 space-y-1.5 rounded-md bg-muted/50 p-2.5 text-xs"
     >
-      {todo.why ? (
-        <p data-testid="todo-why" className="whitespace-pre-wrap">
-          {todo.why}
-        </p>
-      ) : null}
-      <ol className="list-decimal space-y-0.5 ps-4">
-        {todo.steps
-          .split("\n")
-          .map((step) => step.replace(/^\s*\d+[.)]\s*/, "").trim())
-          .filter(Boolean)
-          .map((step, index) => (
-            <li key={`${index}:${step}`}>{step}</li>
-          ))}
-      </ol>
+      <TodoInstructions why={todo.why} steps={todo.steps} />
       <p data-testid="todo-checker" className="text-muted-foreground">
         {todo.verification === "automatic"
           ? t`${botName} checks it when you tick the box`

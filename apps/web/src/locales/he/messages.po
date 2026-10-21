@@ -21,10 +21,6 @@ msgstr ""
 msgid " (unread)"
 msgstr " (לא נקראה)"
 
-#: src/components/TodosControl.tsx
-msgid "(you)"
-msgstr ""
-
 #. placeholder {0}: Math.ceil(oauth.expiresInSeconds / 60)
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1531,6 +1527,10 @@ msgstr "יש לוודא שאפשר להגיע לכתובת ה-URL מסשן הד�
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Confirmed by you"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -5258,6 +5258,10 @@ msgstr ""
 msgid "Show settings"
 msgstr "הצגת הגדרות"
 
+#: src/components/AskCard.tsx
+msgid "Show steps"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Show thoughts"
 msgstr ""
@@ -6118,6 +6122,10 @@ msgstr "קול"
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "יש להמתין רגע ולבדוק שוב."
+
+#: src/components/TodosControl.tsx
+msgid "waiting — Fleet paused"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"

@@ -101,14 +101,19 @@ const ROOMS = [{ id: "room-1", threadId: "t-room" }];
 let referenceLinks: ReferenceLinks = {};
 const CASE_LINK = "https://tracker.example.com/issues/{n}";
 
-async function mount(todos: UserTodo[], children: ReactNode) {
-  vi.mocked(rpc.todos.list).mockResolvedValue({ todos });
+async function mount(todos: UserTodo[], children: ReactNode, checksHeld = false, version = 0) {
+  vi.mocked(rpc.todos.list).mockResolvedValue({ todos, checksHeld });
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={["/app/lily"]}>
         <LocationProbe />
         <ReferenceLinksContext.Provider value={referenceLinks}>
-          <UserTodosProvider scope="user-1:primary" enabled onFeedback={onFeedback}>
+          <UserTodosProvider
+            scope="user-1:primary"
+            enabled
+            version={version}
+            onFeedback={onFeedback}
+          >
             {children}
           </UserTodosProvider>
         </ReferenceLinksContext.Provider>
@@ -121,8 +126,8 @@ async function mount(todos: UserTodo[], children: ReactNode) {
 const sidebarButton = () =>
   container.querySelector<HTMLButtonElement>('[data-testid="todos-sidebar-button"]');
 
-async function openPanel(todos: UserTodo[], rail = false) {
-  await mount(todos, <TodosSidebarButton rail={rail} rooms={ROOMS} />);
+async function openPanel(todos: UserTodo[], rail = false, checksHeld = false) {
+  await mount(todos, <TodosSidebarButton rail={rail} rooms={ROOMS} />, checksHeld);
   await click(sidebarButton()!);
 }
 
@@ -323,6 +328,7 @@ describe("To-dos panel", () => {
     vi.mocked(rpc.todos.check).mockResolvedValue({ todo: todo("m", { status: "checking" }) });
     vi.mocked(rpc.todos.list).mockResolvedValue({
       todos: delivered.map((item) => (item.id === "m" ? { ...item, status: "checking" } : item)),
+      checksHeld: false,
     });
     await click(box("m"));
     await advance(TODO_UNDO_MS);
@@ -344,6 +350,13 @@ describe("To-dos panel", () => {
     expect(
       row("unavailable")!.querySelector<HTMLElement>('[data-testid="todo-secondary"]')!.title,
     ).toBe("No HubSpot read tool");
+  });
+
+  it("says a check waits while the Fleet is paused instead of spinning as if it ran", async () => {
+    await openPanel([todo("checking", { status: "checking" }), todo("open")], false, true);
+    expect(boxState("checking")).toBe("checking");
+    expect(secondary("checking")).toBe("waiting — Fleet paused");
+    expect(secondary("open")).toBeNull();
   });
 
   it("draws unchecked, checked, checking (spinner only), and retired (⊘, struck) boxes", async () => {
@@ -372,8 +385,8 @@ describe("To-dos panel", () => {
       true,
       true,
     ]);
-    expect(row("confirmed")!.textContent).toContain("(you)");
-    expect(row("verified")!.textContent).not.toContain("(you)");
+    expect(row("confirmed")!.textContent).toContain("Confirmed by you");
+    expect(row("verified")!.textContent).not.toContain("Confirmed by you");
 
     expect(boxState("retired")).toBe("retired");
     expect(row("retired")!.querySelector('input[type="checkbox"]')).toBeNull();
@@ -426,6 +439,7 @@ describe("To-dos panel", () => {
     expect(buttonNamed(row("a")!, "Undo")).toBeUndefined();
     vi.mocked(rpc.todos.list).mockResolvedValue({
       todos: [todo("a", { status: "remaining", statusDetail: "_dmarc missing", revision: 9 })],
+      checksHeld: false,
     });
     await act(async () => finish({ todo: todo("a", { status: "checking", revision: 8 }) }));
     await flush();
@@ -455,7 +469,7 @@ describe("To-dos panel", () => {
     expect(rpc.todos.confirm).toHaveBeenCalledWith({ todoId: "m", revision: 2 });
     expect(rpc.todos.check).not.toHaveBeenCalled();
     expect([boxState("m"), box("m").disabled]).toEqual(["checked", true]);
-    expect(row("m")!.textContent).toContain("(you)");
+    expect(row("m")!.textContent).toContain("Confirmed by you");
     await act(async () => finish({ todo: todo("m", { status: "confirmed" }) }));
   });
 
@@ -649,6 +663,7 @@ describe("To-dos panel", () => {
     vi.mocked(rpc.todos.check).mockRejectedValue({ code: "CONFLICT" });
     vi.mocked(rpc.todos.list).mockResolvedValue({
       todos: [todo("a", { status: "checking", revision: 2 }), todo("b")],
+      checksHeld: false,
     });
     await click(box("a"));
     await advance(TODO_UNDO_MS);
@@ -660,6 +675,16 @@ describe("To-dos panel", () => {
 });
 
 describe("Answered card checklist", () => {
+  it("refetches at once when a card was answered, without waiting for the poll", async () => {
+    const checklist = <TodoChecklist messageId="msg-1" />;
+    await mount([], checklist);
+    expect(container.querySelector('[data-testid="todo-checklist"]')).toBeNull();
+    // Answering created the card's to-dos; the shell bumps the version.
+    await mount([todo("a", { groupId: "msg-1" })], checklist, false, 1);
+    expect(rpc.todos.list).toHaveBeenCalledTimes(2);
+    expect(row("a")).not.toBeNull();
+  });
+
   it("shows only the card's items, sharing one fetch with the panel", async () => {
     await mount(
       [

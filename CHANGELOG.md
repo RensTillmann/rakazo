@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Resuming after a long pause cancelled work that was waiting on the user's open cards, and queued work the pause had held, as "stuck". A run waiting on an open card now never expires, and time spent paused no longer counts towards expiry.
 - The approval to send a Zendesk reply showed the customer context as unavailable, because the Fleet now sends it in a new shape. The review shows the customer's full inquiry again and says when a newer customer message arrived since the approved version.
+- A to-do's release message was hidden when its automatic check verified it, because it was filed under the hidden check run; it now shows in the chat like a manual confirmation. A withdrawn or ended card no longer previews in the sidebar as its question, but as "No longer needed".
+- Answering a card with the to-do option showed its to-dos only after up to a minute; the To-dos panel and the card's checklist now update at once.
 - "Done – check now" on a to-do started an ordinary chat run with every tool. It now starts the same short, read-only check as the hourly sweep, run by the case coordinator, and during a pause it waits until resume.
 - A card whose run had ended (stopped, withdrawn, cancelled, failed or completed) stayed "pending" forever, and withdrawing such a card did nothing. Cards now end with their run: an unanswered card is marked no longer needed, with "Withdrawn: <reason>" or "Its run ended without an answer", and open tabs refresh. Cards already left open are cleaned up automatically, and withdrawing one now retires it.
 - A to-do was tied to its case only by the words of its card ("Case 383 · …"), so cancelling the case left its to-dos open. To-dos now carry their tracker case number; the To-dos panel links "Case <n>" to the issue, and the Fleet service can list a case's to-dos and retire the unfinished ones with a reason when the case ends (finished ones stay, nothing is deleted). Existing to-dos are linked only where their card started exactly with "Case <n> · ". Needs migration `20261022090000_user_todo_case_ref`.
@@ -38,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Bots must give every to-do a reason and numbered steps; a to-do request without them is refused with what to fix.
 - Unfinished operations in Fleet control show the case, who follows up, and whether you need to act.
+- A card's to-do option lists the items it adds, with "Show steps" for each item's reason and steps. A check held by the Fleet pause says "waiting — Fleet paused", and an item you confirmed says "Confirmed by you".
 - Message bubbles in the web/PWA transcript use more of a wide window's width (70%/74% caps raised to 84%/88%, still leaving room for the hover-actions gutter), instead of leaving a quarter to a third of a long message's row empty.
 - Every run's system instructions now state the current date and time (UTC), so bots judge deadlines, recency and scheduling from the real present instead of guessing it from training data or quoted timestamps.
 - Connect Slack, WhatsApp Business Cloud, or Telegram DMs to a bot from Messaging settings, alongside iMessage/SMS. Each app can use a different bot. Group conversations remain iMessage-only.

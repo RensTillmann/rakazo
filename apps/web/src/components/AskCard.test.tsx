@@ -105,7 +105,7 @@ describe("AskCard free-text option", () => {
     expect(html).not.toContain('data-testid="ask-type-answer"');
   });
 
-  const dns = {
+  const dns: { key: string; title: string; steps: string; verification: string; why?: string } = {
     key: "dns",
     title: "Add the DNS record",
     steps: "Open the registrar",
@@ -126,7 +126,6 @@ describe("AskCard free-text option", () => {
       <AskCard block={withPrerequisites([dns])} canAnswer onAnswer={async () => {}} />,
     );
     expect(html.match(/adds 1 to-do</g)).toHaveLength(1);
-    expect(html).toContain('title="Add the DNS record"');
     expect(html.indexOf("adds 1 to-do")).toBeGreaterThan(html.indexOf("do it myself"));
     expect(html.indexOf("adds 1 to-do")).toBeLessThan(html.indexOf("Skip"));
     expect(
@@ -134,16 +133,39 @@ describe("AskCard free-text option", () => {
     ).not.toContain("to-do");
   });
 
-  it("counts several to-dos and keeps their titles in the tooltip", () => {
-    const html = renderToStaticMarkup(
+  it("lists what the option commits to before choosing: titles, with why and steps folded", () => {
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(
       <AskCard
-        block={withPrerequisites([dns, { ...dns, key: "mx", title: "Add the MX record" }])}
+        block={withPrerequisites([
+          {
+            ...dns,
+            why: "Mail is rejected without it.",
+            steps: "1. Open the registrar\n2. Add TXT",
+          },
+          { ...dns, key: "mx", title: "Add the MX record" },
+        ])}
         canAnswer
         onAnswer={async () => {}}
       />,
     );
-    expect(html).toContain("adds 2 to-dos");
-    expect(html).toContain('title="Add the DNS record\nAdd the MX record"');
+    expect(container.textContent).toContain("adds 2 to-dos");
+    const items = [...container.querySelectorAll('[data-testid="todo-preview"] > li')];
+    expect(items.map((item) => item.firstElementChild?.textContent)).toEqual([
+      "Add the DNS record",
+      "Add the MX record",
+    ]);
+    // Each item folds its why and numbered steps behind "Show steps", closed until opened.
+    const first = items[0]!.querySelector("details")!;
+    expect(first.open).toBe(false);
+    expect(first.querySelector("summary")?.textContent).toBe("Show steps");
+    expect(first.querySelector('[data-testid="todo-why"]')?.textContent).toBe(
+      "Mail is rejected without it.",
+    );
+    expect([...first.querySelectorAll("ol > li")].map((step) => step.textContent)).toEqual([
+      "Open the registrar",
+      "Add TXT",
+    ]);
   });
 
   it("shows the to-dos it handed over once answered, and not while pending", async () => {

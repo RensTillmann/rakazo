@@ -259,6 +259,7 @@ import {
   touchGroupUpdatedAt,
   UserTodoConflictError,
   UserTodoNotFoundError,
+  userTodoChecksHeld,
 } from "@rakazo/db";
 import { enrichLogContext, getLogger } from "@rakazo/logging";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
@@ -6490,6 +6491,7 @@ export function createRouter(deps: RouterDeps) {
     todos: {
       list: authed.todos.list.handler(async ({ context }) => ({
         todos: await listUserTodos(deps.prisma, context.actor),
+        checksHeld: await userTodoChecksHeld(deps.prisma),
       })),
       check: authed.todos.check.handler(({ context, input }) =>
         runUserTodoAction(deps, () =>

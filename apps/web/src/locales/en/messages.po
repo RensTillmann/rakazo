@@ -21,10 +21,6 @@ msgstr " (needs your answer)"
 msgid " (unread)"
 msgstr " (unread)"
 
-#: src/components/TodosControl.tsx
-msgid "(you)"
-msgstr "(you)"
-
 #. placeholder {0}: Math.ceil(oauth.expiresInSeconds / 60)
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1532,6 +1528,10 @@ msgstr "Confirm the URL is reachable from this browser session, then test again.
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
 msgstr "Confirmations"
+
+#: src/components/TodosControl.tsx
+msgid "Confirmed by you"
+msgstr "Confirmed by you"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
@@ -5258,6 +5258,10 @@ msgstr "Show selected"
 msgid "Show settings"
 msgstr "Show settings"
 
+#: src/components/AskCard.tsx
+msgid "Show steps"
+msgstr "Show steps"
+
 #: src/pages/Shell.tsx
 msgid "Show thoughts"
 msgstr "Show thoughts"
@@ -6118,6 +6122,10 @@ msgstr "Voice"
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "Wait a moment and test again."
+
+#: src/components/TodosControl.tsx
+msgid "waiting — Fleet paused"
+msgstr "waiting — Fleet paused"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"

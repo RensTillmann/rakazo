@@ -108,6 +108,18 @@ export async function listUserTodos(
   return orderUserTodos(rows.map(userTodoDto));
 }
 
+/**
+ * Whether the global pause holds work now. A `checking` to-do's check run is then queued and held
+ * until resume, so the panel says it waits rather than that it is being checked.
+ */
+export async function userTodoChecksHeld(
+  prisma: Pick<PrismaClient, "$queryRaw">,
+): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ active: boolean }>>`
+    SELECT "active" FROM "maintenance_state" WHERE "id" = 'default'`;
+  return rows[0]?.active === true;
+}
+
 /** Every to-do of one tracker case in the caller's space, all statuses, in panel order. */
 export async function listUserTodosForCase(
   prisma: PrismaClient,

@@ -30,6 +30,11 @@ export const latestBotRunSelection = {
 export function previewFromBlocks(blocks: unknown): string {
   const rows = Array.isArray(blocks) ? blocks : [];
   for (const block of rows) {
+    // A withdrawn or ended card previews as what it is now, not as the question it asked.
+    if (block && typeof block === "object" && block.kind === "ask" && block.status === "retired") {
+      const reason = typeof block.retiredReason === "string" ? block.retiredReason.trim() : "";
+      return reason ? `No longer needed · ${reason}` : "No longer needed";
+    }
     if (
       block &&
       typeof block === "object" &&

@@ -159,12 +159,17 @@ next, about how long it takes, real URLs, exact menu names and values, the bot's
 the chat) as the place for a secret, how it is checked, and "(not checked)" after any step it has not
 verified. Cards already stored keep the stored shape and are not re-checked.
 
+While the card is open, the to-do option says "adds N to-dos" and lists the item titles under it;
+"Show steps" unfolds each item's why and numbered steps, so the user sees what they commit to before
+choosing.
+
 Answering with that option, inside the answer's transaction, creates one `UserTodo` per item, grouped
 by the card (`sourceMessageId`). An item whose `key` already has a to-do in the space keeps that to-do's
 identity and progress; changed steps (ignoring whitespace) or verification reset it to open and clear
 its evidence, and a retired one starts over. The answer stays in history as an answer. The to-do records
 intent only: nothing is marked done and nothing is approved. The resumed bot is told the to-do ids and
-not to ask again.
+not to ask again. The answering tab refetches the to-dos at once, so the panel and the card's checklist
+show them without waiting for the next poll.
 
 The To-dos button in the left sidebar (also in the collapsed rail) is always shown; it carries the open
 count when something is open and opens the list ("Nothing waiting on you" when nothing is), grouped by card: cards with an unfinished item that blocks other work first, then by priority
@@ -187,9 +192,10 @@ Undo; nothing is sent if it is undone or the tab closes. Then:
   (positive evidence only) ticks the box. `remaining` (checked, not done) unticks it with "still
   missing: …"; `unavailable` (could not check) unticks it with "couldn't check — tick again to retry",
   and is never treated as a failed access check. During the global pause the run stays queued and is
-  held like any other work; it runs after resume.
-- A manual item becomes `confirmed`, ticked and labelled "(you)" rather than verified. No bot run
-  checks it.
+  held like any other work; it runs after resume. Meanwhile the item says "waiting — Fleet paused"
+  instead of "checking…" (`todos.list` returns `checksHeld`).
+- A manual item becomes `confirmed`, ticked with the line "Confirmed by you" rather than verified. No
+  bot run checks it.
 - A box is ticked only once its item is verified or confirmed, and then cannot be unticked; a pending
   box cannot be ticked again.
 
@@ -202,6 +208,10 @@ same send path as a user message, so a global pause still holds the run): with `
 item wakes the bot once, naming it; with `all`, the last satisfied item of the card wakes it once,
 listing them all, and retiring the last open item releases the satisfied rest. A satisfaction never
 wakes the bot twice (`releasedRevision`). Releasing never grants an approval or clears the pause.
+The release message stays visible in the chat even when it waits behind the check run that verified
+the item: a message queued behind background work (`todo_check`, ticket runs) is not linked to that
+run, whose own steps the transcript hides. A withdrawn or ended card previews in the sidebar as
+"No longer needed" (with its reason), not as its question.
 
 RPC: `todos.list`, `todos.check({ todoId, revision })`, `todos.confirm({ todoId, revision })`, scoped to
 the caller's space and own to-dos. Table `user_todos`, migration `20261021200000_user_todos`.

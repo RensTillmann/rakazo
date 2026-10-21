@@ -2297,8 +2297,11 @@ function SpaceShell() {
     () => pendingDecisionSignature([...bots, ...groups]),
     [bots, groups],
   );
+  // An answered card may have created to-dos: the panel and its checklist refetch at once.
+  const [todosVersion, setTodosVersion] = useState(0);
   const refreshAfterDecision = useCallback(
     (decision: { botId: string; groupId: string | null }) => {
+      setTodosVersion((version) => version + 1);
       if (decision.groupId && activeGroupId.current === decision.groupId) {
         void refreshGroupThreadRef.current(decision.groupId).catch(() => undefined);
       } else if (!decision.groupId && activeBotId.current === decision.botId) {
@@ -2524,6 +2527,7 @@ function SpaceShell() {
         ...(username ? { username } : {}),
         ...(draftFinal !== undefined ? { draftFinal } : {}),
       });
+      setTodosVersion((version) => version + 1);
       if (groupId && activeGroupId.current === groupId) {
         await refreshGroupThreadRef.current(groupId);
       } else if (botId && activeBotId.current === botId) {
@@ -5774,6 +5778,7 @@ function SpaceShell() {
           <UserTodosProvider
             scope={`${userId ?? ""}:${currentSpaceId ?? "primary"}`}
             enabled={Boolean(userId)}
+            version={todosVersion}
             onFeedback={openTodoFeedback}
           >
             {shell}

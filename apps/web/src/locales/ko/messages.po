@@ -21,10 +21,6 @@ msgstr ""
 msgid " (unread)"
 msgstr " (읽지 않음)"
 
-#: src/components/TodosControl.tsx
-msgid "(you)"
-msgstr ""
-
 #. placeholder {0}: Math.ceil(oauth.expiresInSeconds / 60)
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1531,6 +1527,10 @@ msgstr "이 브라우저 세션에서 URL에 연결할 수 있는지 확인한 �
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Confirmed by you"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -5258,6 +5258,10 @@ msgstr ""
 msgid "Show settings"
 msgstr "설정 보기"
 
+#: src/components/AskCard.tsx
+msgid "Show steps"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Show thoughts"
 msgstr ""
@@ -6118,6 +6122,10 @@ msgstr "음성"
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "잠시 기다린 뒤 다시 테스트하세요."
+
+#: src/components/TodosControl.tsx
+msgid "waiting — Fleet paused"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"

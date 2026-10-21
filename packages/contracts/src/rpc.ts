@@ -1144,7 +1144,8 @@ export const appContract = {
    * first, then by priority (unknown after p3), then oldest asked; items in the bot's order.
    */
   todos: {
-    list: oc.output(z.object({ todos: z.array(UserTodoSchema) })),
+    /** `checksHeld`: the global pause holds work, so a check in progress waits for resume. */
+    list: oc.output(z.object({ todos: z.array(UserTodoSchema), checksHeld: z.boolean() })),
     /** Done — check now: asks the requesting bot to verify an automatic to-do. */
     check: oc.input(UserTodoActionInputSchema).output(z.object({ todo: UserTodoSchema })),
     /** I did it: the user confirms a manual to-do no bot can verify. */
