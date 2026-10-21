@@ -55,6 +55,8 @@ describe("reconcileStuckWork", () => {
   it("ignores a young queue and a row the scan cannot classify", async () => {
     const eventFindMany = vi.fn(async () => []);
     const prisma = {
+      maintenanceAudit: { findMany: vi.fn(async () => []) },
+      message: { findMany: vi.fn(async () => []) },
       run: {
         findMany: vi.fn(async () => [
           candidate("queued", 1),
@@ -478,6 +480,8 @@ describe("reconcileStuckWork", () => {
     const second = { ...candidate("waiting_input", 5), id: "run-next-page" };
     const seen: unknown[] = [];
     const prisma = {
+      maintenanceAudit: { findMany: vi.fn(async () => []) },
+      message: { findMany: vi.fn(async () => []) },
       run: {
         findMany: vi.fn(async (args: { where?: { AND?: unknown[] } }) => {
           seen.push(args.where);
@@ -534,6 +538,8 @@ describe("reconcileStuckWork", () => {
 
   it("continues the other scans when the stuck query fails", async () => {
     const prisma = {
+      maintenanceAudit: { findMany: vi.fn(async () => []) },
+      message: { findMany: vi.fn(async () => []) },
       $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
       $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
       run: {
@@ -593,6 +599,8 @@ function noticePrisma(
     createdAt: Date; updatedAt: Date;
   }> = [];
   const prisma = {
+    maintenanceAudit: { findMany: vi.fn(async () => []) },
+    message: { findMany: vi.fn(async () => []) },
     run: {
       findMany: vi.fn(async () => [run]),
       findFirst: vi.fn(async () => ({ ...run, routine: null })),
@@ -668,6 +676,7 @@ function noticePrisma(
 
 function expireClient(run: ReturnType<typeof candidate>, options?: { cancelled?: number }) {
   const client = {
+    maintenanceAudit: { findMany: vi.fn(async () => []) },
     run: {
       findMany: vi.fn(async () => [run]),
       updateMany: vi.fn(async () => ({ count: options?.cancelled ?? 1 })),

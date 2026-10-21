@@ -1,6 +1,6 @@
 import type { JobPublisher, NotificationMessage, NotificationProvider } from "@rakazo/adapter-kit";
 import { runContinueJob } from "@rakazo/adapter-kit";
-import type { StuckWorkStatus } from "@rakazo/core";
+import type { MaintenancePauseSpan, StuckWorkStatus } from "@rakazo/core";
 import {
   isStuckWorkStatus,
   runPushEnabled,
@@ -14,7 +14,13 @@ import {
   stuckWorkStoppedNotification,
 } from "@rakazo/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
-import { appendEventInTransaction, expireStuckRun, withTransactionRetry } from "@rakazo/db";
+import {
+  appendEventInTransaction,
+  expireStuckRun,
+  loadMaintenancePauseSpans,
+  runsWaitingOnOpenCards,
+  withTransactionRetry,
+} from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { ExpoPushProvider, ExpoPushUncertainError, type ExpoPushDelivery } from "./expo-push.js";
 
@@ -91,10 +97,17 @@ export async function reconcileStuckWork(deps: {
     },
   });
 
+  // Time the global pause held the work is not stuck time, so resuming never expires it at once.
+  const pauses = runs.length ? await loadMaintenancePauseSpans(deps.prisma) : [];
   const due = runs.flatMap((run) => {
-    const candidate = readyStuckRun(run, deps.now);
+    const candidate = readyStuckRun(run, deps.now, pauses);
     return candidate ? [candidate] : [];
   });
+  // A run waiting on a card waits for the user's answer, however long: reminded, never expired.
+  const onCards = await runsWaitingOnOpenCards(
+    deps.prisma,
+    due.filter((run) => run.status === "waiting_input").map((run) => run.id),
+  );
   const notices = due.length
     ? await deps.prisma.event.findMany({
         where: {
@@ -111,8 +124,9 @@ export async function reconcileStuckWork(deps: {
       (notice) => notice.runId === run.id && noticeStopsRetry(notice.payload, run.updatedAt),
     );
     const action = stuckWorkAction({
-      ageMs: stuckWorkAgeMs(run.updatedAt, deps.now),
+      ageMs: stuckWorkAgeMs(run.updatedAt, deps.now, pauses),
       alreadyNotified,
+      waitsOnCard: onCards.has(run.id),
     });
     try {
       if (action === "notify") await remindStuckRun(deps, run);
@@ -130,10 +144,11 @@ export async function reconcileStuckWork(deps: {
 function readyStuckRun(
   run: Omit<Partial<StuckCandidate>, "status"> & { id: string; status?: string },
   now: Date,
+  pauses: readonly MaintenancePauseSpan[],
 ): StuckCandidate | null {
   if (!run.status || !isStuckWorkStatus(run.status)) return null;
   if (!(run.updatedAt instanceof Date)) return null;
-  if (stuckWorkAgeMs(run.updatedAt, now) < stuckWorkNotifyAfterMs()) return null;
+  if (stuckWorkAgeMs(run.updatedAt, now, pauses) < stuckWorkNotifyAfterMs()) return null;
   if (!run.spaceId || !run.threadId || !run.botId || !run.userId || !run.taskId) return null;
   if (!run.bot || !run.thread) return null;
   return {

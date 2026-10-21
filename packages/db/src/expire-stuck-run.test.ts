@@ -239,7 +239,10 @@ describe("expired source-question dependencies", () => {
       expireStuckRun(client as unknown as Prisma.TransactionClient, input),
     ).resolves.toBeNull();
     expect(client.externalEffect.updateMany).not.toHaveBeenCalled();
-    expect(client.message.findMany).not.toHaveBeenCalled();
+    // Only the open-card lookup ran; the dependency lookup needs a won cancellation.
+    expect(client.message.findMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ select: { id: true, thread: { select: { spaceId: true } } } }),
+    );
   });
   it("propagates invalidation failure without starting a continuation or writing expiry evidence", async () => {
     const client = tx({ status: "waiting_input", steering: true });

@@ -40,18 +40,39 @@ export function isStuckWorkStatus(status: string): status is StuckWorkStatus {
   return (STUCK_WORK_STATUSES as readonly string[]).includes(status);
 }
 
-export function stuckWorkAgeMs(updatedAt: Date | string, now: Date): number {
+/** A stretch of time the global maintenance pause held all work; `to` null while it still holds. */
+export type MaintenancePauseSpan = { from: Date; to: Date | null };
+
+/**
+ * How long a run has sat still since `updatedAt`, not counting time the global pause held it:
+ * held work is retained input, not stuck work, so resuming never expires it at once.
+ */
+export function stuckWorkAgeMs(
+  updatedAt: Date | string,
+  now: Date,
+  pauses: readonly MaintenancePauseSpan[] = [],
+): number {
   const at = updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(updatedAt);
   if (!Number.isFinite(at)) return 0;
-  return now.getTime() - at;
+  let paused = 0;
+  for (const pause of pauses) {
+    const from = Math.max(pause.from.getTime(), at);
+    const to = Math.min(pause.to?.getTime() ?? now.getTime(), now.getTime());
+    if (to > from) paused += to - from;
+  }
+  return now.getTime() - at - paused;
 }
 
-/** `alreadyNotified` is for this episode (the run's current updatedAt), not an older one. */
+/**
+ * `alreadyNotified` is for this episode (the run's current updatedAt), not an older one.
+ * `waitsOnCard`: the run waits on an open card for the user. It is reminded but never expired by
+ * age: a decision waits for its answer, a withdrawal, Stop, supersession or retirement.
+ */
 export function stuckWorkAction(
-  input: { ageMs: number; alreadyNotified: boolean },
+  input: { ageMs: number; alreadyNotified: boolean; waitsOnCard?: boolean },
   env: StuckWorkEnv = runtimeEnv(),
 ): StuckWorkAction {
-  if (input.ageMs >= stuckWorkExpireAfterMs(env)) return "expire";
+  if (input.ageMs >= stuckWorkExpireAfterMs(env) && !input.waitsOnCard) return "expire";
   if (input.ageMs >= stuckWorkNotifyAfterMs(env) && !input.alreadyNotified) return "notify";
   return "none";
 }

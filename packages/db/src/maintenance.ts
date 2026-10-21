@@ -421,3 +421,27 @@ export function createMaintenanceStore(pool: Pick<Pool, "connect" | "query">) {
 }
 
 export * from "./maintenance-recovery.js";
+
+/**
+ * Every stretch the global pause held work, from the durable audit (enter/force-stop start or
+ * continue a hold, resume ends it). The last span is open (`to: null`) while the pause holds.
+ */
+export async function loadMaintenancePauseSpans(
+  db: Pick<Prisma.TransactionClient, "maintenanceAudit">,
+): Promise<Array<{ from: Date; to: Date | null }>> {
+  const rows = await db.maintenanceAudit.findMany({
+    orderBy: { revision: "asc" },
+    select: { active: true, createdAt: true },
+  });
+  const spans: Array<{ from: Date; to: Date | null }> = [];
+  let open: Date | null = null;
+  for (const row of rows) {
+    if (row.active && !open) open = row.createdAt;
+    if (!row.active && open) {
+      spans.push({ from: open, to: row.createdAt });
+      open = null;
+    }
+  }
+  if (open) spans.push({ from: open, to: null });
+  return spans;
+}

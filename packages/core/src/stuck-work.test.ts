@@ -5,6 +5,7 @@ import {
   STUCK_WORK_EXPIRE_AFTER_MS,
   STUCK_WORK_NOTIFY_AFTER_MS,
   stuckWorkAction,
+  stuckWorkAgeMs,
   stuckWorkExpireAfterMs,
   stuckWorkNotifyAfterMs,
   stuckWorkReminder,
@@ -14,6 +15,25 @@ import {
 } from "./stuck-work.js";
 
 describe("stuck work age", () => {
+  it("never expires a run waiting on a card, but still reminds once", () => {
+    const old = { ageMs: STUCK_WORK_EXPIRE_AFTER_MS * 10, waitsOnCard: true };
+    expect(stuckWorkAction({ ...old, alreadyNotified: false })).toBe("notify");
+    expect(stuckWorkAction({ ...old, alreadyNotified: true })).toBe("none");
+  });
+
+  it("does not count time the global pause held the run", () => {
+    const hour = 60 * 60 * 1000;
+    const now = new Date("2026-10-22T12:00:00Z");
+    const at = new Date(now.getTime() - 30 * hour);
+    const pauses = [
+      { from: new Date(now.getTime() - 40 * hour), to: new Date(now.getTime() - 20 * hour) },
+      { from: new Date(now.getTime() - 2 * hour), to: null },
+    ];
+    // 30 h since the run moved, 10 h + 2 h of them paused.
+    expect(stuckWorkAgeMs(at, now, pauses)).toBe(18 * hour);
+    expect(stuckWorkAgeMs(at, now)).toBe(30 * hour);
+  });
+
   it("keeps the reminder well before the cancellation", () => {
     expect(STUCK_WORK_EXPIRE_AFTER_MS).toBeGreaterThan(STUCK_WORK_NOTIFY_AFTER_MS);
   });

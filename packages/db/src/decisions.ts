@@ -178,3 +178,22 @@ export function duplicateAskRefusal(askedAt: Date): string {
   const time = askedAt.toISOString().slice(11, 16);
   return `Not asked: the same card is already open in Rens's queue (asked ${time} UTC). Don't ask it again; his answer comes to the run that asked it.`;
 }
+
+/** Of `runIds`, the runs that wait on a card still open for the user (questions and approvals). */
+export async function runsWaitingOnOpenCards(
+  db: Pick<Prisma.TransactionClient, "message">,
+  runIds: readonly string[],
+): Promise<Set<string>> {
+  if (runIds.length === 0) return new Set();
+  const cards = await db.message.findMany({
+    where: {
+      runId: { in: [...runIds] },
+      role: "bot",
+      blocks: { array_contains: [{ kind: "ask" }] },
+    },
+    select: { runId: true, blocks: true },
+  });
+  return new Set(
+    cards.flatMap((card) => (card.runId && pendingAskBlock(card.blocks) ? [card.runId] : [])),
+  );
+}

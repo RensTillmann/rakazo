@@ -9,6 +9,7 @@ import {
   createPendingSteeringRun,
   discardAnsweredSteering,
 } from "./events.js";
+import { runsWaitingOnOpenCards } from "./decisions.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 
 export interface ExpireStuckRunInput {
@@ -26,7 +27,7 @@ export interface ExpireStuckRunResult {
 }
 
 /**
- * Cancel one aged queued run or human wait. Sets `error` to the status line so
+ * Cancel one aged queued run or human wait that is not a card waiting for the user. Sets `error` to the status line so
  * a stuck cancel can be told from a user stop, which leaves error empty.
  * Returns null when the row already moved on.
  */
@@ -44,6 +45,13 @@ export async function expireStuckRun(
     !current ||
     current.status !== input.status ||
     current.updatedAt.getTime() !== input.updatedAt.getTime()
+  ) {
+    return null;
+  }
+  // A run waiting on an open card waits for the user's answer; age never ends it.
+  if (
+    input.status === "waiting_input" &&
+    (await runsWaitingOnOpenCards(tx, [input.runId])).size > 0
   ) {
     return null;
   }
