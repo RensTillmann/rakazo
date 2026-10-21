@@ -124,6 +124,11 @@ that seam. The run update holds the source-run lock until commit; new recorders 
 claims re-read the cancelled status under that lock and cannot proceed. Storage
 failures propagate to the owning transaction rather than leaving cleanup best-effort.
 
+Aged-run expiry uses that same dependency invalidation after its cancellation CAS
+wins and before status messages or steering continuation are created. An answer
+that wins the expiry fence causes no invalidation. An invalidation failure aborts
+the owning transaction, rather than starting continuation on partial cleanup.
+
 This is not complete lifecycle fencing: legacy-row reconciliation, other cancellation
 or replacement paths, and dependent-card UI refresh remain to be implemented. The
 reference is not a human answer or an authorization grant.

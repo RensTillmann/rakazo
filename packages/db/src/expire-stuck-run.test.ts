@@ -43,7 +43,9 @@ function tx(options?: {
       create: vi.fn(async () => ({ id: "task-next" })),
     },
     thread: { update: vi.fn(async () => ({ nextMessageSeq: 2, nextEventSeq: 9 })) },
+    externalEffect: { updateMany: vi.fn(async () => ({ count: 1 })) },
     message: {
+      findMany: vi.fn(async () => [{ id: "source-question", thread: { spaceId: "space-1" } }]),
       findFirst: vi.fn(async () => null),
       create: vi.fn(async (args: { data: Record<string, unknown> }) => {
         const row = { id: "message-expired", ...args.data };
@@ -174,5 +176,79 @@ describe("expireStuckRun", () => {
         blocks: [{ kind: "meta", text: stuckWorkStatusMessage("waiting_input") }],
       }),
     });
+  });
+});
+
+describe("expired source-question dependencies", () => {
+  const input = {
+    runId: "run-1",
+    threadId: "thread-1",
+    status: "waiting_input" as const,
+    updatedAt,
+    now,
+  };
+  it("invalidates the exact source dependencies after cancellation and before continuation", async () => {
+    const client = tx({ status: "waiting_input", steering: true });
+    await expireStuckRun(client as unknown as Prisma.TransactionClient, input);
+    expect(client.message.findMany).toHaveBeenCalledWith({
+      where: { runId: { in: ["run-1"] } },
+      select: { id: true, thread: { select: { spaceId: true } } },
+      orderBy: { id: "asc" },
+    });
+    expect(client.externalEffect.updateMany).toHaveBeenCalledWith({
+      where: {
+        spaceId: "space-1",
+        sourceMessageId: "source-question",
+        status: { in: ["intended", "approved"] },
+      },
+      data: {
+        status: "invalidated",
+        result: {
+          error:
+            "This approval no longer applies because its source question is no longer pending.",
+          invalidated: true,
+          reason: "source_question_unavailable",
+          sourceMessageId: "source-question",
+        },
+      },
+    });
+    const invalidation = client.externalEffect.updateMany.mock.invocationCallOrder[0]!;
+    expect(client.run.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(invalidation);
+    expect(invalidation).toBeLessThan(client.run.create.mock.invocationCallOrder[0]!);
+    expect(client.snapshot().messages).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          blocks: expect.arrayContaining([
+            expect.objectContaining({ kind: "ask", status: "answered" }),
+          ]),
+        }),
+      ]),
+    );
+  });
+  it("does not invalidate if an answer already won the expiry fence", async () => {
+    const client = tx({ status: "queued" });
+    await expect(
+      expireStuckRun(client as unknown as Prisma.TransactionClient, input),
+    ).resolves.toBeNull();
+    expect(client.externalEffect.updateMany).not.toHaveBeenCalled();
+    expect(client.message.findMany).not.toHaveBeenCalled();
+  });
+  it("does not invalidate if the cancellation CAS loses", async () => {
+    const client = tx({ status: "waiting_input", cancelled: 0 });
+    await expect(
+      expireStuckRun(client as unknown as Prisma.TransactionClient, input),
+    ).resolves.toBeNull();
+    expect(client.externalEffect.updateMany).not.toHaveBeenCalled();
+    expect(client.message.findMany).not.toHaveBeenCalled();
+  });
+  it("propagates invalidation failure without starting a continuation or writing expiry evidence", async () => {
+    const client = tx({ status: "waiting_input", steering: true });
+    client.externalEffect.updateMany.mockRejectedValue(new Error("invalidation unavailable"));
+    await expect(
+      expireStuckRun(client as unknown as Prisma.TransactionClient, input),
+    ).rejects.toThrow("invalidation unavailable");
+    expect(client.message.create).not.toHaveBeenCalled();
+    expect(client.run.create).not.toHaveBeenCalled();
+    expect(client.attempt.updateMany).not.toHaveBeenCalled();
   });
 });

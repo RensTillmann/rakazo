@@ -61,3 +61,22 @@ export async function invalidateSourceApprovalEffects(
   });
   return changed.count;
 }
+
+/** After the caller wins cancellation and holds the run locks, invalidate only
+ * dependencies of messages attached to those authorized runs, before cleanup.
+ * Keep this in the owning transaction so a storage failure aborts cancellation.
+ */
+export async function invalidateRunSourceApprovalEffects(
+  tx: Pick<import("./client.js").Prisma.TransactionClient, "message" | "externalEffect">,
+  runIds: readonly string[],
+): Promise<void> {
+  if (runIds.length === 0) return;
+  const sources = await tx.message.findMany({
+    where: { runId: { in: [...runIds] } },
+    select: { id: true, thread: { select: { spaceId: true } } },
+    orderBy: { id: "asc" },
+  });
+  for (const source of sources) {
+    await invalidateSourceApprovalEffects(tx, source.thread.spaceId, source.id);
+  }
+}
