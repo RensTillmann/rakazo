@@ -104,20 +104,24 @@ its evidence, and a retired one starts over. The answer stays in history as an a
 intent only: nothing is marked done and nothing is approved. The resumed bot is told the to-do ids and
 not to ask again.
 
-The header's To-dos control lists the items by card ("N of M done", retired items excluded) as checkbox
-rows with the full steps:
+The header's To-dos control lists the items by card: one header line (bot · topic, progress "2/3",
+retired items excluded, chip "unblocks <bot>"), then one line per item: a checkbox, a short title and,
+only when it matters, one short muted line. Clicking the title shows the numbered steps; finished and
+retired items fold into one "Done (N)" row. Ticking the box is the only action and means "I did this":
 
-- Ticking an automatic item is **Done — check now**: it becomes `checking`, and a normal message in the
-  bot's thread asks the requesting bot to check the steps with its own read-only tools and call
-  `todo_report(todo_id, outcome, evidence, remaining_step?)`. `verified` needs positive evidence;
-  `remaining` (checked, not done) shows "Still to do: …"; `unavailable` (could not check) shows
-  "Couldn't check: …" and is never treated as a failed access check.
-- Ticking a manual item is **I did it**: it becomes `confirmed`, labelled "Confirmed by you" rather than
-  verified. No bot run checks it.
-- The box shows ticked only once the item is verified or confirmed; while checking it shows pending.
+- An automatic item shows a pending box and becomes `checking`; a normal message in the bot's thread
+  asks the requesting bot to check the steps with its own read-only tools and call
+  `todo_report(todo_id, outcome, evidence, remaining_step?)`. `verified` (positive evidence only)
+  ticks the box. `remaining` (checked, not done) unticks it with "still missing: …"; `unavailable`
+  (could not check) unticks it with "couldn't check — tick again to retry", and is never treated as a
+  failed access check.
+- A manual item becomes `confirmed` at once, ticked and labelled "(you)" rather than verified. No bot
+  run checks it.
+- A box is ticked only once its item is verified or confirmed, and then cannot be unticked; a pending
+  box cannot be ticked again.
 
 Only the requesting bot can report or retire (`todo_retire(todo_id, reason)` for a cancelled or
-superseded requirement; the item then shows "No longer needed: …" and takes no actions). Every action is
+superseded requirement; it then folds into "Done (N)" as no longer needed and takes no actions). Every action is
 a compare-and-set on the to-do's revision: a stale tab gets `CONFLICT`, two clicks make one transition.
 
 Satisfied items release only the requesting bot's work, through an ordinary message in its thread (the
