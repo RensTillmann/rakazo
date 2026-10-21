@@ -3,7 +3,7 @@ import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@rakazo/a
 import type { MessageBlock } from "@rakazo/contracts";
 import { stuckWorkStatusMessages } from "@rakazo/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
-import { retireInvalidatedApprovalCards } from "@rakazo/db";
+import { reconcileLegacySourceBindings, retireInvalidatedApprovalCards } from "@rakazo/db";
 import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import type { PoolClient } from "pg";
@@ -39,6 +39,7 @@ export interface ReconciliationLeadership {
  * Approval cards whose source question ended are retired (non-answer, with a reason) and their
  * paused runs queued again; open tabs refresh from the durable event. Runs right after the
  * source ends too (API); this pass catches stop/expiry/cleanup paths and anything missed.
+ * Requests recorded before source binding are reconciled first, from their exact envelope.
  */
 export async function reconcileRetiredApprovalCards(deps: {
   prisma: PrismaClient;
@@ -46,9 +47,9 @@ export async function reconcileRetiredApprovalCards(deps: {
   events?: Pick<ThreadEvents, "notify">;
   spaceId?: string;
 }): Promise<number> {
-  const retired = await retireInvalidatedApprovalCards(deps.prisma, {
-    ...(deps.spaceId ? { spaceId: deps.spaceId } : {}),
-  });
+  const scope = deps.spaceId ? { spaceId: deps.spaceId } : {};
+  await reconcileLegacySourceBindings(deps.prisma, scope);
+  const retired = await retireInvalidatedApprovalCards(deps.prisma, scope);
   for (const card of retired) {
     await deps.events?.notify(card.threadId, card.eventSeq).catch((error: unknown) =>
       getLogger().error("retired approval card notification", error),

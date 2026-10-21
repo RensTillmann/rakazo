@@ -1079,10 +1079,14 @@ async function commitAnswerRunInput(
             prerequisites,
           })
         : null;
-    const answer = askAnswerWithEditedDraft(
+    const chosen = askAnswerWithEditedDraft(
       selectedChoice ? `Selected choice ${selectedChoice.id}: ${resumeLabel}` : input.answer,
       draftFinal,
     );
+    // Fleet: the answer holds only for the conversation version the card showed.
+    const answer = pendingAsk.source
+      ? `${chosen}\n\nThis answer is for ${pendingAsk.source.ref} at version ${pendingAsk.source.version}. Act on it only while that is still its latest message; if the customer wrote again, ask again with the new version.`
+      : chosen;
     const task = await tx.task.updateMany({
       where: { runs: { some: { id: input.runId } } },
       data: {
@@ -1380,19 +1384,30 @@ export async function pauseRunForInput(
     // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
     // concurrent clear cannot deadlock against this transaction.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
-    const question = input.dedupeQuestion
-      ? input.blocks.find((block) => block.kind === "ask")
-      : undefined;
-    if (question?.kind === "ask") {
+    const question = input.blocks.find((block) => block.kind === "ask");
+    if (question?.kind === "ask" && (input.dedupeQuestion || question.source)) {
       // Two runs of one bot asking at once queue here, so only the first stores its card.
       const lockKey = `ask-dedupe\u001f${input.botId}`;
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS "lock"`;
-      const duplicate = await findOpenDuplicateQuestion(tx, {
-        botId: input.botId,
-        runId: input.runId,
-        text: question.text,
-      });
-      if (duplicate) return { duplicateAskedAt: duplicate.askedAt };
+      if (input.dedupeQuestion && question.source) {
+        const sameVersion = await replaceOlderSourceCardsInTransaction(
+          tx,
+          { ...input, source: question.source },
+          "find",
+        );
+        if (sameVersion) return { duplicateAskedAt: sameVersion };
+      }
+      if (input.dedupeQuestion) {
+        const duplicate = await findOpenDuplicateQuestion(tx, {
+          botId: input.botId,
+          runId: input.runId,
+          text: question.text,
+          ...(question.source
+            ? { replacing: { threadId: input.threadId, ...question.source } }
+            : {}),
+        });
+        if (duplicate) return { duplicateAskedAt: duplicate.askedAt };
+      }
     }
     const paused = await tx.run.updateMany({
       where: {
@@ -1414,6 +1429,10 @@ export async function pauseRunForInput(
       },
     });
     if (paused.count !== 1) return null;
+    // Only once this card is sure to be stored: a lost lease must not withdraw the older card.
+    if (question?.kind === "ask" && question.source) {
+      await replaceOlderSourceCardsInTransaction(tx, { ...input, source: question.source }, "replace");
+    }
 
     const attempt = await tx.attempt.updateMany({
       where: {
@@ -1457,6 +1476,92 @@ export async function pauseRunForInput(
   if (committed.duplicateAskedAt) return { duplicateAskedAt: committed.duplicateAskedAt };
   await notifyRealtime(realtime, committed.threadId, committed.seq);
   return true;
+}
+
+/**
+ * Fleet: a new reply card for `source` replaces this bot's older open question cards in the same
+ * thread that answer another version of the same conversation. Each older card is withdrawn like
+ * `decisions.withdraw` (its run alone is cancelled, its dependents invalidated) and marked
+ * `retired` with the reason, never answered. In `find` mode nothing is written and the time of
+ * an open card for the same version is returned, so the caller can refuse the duplicate. Runs
+ * inside the new card's transaction, under its thread lock.
+ */
+async function replaceOlderSourceCardsInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    spaceId: string;
+    threadId: string;
+    botId: string;
+    runId: string;
+    source: { ref: string; version: string };
+  },
+  /** `find`: only report an open card for the same version; `replace`: withdraw older versions. */
+  mode: "find" | "replace",
+): Promise<Date | null> {
+  const waiting = await tx.run.findMany({
+    where: {
+      spaceId: input.spaceId,
+      threadId: input.threadId,
+      botId: input.botId,
+      status: "waiting_input",
+      id: { not: input.runId },
+    },
+    select: { id: true, userId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  for (const run of waiting) {
+    const cards = await tx.message.findMany({
+      where: { threadId: input.threadId, runId: run.id, botId: input.botId, role: "bot" },
+      select: { id: true, blocks: true, createdAt: true },
+    });
+    for (const card of cards) {
+      const parsed = MessageBlockSchema.array().safeParse(card.blocks);
+      if (!parsed.success) continue;
+      const ask = parsed.data.find(isOpenAskBlock);
+      if (ask?.kind !== "ask" || ask.source?.ref !== input.source.ref) continue;
+      if (ask.source.version === input.source.version) {
+        if (mode === "find") return card.createdAt;
+        continue;
+      }
+      if (mode === "find") continue;
+      const reason = `Replaced by a newer card for ${input.source.ref} (version ${ask.source.version} → ${input.source.version}).`;
+      let withdrawn: QuestionWithdrawalCommit;
+      try {
+        withdrawn = await withdrawQuestionInTransaction(
+          tx,
+          { spaceId: input.spaceId, userId: run.userId },
+          { botId: input.botId, messageId: card.id, reason },
+        );
+      } catch (error) {
+        // A run with another open card, or a card that is not an ordinary question, stays.
+        if (error instanceof QuestionNotWithdrawableError || error instanceof IsolationError) {
+          continue;
+        }
+        throw error;
+      }
+      if (!withdrawn.withdrawn) continue;
+      const blocks = parsed.data.map((block) =>
+        block === ask
+          ? {
+              ...ask,
+              status: "retired" as const,
+              retiredReason: reason,
+              retiredAt: new Date().toISOString(),
+            }
+          : block,
+      );
+      await tx.message.update({ where: { id: card.id }, data: { blocks } });
+      await appendEventInTransaction(tx, {
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        botId: input.botId,
+        // The run is cancelled now; the card update belongs to the thread, not to that run.
+        type: "thread.message.updated",
+        payload: { messageId: card.id, role: "bot", blocks },
+      });
+    }
+  }
+  return null;
 }
 
 export async function pauseRunForTakeover(

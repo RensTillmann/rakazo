@@ -621,6 +621,10 @@ export type AgentRuntimeEvent =
       actions?: Array<{ id: string; label: string; todo?: true }>;
       /** Fleet: a reply draft the card shows editable (`ask_user` `draft`). */
       draft?: string;
+      /** Fleet: the full customer inquiry a reply card shows (`ask_user` `inquiry`). */
+      inquiry?: string;
+      /** Fleet: the conversation and version a reply card answers (`ask_user` `source`). */
+      source?: { ref: string; version: string };
       /** Fleet: the manual prerequisites the `todo` action hands to the user (`ask_user` `prerequisites`). */
       prerequisites?: {
         items: Array<{

@@ -247,6 +247,37 @@ describe("Pi choice asks", () => {
     }
   });
 
+  it("carries the full customer inquiry and the source version onto a reply card", async () => {
+    const inquiry = `Hi,\n\n${"My licence stopped working. ".repeat(400)}\n\nKonstantin`;
+    fakeAgentState.draft = "Hi Konstantin,\n\nFixed.\n\nRens";
+    fakeAgentState.todoArgs = { inquiry, source: { ref: "zendesk:3529", version: "42" } };
+    const runtime = new PiAgentRuntime();
+    const events: AgentRuntimeEvent[] = [];
+
+    for await (const event of runtime.run(runRequest, runContext)) events.push(event);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "ask",
+        inquiry,
+        source: { ref: "zendesk:3529", version: "42" },
+      }),
+    );
+  });
+
+  it("rejects a source without a version and an inquiry over 20,000 characters", async () => {
+    for (const [args, message] of [
+      [{ source: { ref: "zendesk:3529" } }, "ask_user source needs ref and version"],
+      [{ inquiry: "x".repeat(20_001) }, "ask_user inquiry must be text of at most 20000"],
+    ] as const) {
+      fakeAgentState.todoArgs = args;
+      const runtime = new PiAgentRuntime();
+      await expect(async () => {
+        for await (const _event of runtime.run(runRequest, runContext));
+      }).rejects.toThrow(message);
+    }
+  });
+
   it("returns the consumer's refusal without pausing when no card was made", async () => {
     const refusal =
       "Not asked: the same card is already open in Rens's queue (asked 05:26 UTC). Don't ask it again; his answer comes to the run that asked it.";

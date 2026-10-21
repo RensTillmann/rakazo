@@ -2,6 +2,7 @@ export {
   casSourceCheckedEffect,
   checkEffectSourceInTransaction,
   claimSourceCheckedEffect,
+  reconcileLegacySourceBindings,
 } from "./approval-claim.js";
 export {
   invalidatePendingApprovalEffect,

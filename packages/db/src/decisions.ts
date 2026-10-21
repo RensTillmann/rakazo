@@ -124,11 +124,18 @@ function sameQuestion(a: string, b: string): boolean {
 
 /**
  * Fleet: the bot's open question card (not an approval or secret card) in another run that has
- * not ended, asking the same thing: the same case key, or without one the same text.
+ * not ended, asking the same thing: the same case key, or without one the same text. A card in
+ * `replacing.threadId` for another version of `replacing.ref` is not a duplicate: the new card
+ * replaces it.
  */
 export async function findOpenDuplicateQuestion(
   tx: Prisma.TransactionClient,
-  input: { botId: string; runId: string; text: string },
+  input: {
+    botId: string;
+    runId: string;
+    text: string;
+    replacing?: { threadId: string; ref: string; version: string };
+  },
 ): Promise<{ messageId: string; askedAt: Date } | null> {
   const runs = await tx.run.findMany({
     where: {
@@ -150,6 +157,15 @@ export async function findOpenDuplicateQuestion(
     const block = pendingAskBlock(message.blocks);
     if (block?.kind !== "ask") continue;
     if (block.approvalEffectId || isApprovalAskBlock(block) || isSecretAskBlock(block)) continue;
+    const replacing = input.replacing;
+    if (
+      replacing &&
+      message.threadId === replacing.threadId &&
+      block.source?.ref === replacing.ref &&
+      block.source.version !== replacing.version
+    ) {
+      continue;
+    }
     if (sameQuestion(input.text, block.text)) {
       return { messageId: message.id, askedAt: message.createdAt };
     }

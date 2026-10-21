@@ -1,6 +1,7 @@
 import type { ConnectorTool } from "@rakazo/adapter-kit";
 import {
   ASK_DRAFT_MAX_LENGTH,
+  ASK_INQUIRY_MAX_LENGTH,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   BotSecretName,
@@ -445,7 +446,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "ask_user",
     description:
-      "Ask the user one short multiple-choice question with tappable options, then wait for their selection. Use this instead of asking them to type when two to four concise choices are enough. When the question is whether to send a reply you drafted, put the reply itself in `draft`: the user can edit it on the card before choosing, and if they do, their answer carries the edited reply to send exactly. When one option means the user will do manual steps themselves (grant access, change a setting), list them in `prerequisites` and name that option in `option`: choosing it gives the user one to-do per item with the exact steps, which you later verify with todo_report.",
+      "Ask the user one short multiple-choice question with tappable options, then wait for their selection. Use this instead of asking them to type when two to four concise choices are enough. Say plainly who acts after the choice (you, the user, or a named bot) and what each option changes; never write 'operator' or 'developer'. When the question is whether to send a reply you drafted, put the reply itself in `draft`, the customer's full inquiry and the material context in `inquiry`, and the conversation with its latest message id in `source`: the user sees both in full, can edit the reply before choosing, and their answer carries the edited reply to send exactly, bound to that source version. A newer version of the same source replaces your older open card. When one option means the user will do manual steps themselves (grant access, change a setting), list them in `prerequisites` and name that option in `option`: choosing it gives the user one to-do per item with the exact steps, which you later verify with todo_report.",
     inputSchema: {
       type: "object",
       properties: {
@@ -462,6 +463,27 @@ export const builtinAgentTools: ConnectorTool[] = [
           maxLength: ASK_DRAFT_MAX_LENGTH,
           description:
             "Optional: the full reply you drafted, nothing else (no headers or notes). Shown editable on the card.",
+        },
+        inquiry: {
+          type: "string",
+          maxLength: ASK_INQUIRY_MAX_LENGTH,
+          description:
+            "With `draft`: the customer's full inquiry and the material context, verbatim (no summary, no cutting). Shown in full on the card.",
+        },
+        source: {
+          type: "object",
+          description:
+            "With `draft`: the conversation the reply answers and its latest message id. The answer is bound to this version; send only if it is still the latest.",
+          properties: {
+            ref: { type: "string", minLength: 1, maxLength: 200, description: "e.g. zendesk:3529" },
+            version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 200,
+              description: "The latest message or comment id the draft answers.",
+            },
+          },
+          required: ["ref", "version"],
         },
         prerequisites: {
           type: "array",

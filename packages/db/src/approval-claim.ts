@@ -170,3 +170,56 @@ export async function casSourceCheckedEffect(
   });
   return claimed.count === 1;
 }
+
+/**
+ * Reconciles pending requests recorded before the source column existed, without waiting for a
+ * click. Only the exact route-bound withdrawal envelopes the claim already recovers count; an
+ * unbound request is never given a guessed source. Under the same source-thread -> source-run
+ * locks as a claim: an ended source invalidates the request (its card is then retired), a live
+ * one gets its source recorded, so a later answer, withdrawal or stop invalidates it at once.
+ * Returns how many requests changed.
+ */
+export async function reconcileLegacySourceBindings(
+  prisma: PrismaClient,
+  options: { spaceId?: string; limit?: number } = {},
+): Promise<number> {
+  const candidates = await prisma.externalEffect.findMany({
+    where: {
+      sourceMessageId: null,
+      status: { in: ["intended", "approved"] },
+      ...(options.spaceId ? { spaceId: options.spaceId } : {}),
+      run: { status: "waiting_input" },
+    },
+    select: {
+      id: true,
+      status: true,
+      spaceId: true,
+      request: true,
+      run: { select: { id: true, botId: true, userId: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: options.limit ?? 50,
+  });
+  let changed = 0;
+  for (const effect of candidates) {
+    if (!legacySourceMessageId(effect.request)) continue;
+    const from = effect.status === "approved" ? "approved" : "intended";
+    const run = { ...effect.run, spaceId: effect.spaceId };
+    changed += await prisma.$transaction(async (tx) => {
+      const source = await checkEffectSourceInTransaction(tx, run, effect.id, from);
+      if (!source) {
+        const ended = await tx.externalEffect.count({
+          where: { id: effect.id, status: "invalidated" },
+        });
+        return ended;
+      }
+      if (!source.sourceMessageId) return 0;
+      const bound = await tx.externalEffect.updateMany({
+        where: { id: effect.id, status: from, sourceMessageId: null },
+        data: { sourceMessageId: source.sourceMessageId },
+      });
+      return bound.count;
+    });
+  }
+  return changed;
+}

@@ -37,7 +37,9 @@ import {
 } from "@rakazo/adapter-kit";
 import {
   ASK_DRAFT_MAX_LENGTH,
+  ASK_INQUIRY_MAX_LENGTH,
   AskPrerequisitesInput,
+  AskSource,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   canonicalPiProviderId,
   FLEET_TOOL_NAMES,
@@ -1475,6 +1477,8 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           options,
           // Same: an invalid draft stays as-is for the schema to reject.
           ...(raw.draft == null ? {} : { draft: raw.draft }),
+          ...(raw.inquiry == null ? {} : { inquiry: raw.inquiry }),
+          ...(raw.source == null ? {} : { source: raw.source }),
           // Invalid to-do arguments are rejected when the tool runs, with the reason.
           ...(raw.prerequisites == null ? {} : { prerequisites: raw.prerequisites }),
           ...(raw.option == null ? {} : { option: raw.option }),
@@ -1613,6 +1617,22 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     `ask_user draft must be text of at most ${ASK_DRAFT_MAX_LENGTH} characters`,
                   );
                 }
+                const inquiry = args.inquiry;
+                if (
+                  inquiry !== undefined &&
+                  (typeof inquiry !== "string" || inquiry.length > ASK_INQUIRY_MAX_LENGTH)
+                ) {
+                  throw new Error(
+                    `ask_user inquiry must be text of at most ${ASK_INQUIRY_MAX_LENGTH} characters`,
+                  );
+                }
+                const source =
+                  args.source === undefined ? undefined : AskSource.safeParse(args.source);
+                if (source && !source.success) {
+                  throw new Error(
+                    "ask_user source needs ref and version (each at most 200 characters)",
+                  );
+                }
                 let todo: AskPrerequisitesInput | undefined;
                 if (args.prerequisites !== undefined) {
                   const parsed = AskPrerequisitesInput.safeParse({
@@ -1640,6 +1660,8 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     ...(label === todo?.option ? { todo: true as const } : {}),
                   })),
                   ...(typeof draft === "string" && draft.trim() ? { draft } : {}),
+                  ...(typeof inquiry === "string" && inquiry.trim() ? { inquiry } : {}),
+                  ...(source?.success ? { source: source.data } : {}),
                   ...(todo
                     ? {
                         prerequisites: {
@@ -2214,6 +2236,13 @@ function builtinParameters(tool: ConnectorTool) {
         uniqueItems: true,
       }),
       draft: Type.Optional(Type.String({ maxLength: ASK_DRAFT_MAX_LENGTH })),
+      inquiry: Type.Optional(Type.String({ maxLength: ASK_INQUIRY_MAX_LENGTH })),
+      source: Type.Optional(
+        Type.Object({
+          ref: Type.String({ minLength: 1, maxLength: 200 }),
+          version: Type.String({ minLength: 1, maxLength: 200 }),
+        }),
+      ),
       prerequisites: Type.Optional(
         Type.Array(
           Type.Object({

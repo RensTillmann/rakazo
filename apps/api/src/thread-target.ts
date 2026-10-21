@@ -1416,6 +1416,55 @@ export async function flagThreadMessage(
   return flagResult(target, committed.message, committed.run);
 }
 
+/** Longest original or sent draft quoted in a draft-edit learning note; the card keeps both. */
+const DRAFT_EDIT_NOTE_QUOTE_MAX = 4000;
+
+/**
+ * Fleet: when the user edited a reply draft before answering its card, tell the feedback bot
+ * (`RAKAZO_FLAG_BOT`, Elena) once, as a learning note through the ordinary forward path. The
+ * nonce is the card, so a retried answer or a second call never sends it twice. It carries no
+ * authority: it approves, sends and changes nothing.
+ */
+export async function forwardDraftEditLearning(
+  deps: { prisma: PrismaClient; events: ThreadEvents; jobs: JobPublisher },
+  actor: Actor,
+  source: ThreadTarget,
+  input: { messageId: string; flagBot: string; label: string; webOrigin: string },
+) {
+  const card = await deps.prisma.message.findFirst({
+    where: { id: input.messageId, threadId: source.threadId, role: "bot" },
+    select: { blocks: true },
+  });
+  const parsed = MessageBlockSchema.array().safeParse(card?.blocks);
+  const ask = parsed.success
+    ? parsed.data.find((block) => block.kind === "ask" && block.status === "answered")
+    : undefined;
+  if (ask?.kind !== "ask" || ask.draft === undefined || ask.draftFinal === undefined) return null;
+  const bot = await findFlagBot(deps.prisma, actor, input.flagBot);
+  if (!bot) return null;
+  const target = await resolveThreadTarget(deps.prisma, actor, { botId: bot.id });
+  if (target.kind !== "bot") return null;
+  const quote = (text: string) =>
+    text.length > DRAFT_EDIT_NOTE_QUOTE_MAX
+      ? `${text.slice(0, DRAFT_EDIT_NOTE_QUOTE_MAX)}\n(… the rest is on the card)`
+      : text;
+  const note = [
+    "Learning note only: I edited this reply draft before answering. This approves, sends and changes nothing; use it to learn how I want replies written.",
+    ...(ask.source ? [`Conversation: ${ask.source.ref} (version ${ask.source.version})`] : []),
+    "Original draft:",
+    quote(ask.draft),
+    "What I sent instead:",
+    quote(ask.draftFinal),
+  ].join("\n");
+  return flagThreadMessage(deps, actor, source, target, {
+    messageId: input.messageId,
+    note,
+    clientNonce: `draft-edit:${input.messageId}`,
+    label: input.label,
+    webOrigin: input.webOrigin,
+  });
+}
+
 function flagResult(
   target: Extract<ThreadTarget, { kind: "bot" }>,
   message: { seq: number },

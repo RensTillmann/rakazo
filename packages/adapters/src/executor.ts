@@ -8268,6 +8268,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 ...(action.todo && event.prerequisites ? { todo: true as const } : {}),
               }));
               const safeDraft = event.draft ? redactSecrets(event.draft, runSecrets) : undefined;
+              const safeInquiry = event.inquiry
+                ? redactSecrets(event.inquiry, runSecrets)
+                : undefined;
               const safePrerequisites = event.prerequisites
                 ? {
                     release: event.prerequisites.release,
@@ -8301,6 +8304,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     status: "pending",
                     actions: safeActions,
                     ...(safeDraft ? { draft: safeDraft } : {}),
+                    ...(safeInquiry ? { inquiry: safeInquiry } : {}),
+                    ...(event.source ? { source: event.source } : {}),
                     ...(safePrerequisites ? { prerequisites: safePrerequisites } : {}),
                   },
                 ],

@@ -101,6 +101,21 @@ export const THINKING_BLOCK_MAX_CHARS = 8_000;
 /** Longest reply draft an ask card shows editable (`ask_user` `draft`, `threads.answer` `draftFinal`). */
 export const ASK_DRAFT_MAX_LENGTH = 20_000;
 
+/** Longest customer inquiry a reply card shows (`ask_user` `inquiry`). */
+export const ASK_INQUIRY_MAX_LENGTH = 20_000;
+
+/**
+ * Fleet: the outside conversation a reply card answers, at the exact version the draft was
+ * written for. A newer `version` of the same `ref` replaces the older open card.
+ */
+export const AskSource = z.object({
+  /** Stable identity of the conversation, e.g. `zendesk:3529`. */
+  ref: z.string().trim().min(1).max(200),
+  /** Its latest message or revision the draft answers, e.g. the last comment id. */
+  version: z.string().trim().min(1).max(200),
+});
+export type AskSource = z.infer<typeof AskSource>;
+
 /**
  * Fleet: one manual prerequisite an ask card offers to hand to the user. Choosing the card's
  * `todo` option creates or refreshes the user's to-do for `key`; it never marks it done.
@@ -197,6 +212,10 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     purpose: SecretAskPurpose.optional(),
     /** Fleet: a reply the bot drafted, shown editable on the card above its options. */
     draft: z.string().optional(),
+    /** Fleet: the full customer inquiry and material context the draft answers. */
+    inquiry: z.string().optional(),
+    /** Fleet: the conversation and version the draft answers; the answer is bound to it. */
+    source: AskSource.optional(),
     /** Fleet: the manual prerequisites the card's `todo` option hands to the user as to-dos. */
     prerequisites: AskPrerequisites.optional(),
     /**

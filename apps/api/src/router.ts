@@ -318,6 +318,7 @@ import {
   DEFAULT_FLAG_LABEL,
   findFlagBot,
   flagThreadMessage,
+  forwardDraftEditLearning,
   reactToThreadMessage,
   resolveThreadTarget,
   resolveThreadTargetAttachments,
@@ -2711,6 +2712,16 @@ export function createRouter(deps: RouterDeps) {
         await reconcileRetiredApprovalCards({ ...deps, spaceId: context.actor.spaceId }).catch(
           (error: unknown) => getLogger().error("retire dependent approval cards", error),
         );
+        // Fleet: an edited reply draft becomes one learning note to the feedback bot. The
+        // answer is already committed; a failed note is logged, never a failed answer.
+        if (input.draftFinal !== undefined && deps.env.flagBot) {
+          await forwardDraftEditLearning(deps, context.actor, target, {
+            messageId: input.messageId,
+            flagBot: deps.env.flagBot,
+            label: deps.env.flagLabel ?? DEFAULT_FLAG_LABEL,
+            webOrigin: deps.env.webOrigin,
+          }).catch((error: unknown) => getLogger().error("draft edit learning note", error));
+        }
         return { ok: true as const };
       }),
       markRead: authed.threads.markRead.handler(async ({ context, input }) => {
