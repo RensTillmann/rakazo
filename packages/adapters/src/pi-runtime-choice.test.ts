@@ -175,13 +175,16 @@ describe("Pi choice asks", () => {
   const seoul = {
     key: "city-access:seoul",
     title: "Open the Seoul office account",
-    steps: "Sign in at office.example and enable the Seoul account.",
+    steps:
+      "1. Sign in at https://office.example/admin\n2. Open Accounts → Seoul and click Enable (not checked)",
+    why: "The Seoul team cannot work until the account is enabled; I check its status page.",
     verification: "automatic",
   };
   const badge = {
     key: "city-badge:seoul",
     title: "Pick up the Seoul door badge",
-    steps: "Collect the badge at reception.",
+    steps: "1. Collect the badge at reception (desk 2).",
+    why: "Without the badge the door stays shut; only you can confirm you have it.",
     verification: "manual",
     blocks: [{ issue: 142 }, "release 6.4"],
   };
@@ -248,6 +251,37 @@ describe("Pi choice asks", () => {
       for await (const event of runtime.run(runRequest, runContext)) events.push(event);
     }).rejects.toThrow("ask_user option must be exactly one of the options");
     expect(events.some((event) => event.type === "ask")).toBe(false);
+  });
+
+  it("refuses an item without why or numbered steps, saying exactly what to fix", async () => {
+    fakeAgentState.todoArgs = {
+      prerequisites: [
+        { ...seoul, why: undefined },
+        { ...badge, steps: "Collect the badge at reception." },
+      ],
+      option: "Seoul",
+    };
+    const runtime = new PiAgentRuntime();
+    const events: AgentRuntimeEvent[] = [];
+    let message = "";
+    try {
+      for await (const event of runtime.run(runRequest, runContext)) events.push(event);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('item "city-access:seoul": add "why"');
+    expect(message).toContain('item "city-badge:seoul": write "steps" as numbered steps');
+    expect(message).toContain("this bot's Credentials, never the chat");
+    expect(message).not.toContain('item "city-access:seoul": write "steps"');
+    expect(events.some((event) => event.type === "ask")).toBe(false);
+  });
+
+  it("refuses an empty why", async () => {
+    fakeAgentState.todoArgs = { prerequisites: [{ ...seoul, why: "   " }], option: "Seoul" };
+    const runtime = new PiAgentRuntime();
+    await expect(async () => {
+      for await (const _event of runtime.run(runRequest, runContext));
+    }).rejects.toThrow(/add "why"|prerequisites needs/);
   });
 
   it("rejects items that repeat a key or miss their steps", async () => {

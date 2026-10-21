@@ -490,7 +490,7 @@ export const builtinAgentTools: ConnectorTool[] = [
           minItems: 1,
           maxItems: 10,
           description:
-            "Optional: the manual steps the user may take on themselves, one item per separate requirement. Choosing `option` creates their to-dos; it records intent only, never completion.",
+            "Optional: the manual steps the user may take on themselves, one item per separate requirement. Choosing `option` creates their to-dos; it records intent only, never completion. Every item must let the user act without asking back: `why` it is needed; `steps` as numbered steps (\"1. …\", \"2. …\") with real URLs, exact menu names and exact values to enter; for a password, key or token, the exact place to enter it, which is this bot's Credentials in Rakazo, never the chat; how it will be checked; and \"(not checked)\" after any step you have not verified yourself. An item without `why` or without a numbered step is refused.",
           items: {
             type: "object",
             properties: {
@@ -506,13 +506,15 @@ export const builtinAgentTools: ConnectorTool[] = [
                 type: "string",
                 minLength: 1,
                 maxLength: 4000,
-                description: "The exact steps the user takes, complete enough to follow alone.",
+                description:
+                  "Required, numbered: \"1. Open https://github.com/org/repo/settings/access\"\n\"2. Click Add people, enter elena-bot, choose Write\". Real URLs, menu names and exact values; secrets go into this bot's Credentials, never the chat; mark any step you have not verified \"(not checked)\".",
               },
               why: {
                 type: "string",
                 minLength: 1,
                 maxLength: 600,
-                description: "Optional: why this item is needed, in one or two plain sentences.",
+                description:
+                  "Required: why this item is needed, in one or two plain sentences, and how it will be checked.",
               },
               blocks: {
                 type: "array",
@@ -535,7 +537,7 @@ export const builtinAgentTools: ConnectorTool[] = [
                   "automatic: you can check it with your own read-only tools; manual: only the user can tell.",
               },
             },
-            required: ["key", "title", "steps", "verification"],
+            required: ["key", "title", "steps", "why", "verification"],
           },
         },
         option: {

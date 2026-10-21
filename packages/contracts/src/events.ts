@@ -180,6 +180,28 @@ export const AskPrerequisites = z.object({
 });
 export type AskPrerequisites = z.infer<typeof AskPrerequisites>;
 
+/** A numbered step at the start of a line: "1. …", "2) …". */
+const NUMBERED_STEP = /^\s*\d+[.)]\s+\S/m;
+
+/**
+ * Why a new prerequisite set is not clear enough to hand to the user, one line per problem, or
+ * none. Every item needs `why` and at least one numbered step. Stored cards are not re-checked.
+ */
+export function prerequisiteInstructionProblems(
+  items: ReadonlyArray<{ key: string; why?: string; steps: string }>,
+): string[] {
+  return items.flatMap((item) => [
+    ...(item.why?.trim()
+      ? []
+      : [`item "${item.key}": add "why" (why it is needed and how it will be checked)`]),
+    ...(NUMBERED_STEP.test(item.steps)
+      ? []
+      : [
+          `item "${item.key}": write "steps" as numbered steps ("1. …", "2. …") with real URLs, menu names and exact values`,
+        ]),
+  ]);
+}
+
 /** `ask_user`'s to-do arguments: the items, the option that accepts them, and the release mode. */
 export const AskPrerequisitesInput = z.object({
   prerequisites: AskPrerequisites.shape.items,

@@ -43,6 +43,7 @@ import {
   BOT_INSTRUCTIONS_MAX_LENGTH,
   canonicalPiProviderId,
   FLEET_TOOL_NAMES,
+  prerequisiteInstructionProblems,
   usableModelId,
 } from "@rakazo/contracts";
 import { abortableDelay, MISSING_TOOL_FINAL_RESPONSE_ERROR } from "@rakazo/core";
@@ -1649,6 +1650,13 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     );
                   }
                   todo = parsed.data;
+                  // Fleet: what the user is asked to do must come with clear instructions.
+                  const unclear = prerequisiteInstructionProblems(todo.prerequisites);
+                  if (unclear.length) {
+                    throw new Error(
+                      `ask_user prerequisites are not clear enough to hand to the user: ${unclear.join("; ")}. Fix them and ask again; secrets go into this bot's Credentials, never the chat.`,
+                    );
+                  }
                   if (!options.includes(todo.option)) {
                     throw new Error("ask_user option must be exactly one of the options");
                   }
