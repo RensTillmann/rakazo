@@ -10,6 +10,7 @@ import type { MessageBlock } from "@rakazo/contracts";
 import { ATTACHMENT_MAX_COUNT, AutomatedSenderPoliciesSchema } from "@rakazo/contracts";
 import { botMessageMaxHops, messageBlockForArtifact, promptTextForAttachments } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+import { invalidateRunSourceApprovalEffects } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import type { MessagingReceipts } from "./messaging-receipts.js";
 import type { TeamChatEngagementJudge } from "./team-chat-judge.js";
@@ -1354,33 +1355,41 @@ export class TeamChatBridge {
     // beside the routine wake.
     if (await findWake()) {
       if (sent.runId) {
-        const cancelledAt = new Date();
-        await this.deps.prisma.run.updateMany({
-          where: {
-            id: sent.runId,
-            status: { in: ["queued", "running", "leased", "waiting_input", "waiting_takeover"] },
-          },
-          data: {
-            status: "cancelled",
-            completedAt: cancelledAt,
-            leaseOwner: null,
-            leaseExpiresAt: null,
-          },
-        });
-        const taskId =
-          sent.taskId ??
-          (
-            await this.deps.prisma.run.findUnique({
-              where: { id: sent.runId },
-              select: { taskId: true },
-            })
-          )?.taskId;
-        if (taskId) {
-          await this.deps.prisma.task.updateMany({
-            where: { id: taskId },
-            data: { status: "cancelled" },
+        const runId = sent.runId;
+        await this.deps.prisma.$transaction(async (tx) => {
+          const cancelled = await tx.run.updateManyAndReturn({
+            where: {
+              id: runId,
+              spaceId: message.externalConversation.spaceId,
+              userId: message.externalConversation.userId,
+              botId: message.externalConversation.botId,
+              threadId: thread.id,
+              status: { in: ["queued", "running", "leased", "waiting_input", "waiting_takeover"] },
+            },
+            data: {
+              status: "cancelled",
+              completedAt: new Date(),
+              leaseOwner: null,
+              leaseExpiresAt: null,
+            },
+            select: { id: true, taskId: true },
           });
-        }
+          // The cancellation update holds each won source-run lock. Keep
+          // invalidation and task cleanup inside this transaction; a lost CAS
+          // must not cancel a task belonging to a now-terminal run.
+          await invalidateRunSourceApprovalEffects(
+            tx,
+            cancelled.map((run) => run.id),
+          );
+          for (const run of cancelled) {
+            if (run.taskId) {
+              await tx.task.updateMany({
+                where: { id: run.taskId },
+                data: { status: "cancelled" },
+              });
+            }
+          }
+        });
       }
       await abandonForRoutine("queueing");
       return;

@@ -144,6 +144,12 @@ account and space, and invalidates their source dependencies inside that same
 transaction before progress cleanup. Only returned cancellations are scanned;
 invalidation failure aborts before computer lease changes.
 
+Team-chat fallback cancellation after a competing routine wake also invalidates
+source dependencies in the owning cancellation transaction before task cleanup.
+Only active runs matching the exact account, space, bot and thread can be cancelled;
+a lost cancellation does not modify the task or source dependencies. Invalidation
+failure propagates before the external-message reservation is abandoned.
+
 This is not complete lifecycle fencing: legacy-row reconciliation, other cancellation
 or replacement paths, and dependent-card UI refresh remain to be implemented. The
 reference is not a human answer or an authorization grant.
