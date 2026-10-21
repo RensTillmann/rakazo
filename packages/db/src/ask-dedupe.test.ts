@@ -1,7 +1,7 @@
 import type { MessageBlock } from "@rakazo/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
-import { askCaseKey, duplicateAskRefusal } from "./decisions.js";
+import { askCaseRef, duplicateAskRefusal } from "./decisions.js";
 import { pauseRunForInput } from "./events.js";
 
 type RunRow = { id: string; botId: string; threadId: string; status: string };
@@ -137,10 +137,10 @@ function ask(prisma: PrismaClient, text: string, dedupeQuestion = true) {
 
 describe("ask dedupe (patch/ask-dedupe)", () => {
   it("reads the case key, also after an URGENT prefix", () => {
-    expect(askCaseKey("Case 78 · alert: Can you export the 403/4xx …")).toBe("case 78");
-    expect(askCaseKey("URGENT · case 78: export?")).toBe("case 78");
-    expect(askCaseKey("Export the logs for case 78?")).toBeNull();
-    expect(askCaseKey("Case 780 · other")).toBe("case 780");
+    expect(askCaseRef("Case 78 · alert: Can you export the 403/4xx …")).toBe(78);
+    expect(askCaseRef("URGENT · case 78: export?")).toBe(78);
+    expect(askCaseRef("Export the logs for case 78?")).toBeNull();
+    expect(askCaseRef("Case 780 · other")).toBe(780);
   });
 
   it("refuses a second card for the same case and stores nothing", async () => {

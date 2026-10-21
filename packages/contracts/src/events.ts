@@ -164,15 +164,17 @@ export type PrerequisiteRelease = z.infer<typeof PrerequisiteRelease>;
 export const PrerequisitePriority = z.enum(["p0", "p1", "p2", "p3"]);
 export type PrerequisitePriority = z.infer<typeof PrerequisitePriority>;
 
+function uniqueKeys(items: ReadonlyArray<{ key: string }>): boolean {
+  return new Set(items.map((item) => item.key)).size === items.length;
+}
+
 /** Fleet: the to-do items a card's `todo` option hands to the user, and how they release work. */
 export const AskPrerequisites = z.object({
   items: z
     .array(AskPrerequisite)
     .min(1)
     .max(ASK_PREREQUISITES_MAX)
-    .refine((items) => new Set(items.map((item) => item.key)).size === items.length, {
-      message: "prerequisite keys must be unique within a card",
-    }),
+    .refine(uniqueKeys, { message: "prerequisite keys must be unique within a card" }),
   release: PrerequisiteRelease,
   priority: PrerequisitePriority.optional(),
   /** The tracker case (issue number) these to-dos belong to; its end retires them. */
@@ -184,27 +186,28 @@ export type AskPrerequisites = z.infer<typeof AskPrerequisites>;
 const NUMBERED_STEP = /^\s*\d+[.)]\s+\S/m;
 
 /**
- * Why a new prerequisite set is not clear enough to hand to the user, one line per problem, or
- * none. Every item needs `why` and at least one numbered step. Stored cards are not re-checked.
+ * A new item as `ask_user` accepts it: the stored shape plus the minimum for clear instructions,
+ * a `why` and at least one numbered step. Stored cards keep the stored shape and are not re-checked.
  */
-export function prerequisiteInstructionProblems(
-  items: ReadonlyArray<{ key: string; why?: string; steps: string }>,
-): string[] {
-  return items.flatMap((item) => [
-    ...(item.why?.trim()
-      ? []
-      : [`item "${item.key}": add "why" (why it is needed and how it will be checked)`]),
-    ...(NUMBERED_STEP.test(item.steps)
-      ? []
-      : [
-          `item "${item.key}": write "steps" as numbered steps ("1. …", "2. …") with real URLs, menu names and exact values`,
-        ]),
-  ]);
-}
+export const AskPrerequisiteInput = AskPrerequisite.extend({
+  steps: AskPrerequisite.shape.steps.regex(NUMBERED_STEP, {
+    error:
+      'write "steps" as numbered steps ("1. …", "2. …") with real URLs, menu names and exact values',
+  }),
+  why: z
+    .string({ error: 'add "why": why it is needed, who acts and what happens next' })
+    .trim()
+    .min(1, { error: 'add "why": why it is needed, who acts and what happens next' })
+    .max(600),
+});
 
 /** `ask_user`'s to-do arguments: the items, the option that accepts them, and the release mode. */
 export const AskPrerequisitesInput = z.object({
-  prerequisites: AskPrerequisites.shape.items,
+  prerequisites: z
+    .array(AskPrerequisiteInput)
+    .min(1)
+    .max(ASK_PREREQUISITES_MAX)
+    .refine(uniqueKeys, { message: "prerequisite keys must be unique within a card" }),
   /** The exact label of the option meaning "I will do it myself". */
   option: z.string().trim().min(1).max(80),
   release: PrerequisiteRelease.default("all"),

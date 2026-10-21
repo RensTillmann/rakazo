@@ -115,7 +115,14 @@ import {
   stableJsonValue,
   toolEffectIdempotencyKey,
 } from "@rakazo/core/node/approval-effect-key";
-import type { MaintenanceCancellationStore, McpServer, PrismaClient, Run, ThreadEvents } from "@rakazo/db";
+import type {
+  CaseCoordination,
+  MaintenanceCancellationStore,
+  McpServer,
+  PrismaClient,
+  Run,
+  ThreadEvents,
+} from "@rakazo/db";
 import {
   appendEventInTransaction,
   casSourceCheckedEffect,
@@ -132,6 +139,7 @@ import {
   isTooManyDatabaseConnections,
   latestSubscriptionLimitReading,
   loadRunHistoryMessages,
+  NO_CASE_COORDINATION,
   Prisma,
   parseComputerMode,
   readHistory,
@@ -2864,6 +2872,8 @@ function runtimeFallbackModel(runtime: AgentRuntime) {
 }
 
 export interface ExecutorDeps {
+  /** Fleet: who coordinates cases; a case coordinator may report the to-do checks it runs. */
+  caseCoordination?: CaseCoordination;
   maxUploadSizeBytes?: number;
   contextStrategy?: AgentContextStrategy;
   prisma: PrismaClient;
@@ -6041,14 +6051,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (refused) {
                 const target = todoCheckRunTarget(run.clientNonce);
                 if (target) {
-                  await reportUserTodo(deps.prisma, {
-                    spaceId: run.spaceId,
-                    botId: bot.id,
-                    todoId: target.todoId,
-                    outcome: "unavailable",
-                    evidence: `Couldn't check: ${TODO_CHECK_SHELL_REASON} (${refused}).`,
-                    expectedRevision: target.revision,
-                  });
+                  await reportUserTodo(
+                    deps.prisma,
+                    {
+                      spaceId: run.spaceId,
+                      botId: bot.id,
+                      todoId: target.todoId,
+                      outcome: "unavailable",
+                      evidence: `Couldn't check: ${TODO_CHECK_SHELL_REASON} (${refused}).`,
+                      expectedRevision: target.revision,
+                    },
+                    deps.caseCoordination ?? NO_CASE_COORDINATION,
+                  );
                 }
                 return finish({
                   error: `This command was not run: a to-do check may only read (${refused}). The to-do is recorded as couldn't check: ${TODO_CHECK_SHELL_REASON}. Stop here; it is checked again later.`,
@@ -6488,26 +6502,28 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     reason: String(args.reason ?? ""),
                   })
                 : outcome === "verified" || outcome === "remaining" || outcome === "unavailable"
-                  ? await reportUserTodo(deps.prisma, {
-                      spaceId: run.spaceId,
-                      botId: bot.id,
-                      todoId,
-                      outcome,
-                      evidence: String(args.evidence ?? ""),
-                      ...(args.remaining_step !== undefined
-                        ? { remainingStep: String(args.remaining_step) }
-                        : {}),
-                    })
+                  ? await reportUserTodo(
+                      deps.prisma,
+                      {
+                        spaceId: run.spaceId,
+                        botId: bot.id,
+                        todoId,
+                        outcome,
+                        evidence: String(args.evidence ?? ""),
+                        ...(args.remaining_step !== undefined
+                          ? { remainingStep: String(args.remaining_step) }
+                          : {}),
+                      },
+                      deps.caseCoordination ?? NO_CASE_COORDINATION,
+                    )
                   : { error: "outcome must be verified, remaining or unavailable." };
             if ("error" in result) return finish(result);
             // The item satisfied its work: the release message is already committed to the thread.
             if (result.wake) {
               const { wake } = result;
-              if (wake.seq !== null) {
-                await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
-                  getLogger().error("to-do release notify", error);
-                });
-              }
+              await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
+                getLogger().error("to-do release notify", error);
+              });
               if (wake.startedRunId) {
                 // The queued run is durable; the reconciler repairs a missed wake.
                 await deps.jobs

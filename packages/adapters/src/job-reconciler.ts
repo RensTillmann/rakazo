@@ -2,8 +2,9 @@ import type { JobPublisher, NotificationProvider } from "@rakazo/adapter-kit";
 import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { stuckWorkStatusMessages } from "@rakazo/core";
-import type { Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
+import type { CaseCoordination, Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
+  NO_CASE_COORDINATION,
   reconcileLegacySourceBindings,
   retireEndedRunCards,
   retireInvalidatedApprovalCards,
@@ -84,8 +85,12 @@ export async function reconcileRetiredApprovalCards(deps: {
 export async function reconcileUserTodoChecks(deps: {
   prisma: PrismaClient;
   jobs: JobPublisher;
+  caseCoordination?: CaseCoordination;
 }): Promise<number> {
-  const runIds = await sweepUserTodoChecks(deps.prisma);
+  const runIds = await sweepUserTodoChecks(
+    deps.prisma,
+    deps.caseCoordination ?? NO_CASE_COORDINATION,
+  );
   for (const runId of runIds) {
     await deps.jobs.enqueue(runContinueJob(runId)).catch((error: unknown) =>
       getLogger().error("to-do check wake", error),
@@ -170,6 +175,8 @@ export function createJobReconciler(
     events?: ThreadEvents;
     notifications?: NotificationProvider;
     leadership?: ReconciliationLeadership;
+    /** Fleet: who coordinates cases; case to-do checks go to them. */
+    caseCoordination?: CaseCoordination;
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileRoutineRetryNotices?: () => Promise<void>;

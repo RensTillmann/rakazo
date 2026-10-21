@@ -116,27 +116,17 @@ export function FleetRecoveryList({
               {item.bot ? <> · {item.bot}</> : null} · {item.status} ·{" "}
               <span>{stateLabel(item)}</span>
             </p>
-            <p className="text-xs" data-testid="recovery-accountable">
-              {item.caseRef ? (
-                <>
-                  <Trans>Case {item.caseRef}</Trans> ·{" "}
-                </>
-              ) : null}
-              {item.coordinator ? (
-                <>
-                  <Trans>Follow-up: {item.coordinator}</Trans> ·{" "}
-                </>
-              ) : null}
-              {item.userActionNeeded ? (
-                <span className="font-medium text-warning">
-                  <Trans>Needs you</Trans>
-                </span>
-              ) : (
-                <span className="text-muted-foreground">
-                  <Trans>Nothing for you to do</Trans>
-                </span>
-              )}
-            </p>
+            {item.caseRef || item.coordinator || item.userActionNeeded ? (
+              <p className="text-xs" data-testid="recovery-accountable">
+                {[
+                  item.caseRef ? t`Case ${item.caseRef}` : null,
+                  item.coordinator ? t`Follow-up: ${item.coordinator}` : null,
+                  item.userActionNeeded ? t`Needs you` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               {item.kind} {item.id}
               {item.runId && item.runId !== item.id ? (

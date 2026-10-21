@@ -53,12 +53,15 @@ describe("reply review", () => {
       ),
     );
     expect(host.querySelector('[data-testid="reply-review-inquiry"]')?.textContent).toBe(inquiry);
-    expect(host.textContent).toContain("Newer comments exist since this reply was proposed.");
-    expect(host.textContent).toContain("Approved for version: 98100");
-    expect(host.textContent).toContain("Newest customer message: 98123");
+    // Stale is said in plain words; comment ids are bookkeeping, never shown beside it.
+    const outside = [
+      host.querySelector('[role="status"]')?.textContent ?? "",
+      host.querySelector("details")?.textContent ?? "",
+    ].join(" ");
+    expect(host.querySelector('[role="status"]')?.textContent).toBeTruthy();
+    expect(outside).not.toMatch(/98100|98123/);
     await act(async () => root.unmount());
   });
-
 
   it("retains the proposal's exact whitespace and final characters without interpreting customer-controlled HTML", async () => {
     const host = document.createElement("div");

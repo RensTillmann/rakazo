@@ -676,9 +676,10 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(f.sandboxExecute).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(f.sandboxExecute.mock.calls[0])).toContain("gh api repos/acme/site");
       // Each refusal is recorded on the swept to-do it belongs to.
-      expect(f.userTodoFindFirst).toHaveBeenCalledWith({
-        where: { id: "todo-7", spaceId: "space-1" },
-      });
+      expect(f.userTodoFindFirst).toHaveBeenCalledTimes(2);
+      expect(f.userTodoFindFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ id: "todo-7" }) }),
+      );
     });
 
     it("leaves a normal run's shell as it was", async () => {

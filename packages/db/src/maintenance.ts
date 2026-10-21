@@ -1,5 +1,6 @@
 import type { MaintenanceState, MaintenanceSnapshot, MaintenanceCommand, MaintenanceChange } from "@rakazo/contracts";
 import { MaintenanceCommandSchema } from "@rakazo/contracts";
+import type { MaintenancePauseSpan } from "@rakazo/core";
 import type { Pool } from "pg";
 import type { Prisma } from "./client.js";
 
@@ -428,12 +429,12 @@ export * from "./maintenance-recovery.js";
  */
 export async function loadMaintenancePauseSpans(
   db: Pick<Prisma.TransactionClient, "maintenanceAudit">,
-): Promise<Array<{ from: Date; to: Date | null }>> {
+): Promise<MaintenancePauseSpan[]> {
   const rows = await db.maintenanceAudit.findMany({
     orderBy: { revision: "asc" },
     select: { active: true, createdAt: true },
   });
-  const spans: Array<{ from: Date; to: Date | null }> = [];
+  const spans: MaintenancePauseSpan[] = [];
   let open: Date | null = null;
   for (const row of rows) {
     if (row.active && !open) open = row.createdAt;

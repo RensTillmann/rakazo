@@ -2,7 +2,8 @@
 import type { MaintenanceRecoveryItem } from "@rakazo/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import type { Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFleetRecovery } from "../lib/rpc";
 import { FleetRecoveryList } from "./FleetRecoveryList";
@@ -65,6 +66,15 @@ describe("FleetRecoveryList", () => {
           ownerVerifiable: false,
           userActionNeeded: false,
         }),
+        item({
+          id: "run-3",
+          kind: "run",
+          state: "draining",
+          caseRef: null,
+          coordinator: null,
+          ownerVerifiable: false,
+          userActionNeeded: false,
+        }),
       ],
     });
     await act(async () => {
@@ -73,9 +83,8 @@ describe("FleetRecoveryList", () => {
     const lines = [...container.querySelectorAll('[data-testid="recovery-accountable"]')].map(
       (line) => line.textContent,
     );
-    expect(lines).toEqual([
-      "Case 383 · Follow-up: Josy · Needs you",
-      "Follow-up: Elena · Nothing for you to do",
-    ]);
+    // Nothing to say, nothing shown: no line for an item no one needs to act on.
+    expect(lines).toEqual(["Case 383 · Follow-up: Josy · Needs you", "Follow-up: Elena"]);
+    expect(container.querySelectorAll("li")).toHaveLength(3);
   });
 });

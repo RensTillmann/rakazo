@@ -110,15 +110,15 @@ export async function pendingDecisionCountsByThread(
   return counts;
 }
 
-/** Fleet: the leading `Case <n>` of a question (also after `URGENT · `), lowercased; null when none. */
-export function askCaseKey(text: string): string | null {
-  const match = /^\s*(?:urgent\s*·\s*)?case\s+(\d+)\b/i.exec(text);
-  return match ? `case ${match[1]}` : null;
+/** Fleet: the case of a card head, the leading `Case <n>` (also after `URGENT · `); null when none. */
+export function askCaseRef(text: string): number | null {
+  const match = /^\s*(?:urgent\s*·\s*)?case\s+([1-9]\d*)\b/i.exec(text);
+  return match ? Number(match[1]) : null;
 }
 
 function sameQuestion(a: string, b: string): boolean {
-  const key = askCaseKey(a);
-  if (key) return askCaseKey(b) === key;
+  const caseRef = askCaseRef(a);
+  if (caseRef !== null) return askCaseRef(b) === caseRef;
   return a.trim().replace(/\s+/g, " ") === b.trim().replace(/\s+/g, " ");
 }
 

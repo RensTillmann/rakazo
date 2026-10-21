@@ -97,7 +97,8 @@ is sent. A note that fails after the answer committed is logged, not retried.
 The approval to send a Zendesk reply (`zd_reply { ticket, body, status, tags? }`) shows the Fleet's
 `zd_reply_context` for the ticket: the customer's full `inquiry`, the thread and any note. The version
 the user approved is the `source.version` of the bot's newest answered reply card for
-`zendesk:<ticket>`; when the newest customer message is another version, the review says it is stale.
+`zendesk:<ticket>`; when the newest customer message is another version, the review says in plain words
+that the customer wrote again (comment ids stay out of the review).
 A context in another shape shows as unavailable, never guessed. The contract is pinned by the Fleet's
 fixture, copied whole into `apps/api/src/fixtures/zd_reply_context.json`.
 
@@ -151,11 +152,12 @@ An option that is not one of the card's options, or an invalid item, is refused 
 stored. The card stores the items as `prerequisites` and marks that option `todo: true`.
 
 What the user is asked to do must come with clear instructions. Every new item needs a non-empty `why`
-(why it is needed and how it will be checked) and `steps` with at least one numbered step ("1. …");
-otherwise the whole set is refused with one line per item naming what to fix. The tool description
-tells the bot what a good item holds: real URLs, exact menu names and values, the bot's Credentials
-(never the chat) as the place for a secret, how it is checked, and "(not checked)" after any step it
-has not verified. Cards already stored are not re-checked.
+and `steps` with at least one numbered step ("1. …"); `ask_user` parses new items with one schema
+(`AskPrerequisiteInput`) and refuses the whole set otherwise, naming each item and field to fix. The
+tool description tells the bot what a good item holds: why it is needed, who acts and what happens
+next, about how long it takes, real URLs, exact menu names and values, the bot's Credentials (never
+the chat) as the place for a secret, how it is checked, and "(not checked)" after any step it has not
+verified. Cards already stored keep the stored shape and are not re-checked.
 
 Answering with that option, inside the answer's transaction, creates one `UserTodo` per item, grouped
 by the card (`sourceMessageId`). An item whose `key` already has a to-do in the space keeps that to-do's
@@ -231,7 +233,8 @@ check-now held by the pause) is not checked again.
 
 A due to-do goes to `checking` through the same compare-and-set as Done — check now, and gets the same
 `todo_check` run, tagged `todo-check:<id>:<revision>`. The run belongs to the case coordinator
-(`RAKAZO_CASE_COORDINATOR_BOTS`, comma-separated names or ids, first is the default): the bot that
+(`RAKAZO_CASE_COORDINATOR_BOTS`, comma-separated names or ids, first is the default; read once at
+startup and matched by id, else by name, the same way for recovery items): the bot that
 asked when it is one of them (only Josy, or Elena for fleet cases, ask Rens cards), the default one
 for a case card another bot asked, and the asking bot when there is no case. The run is
 context-bounded and quiet: its prompt carries only the to-do, why it is needed, its steps and its last

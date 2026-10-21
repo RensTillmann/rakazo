@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
-import { createDb, createThreadMessage, type PrismaClient } from "@rakazo/db";
+import type { PrismaClient } from "@rakazo/db";
+import { createDb, createThreadMessage } from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { reconcileStuckWork } from "./stuck-work.js";
 

@@ -109,7 +109,7 @@ export function ReplyReview({
               <p
                 role="status"
                 className="mt-2 font-medium"
-              >{t`Newer comments exist since this reply was proposed.`}</p>
+              >{t`The customer wrote again after this reply was written.`}</p>
             ) : null}
             {context.stale === null ? (
               <p className="mt-2 text-sm text-muted-foreground">{t`Freshness could not be verified.`}</p>
@@ -153,18 +153,6 @@ export function ReplyReview({
             <div>
               <dt className="inline font-medium">{t`Tags`}: </dt>
               <dd className="inline">{review.tags.join(", ")}</dd>
-            </div>
-          ) : null}
-          {review.cardVersion ? (
-            <div>
-              <dt className="inline font-medium">{t`Approved for version`}: </dt>
-              <dd className="inline">{review.cardVersion}</dd>
-            </div>
-          ) : null}
-          {context.status === "available" && context.source ? (
-            <div>
-              <dt className="inline font-medium">{t`Newest customer message`}: </dt>
-              <dd className="inline">{context.source.version}</dd>
             </div>
           ) : null}
         </dl>

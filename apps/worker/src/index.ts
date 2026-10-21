@@ -56,6 +56,7 @@ import {
 } from "@rakazo/adapters";
 import { resolveEncryptionKey, resolveSupervisorToken, uploadSizeFromEnv } from "@rakazo/core";
 import {
+  caseCoordinationFromEnv,
   createBoardEvents,
   createDb,
   createMaintenanceStore,
@@ -186,7 +187,9 @@ async function main() {
   const notifications = new ExpoPushProvider(dataDir, prisma, (sessionId) =>
     pushSessionExpiresAt(prisma, sessionId),
   );
+  const caseCoordination = caseCoordinationFromEnv(process.env);
   const executor = createRunExecutor({
+    caseCoordination,
     maxUploadSizeBytes: uploadSizeFromEnv(process.env),
     prisma,
     maintenance: createMaintenanceStore(pool),
@@ -286,6 +289,7 @@ async function main() {
   const reconciler = createJobReconciler({
     prisma,
     jobs,
+    caseCoordination,
     events,
     notifications,
     leadership: createPostgresReconciliationLeadership(pool),

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { CaseCoordination } from "./case-coordinators.js";
+import { NO_CASE_COORDINATION } from "./case-coordinators.js";
 import { createMaintenanceRecoveryStore } from "./maintenance-recovery.js";
 
 // Opt in only with a dedicated disposable LOCAL test database.
@@ -24,7 +26,10 @@ suite("maintenance recovery against PostgreSQL", () => {
     await pool.query(`
       CREATE TABLE "deployment_settings" ("id" TEXT PRIMARY KEY, "ownerUserId" TEXT);
       INSERT INTO "deployment_settings" VALUES ('default', 'operator');
-      CREATE TABLE "bots" ("id" TEXT PRIMARY KEY, "name" TEXT NOT NULL);
+      CREATE TABLE "bots" (
+        "id" TEXT PRIMARY KEY, "name" TEXT NOT NULL, "userId" TEXT NOT NULL DEFAULT 'operator',
+        "archivedAt" TIMESTAMP(3)
+      );
       CREATE TABLE "runs" (
         "id" TEXT PRIMARY KEY, "botId" TEXT, "status" TEXT NOT NULL,
         "leaseFence" INTEGER NOT NULL DEFAULT 1, "leaseExpiresAt" TIMESTAMP(3),
@@ -74,7 +79,9 @@ suite("maintenance recovery against PostgreSQL", () => {
       TRUNCATE "bots", "runs", "attempts", "external_effects", "events", "maintenance_recovery",
         "cloud_agents", "external_messages", "messaging_outbound", "routines", "computers",
         "messages", "user_todos";
-      INSERT INTO "bots" VALUES ('isabella', 'Isabella'), ('riona', 'Riona'), ('jill', 'Jill');
+      INSERT INTO "bots" ("id", "name") VALUES
+        ('isabella', 'Isabella'), ('riona', 'Riona'), ('jill', 'Jill'), ('josy', 'Josy'),
+        ('elena', 'Elena');
     `);
   });
 
@@ -122,11 +129,11 @@ suite("maintenance recovery against PostgreSQL", () => {
     `);
   }
 
-  const byId = async (operatorId = "operator") =>
+  const byId = async (operatorId = "operator", coordination = NO_CASE_COORDINATION) =>
     new Map(
-      (await createMaintenanceRecoveryStore(pool).recoveryForOperator(operatorId)).items.map(
-        (item) => [item.id, item],
-      ),
+      (
+        await createMaintenanceRecoveryStore(pool, coordination).recoveryForOperator(operatorId)
+      ).items.map((item) => [item.id, item]),
     );
 
   it("derives each Q35 record's state from its own evidence, never from the parent run alone", async () => {
@@ -176,59 +183,53 @@ suite("maintenance recovery against PostgreSQL", () => {
 
   it("names the case, its coordinator and whether only the user can settle each item (Q21)", async () => {
     await seedQ35Records();
-    const previous = {
-      coordinators: process.env.RAKAZO_CASE_COORDINATOR_BOTS,
-      fleet: process.env.RAKAZO_FLEET_COORDINATOR_BOT,
+    await pool.query(`
+      INSERT INTO "messages" ("id", "runId", "role", "seq", "blocks") VALUES
+        ('m1', 'run-jill', 'bot', 1,
+          '[{"kind": "ask", "text": "Case 383 · repo: which repository?", "status": "answered"}]'),
+        ('m2', 'run-riona', 'bot', 1,
+          '[{"kind": "ask", "text": "About case 99, not a card head", "status": "pending"}]'),
+        ('m3', 'elena-live', 'bot', 1,
+          '[{"kind": "ask", "text": "URGENT · Case 50 · fleet: restart?", "status": "pending"}]');
+      INSERT INTO "user_todos" ("id", "runId", "caseRef") VALUES ('t1', 'run-isabella', 142);
+      INSERT INTO "runs" ("id", "botId", "status", "leaseExpiresAt") VALUES
+        ('live', 'jill', 'running', (now() AT TIME ZONE 'UTC') + interval '1 hour'),
+        ('elena-live', 'elena', 'running', (now() AT TIME ZONE 'UTC') + interval '1 hour');
+    `);
+    const coordination: CaseCoordination = {
+      caseCoordinators: ["josy", "Elena"],
+      fleetCoordinator: "elena",
     };
-    process.env.RAKAZO_CASE_COORDINATOR_BOTS = "Josy,Elena";
-    process.env.RAKAZO_FLEET_COORDINATOR_BOT = "Elena";
-    try {
-      await pool.query(`
-        INSERT INTO "messages" ("id", "runId", "role", "seq", "blocks") VALUES
-          ('m1', 'run-jill', 'bot', 1,
-            '[{"kind": "ask", "text": "Case 383 · repo: which repository?", "status": "answered"}]'),
-          ('m2', 'run-riona', 'bot', 1,
-            '[{"kind": "ask", "text": "About case 99, not a card head", "status": "pending"}]');
-        INSERT INTO "user_todos" ("id", "runId", "caseRef") VALUES ('t1', 'run-isabella', 142);
-        INSERT INTO "runs" ("id", "botId", "status", "leaseExpiresAt") VALUES
-          ('live', 'jill', 'running', (now() AT TIME ZONE 'UTC') + interval '1 hour');
-      `);
-      const items = await byId();
-      // Case from an exact card head; a worker's case goes to the default case coordinator.
-      expect(items.get("shell")).toMatchObject({
-        caseRef: 383,
-        coordinator: "Josy",
-        userActionNeeded: true,
-      });
-      // Case from a linked to-do; recorded evidence still needs the owner to apply it.
-      expect(items.get("attempt-1")).toMatchObject({
-        caseRef: 142,
-        coordinator: "Josy",
-        userActionNeeded: true,
-      });
-      // Free text never names a case: internal, so the Fleet coordinator answers for it.
-      expect(items.get("open-path")).toMatchObject({ caseRef: null, coordinator: "Elena" });
-      // Still finishing on its own: nobody needs to act.
-      expect(items.get("live")).toMatchObject({
-        state: "draining",
-        caseRef: null,
-        coordinator: "Elena",
-        userActionNeeded: false,
-      });
-    } finally {
-      for (const [key, value] of [
-        ["RAKAZO_CASE_COORDINATOR_BOTS", previous.coordinators],
-        ["RAKAZO_FLEET_COORDINATOR_BOT", previous.fleet],
-      ] as const) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
-    }
+    const items = await byId("operator", coordination);
+    // Case from a card head; a worker's case goes to the default case coordinator, by bot name.
+    expect(items.get("shell")).toMatchObject({
+      caseRef: 383,
+      coordinator: "Josy",
+      userActionNeeded: true,
+    });
+    // Case from a linked to-do; recorded evidence still needs the owner to apply it.
+    expect(items.get("attempt-1")).toMatchObject({
+      caseRef: 142,
+      coordinator: "Josy",
+      userActionNeeded: true,
+    });
+    // A coordinator's own case stays hers; still finishing on its own, so nobody needs to act.
+    expect(items.get("elena-live")).toMatchObject({
+      caseRef: 50,
+      coordinator: "Elena",
+      userActionNeeded: false,
+    });
+    // Free text never names a case: internal, so the Fleet coordinator answers for it.
+    expect(items.get("open-path")).toMatchObject({ caseRef: null, coordinator: "Elena" });
+    expect(items.get("live")).toMatchObject({ caseRef: null, coordinator: "Elena" });
+    // Without coordinators configured nobody is named, and nothing is guessed.
+    expect((await byId()).get("shell")).toMatchObject({ caseRef: 383, coordinator: "Jill" });
+    expect((await byId()).get("live")).toMatchObject({ coordinator: null });
   });
 
   it("settles from evidence once, records provenance, and replays the same request", async () => {
     await seedQ35Records();
-    const store = createMaintenanceRecoveryStore(pool);
+    const store = createMaintenanceRecoveryStore(pool, NO_CASE_COORDINATION);
     const attempt = {
       requestId: "settle-attempt",
       basis: "evidence",
@@ -295,7 +296,7 @@ suite("maintenance recovery against PostgreSQL", () => {
 
   it("preserves a real outcome that lands first and lets only one competing settlement win", async () => {
     await seedQ35Records();
-    const store = createMaintenanceRecoveryStore(pool);
+    const store = createMaintenanceRecoveryStore(pool, NO_CASE_COORDINATION);
     await pool.query(
       `UPDATE "external_effects" SET "status" = 'completed', "result" = '{"ok": true}' WHERE "id" = 'open-path'`,
     );
@@ -336,7 +337,7 @@ suite("maintenance recovery against PostgreSQL", () => {
       INSERT INTO "runs" ("id", "botId", "status", "leaseFence") VALUES ('expired', 'jill', 'failed', 1);
       INSERT INTO "attempts" ("id", "runId", "fence", "status") VALUES ('lonely', 'expired', 1, 'running');
     `);
-    const store = createMaintenanceRecoveryStore(pool);
+    const store = createMaintenanceRecoveryStore(pool, NO_CASE_COORDINATION);
     expect((await byId()).get("lonely")).toMatchObject({ state: "unresolved", proposed: null });
     expect(
       await store.settleRecovery("operator", {

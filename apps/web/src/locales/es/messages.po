@@ -800,10 +800,6 @@ msgstr "Aprobar"
 msgid "Approve this server to let your agent use its tools."
 msgstr "Aprueba este servidor para que tu agente use sus herramientas."
 
-#: src/components/ReplyReview.tsx
-msgid "Approved for version"
-msgstr ""
-
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
 msgstr "Archivar"
@@ -3832,14 +3828,6 @@ msgstr "Nuevo space"
 msgid "New ticket"
 msgstr ""
 
-#: src/components/ReplyReview.tsx
-msgid "Newer comments exist since this reply was proposed."
-msgstr ""
-
-#: src/components/ReplyReview.tsx
-msgid "Newest customer message"
-msgstr ""
-
 #: src/components/DecisionDock.tsx
 msgid "Next decision"
 msgstr ""
@@ -4018,10 +4006,6 @@ msgstr ""
 
 #: src/components/FlagMessageDialog.tsx
 msgid "Note (optional)"
-msgstr ""
-
-#: src/components/FleetRecoveryList.tsx
-msgid "Nothing for you to do"
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
@@ -5639,6 +5623,10 @@ msgstr "Se agotó el tiempo de conexión."
 
 #: src/components/FleetFeedback.tsx
 msgid "The current Space changed. Return to this Space before sending, or reload the app in the intended Space. Your draft is preserved."
+msgstr ""
+
+#: src/components/ReplyReview.tsx
+msgid "The customer wrote again after this reply was written."
 msgstr ""
 
 #. js-lingui-explicit-id

@@ -6,8 +6,10 @@ import type {
 } from "@rakazo/contracts";
 import { MaintenanceRecoveryCommandSchema } from "@rakazo/contracts";
 import type { Pool, PoolClient } from "pg";
+import type { CaseCoordination } from "./case-coordinators.js";
+import { caseCoordinatorOf, fleetCoordinatorOf } from "./case-coordinators.js";
+import { askCaseRef } from "./decisions.js";
 import { MaintenanceConflictError, MaintenanceOwnerRequiredError } from "./maintenance.js";
-import { caseCoordinatorNames } from "./user-todo-actions.js";
 
 export interface MaintenanceRecoveryStore {
   recoveryForOperator(operatorId: string): Promise<MaintenanceRecovery>;
@@ -207,25 +209,33 @@ async function newerFinishedAttempt(
   return result.rows[0] ?? null;
 }
 
-/** The case number of an exact card head, "Case <n> · " or "URGENT · Case <n> · ". */
-const CARD_HEAD_CASE = /^(?:URGENT · )?Case ([1-9][0-9]{0,8}) · /;
-
 /**
  * Q21: who answers for each item, and whether only the user can settle it. The case comes from the
- * run's own cards (exact "Case <n> · " head) or its to-dos' case link, never from free text. A case
- * item belongs to that case's coordinator (the run's bot when it coordinates cases itself, else the
- * default case coordinator); anything else is internal and belongs to the Fleet coordinator.
+ * run's to-dos' case link or its own card heads (`askCaseRef`), never from free text. A case item
+ * belongs to that case's coordinator (`caseCoordinatorOf` the run's bot); anything else is internal
+ * and belongs to the Fleet coordinator.
  */
-async function accountFor(client: Queryable, items: MaintenanceRecoveryItem[]): Promise<void> {
+async function accountFor(
+  client: Queryable,
+  ownerId: string,
+  items: MaintenanceRecoveryItem[],
+  coordination: CaseCoordination,
+): Promise<void> {
   const runIds = [...new Set(items.flatMap((item) => (item.runId ? [item.runId] : [])))];
   const cases = new Map<string, number>();
+  const runBots = new Map<string, string>();
   if (runIds.length) {
+    const runs = await client.query<{ id: string; botId: string | null }>(
+      `SELECT "id", "botId" FROM "runs" WHERE "id" = ANY($1)`,
+      [runIds],
+    );
+    for (const run of runs.rows) if (run.botId) runBots.set(run.id, run.botId);
     const todos = await client.query<{ runId: string; caseRef: number }>(
       `SELECT "runId", "caseRef" FROM "user_todos" WHERE "runId" = ANY($1) AND "caseRef" IS NOT NULL`,
       [runIds],
     );
     for (const row of todos.rows) cases.set(row.runId, row.caseRef);
-    const cards = await client.query<{ runId: string; text: string }>(
+    const cards = await client.query<{ runId: string; text: string | null }>(
       `SELECT m."runId", b->>'text' AS "text"
          FROM "messages" m, jsonb_array_elements(m."blocks") b
         WHERE m."runId" = ANY($1) AND m."role" = 'bot' AND b->>'kind' = 'ask'
@@ -233,20 +243,25 @@ async function accountFor(client: Queryable, items: MaintenanceRecoveryItem[]): 
       [runIds],
     );
     for (const row of cards.rows) {
-      const head = CARD_HEAD_CASE.exec(row.text ?? "");
-      if (head && !cases.has(row.runId)) cases.set(row.runId, Number(head[1]));
+      const caseRef = askCaseRef(row.text ?? "");
+      if (caseRef !== null && !cases.has(row.runId)) cases.set(row.runId, caseRef);
     }
   }
-  const coordinators = caseCoordinatorNames();
-  const fleetCoordinator =
-    process.env.RAKAZO_FLEET_COORDINATOR_BOT?.trim() || process.env.RAKAZO_FLAG_BOT?.trim() || null;
+  const bots = (
+    await client.query<{ id: string; name: string }>(
+      `SELECT "id", "name" FROM "bots" WHERE "userId" = $1 AND "archivedAt" IS NULL`,
+      [ownerId],
+    )
+  ).rows;
+  const internal = fleetCoordinatorOf(bots, coordination)?.name ?? null;
   for (const item of items) {
     const caseRef = item.runId ? (cases.get(item.runId) ?? null) : null;
-    const own = item.bot
-      ? coordinators.find((name) => name.toLowerCase() === item.bot!.toLowerCase())
-      : undefined;
+    const asker = item.runId ? (runBots.get(item.runId) ?? null) : null;
     item.caseRef = caseRef;
-    item.coordinator = caseRef !== null ? (own ?? coordinators[0] ?? item.bot) : fleetCoordinator;
+    item.coordinator =
+      caseRef === null
+        ? internal
+        : (caseCoordinatorOf(bots, coordination, asker)?.name ?? item.bot);
     // The recovery commands are the owner's: applying recorded evidence and recording a checked
     // outcome. Draining items settle themselves; other unknowns are the coordinator's to chase.
     item.userActionNeeded = item.state === "settleable" || item.ownerVerifiable;
@@ -255,6 +270,7 @@ async function accountFor(client: Queryable, items: MaintenanceRecoveryItem[]): 
 
 export function createMaintenanceRecoveryStore(
   pool: Pick<Pool, "connect">,
+  coordination: CaseCoordination,
 ): MaintenanceRecoveryStore {
   return {
     async recoveryForOperator(operatorId) {
@@ -465,7 +481,7 @@ export function createMaintenanceRecoveryStore(
             missing: uncertain ? "Its own reconciler must confirm the outcome." : null,
           });
         }
-        await accountFor(client, items);
+        await accountFor(client, operatorId, items, coordination);
         await client.query("COMMIT");
         return { items };
       } catch (error) {

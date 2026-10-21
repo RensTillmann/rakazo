@@ -43,7 +43,6 @@ import {
   BOT_INSTRUCTIONS_MAX_LENGTH,
   canonicalPiProviderId,
   FLEET_TOOL_NAMES,
-  prerequisiteInstructionProblems,
   usableModelId,
 } from "@rakazo/contracts";
 import { abortableDelay, MISSING_TOOL_FINAL_RESPONSE_ERROR } from "@rakazo/core";
@@ -1645,18 +1644,24 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     caseRef: args.caseRef ?? undefined,
                   });
                   if (!parsed.success) {
+                    // Name each item and what to fix, so the bot can ask again with clear instructions.
+                    const items: unknown[] = Array.isArray(args.prerequisites)
+                      ? args.prerequisites
+                      : [];
+                    const problems = parsed.error.issues.map((issue) => {
+                      const [field, index, part] = issue.path;
+                      if (field !== "prerequisites" || typeof index !== "number")
+                        return `${issue.path.join(".") || "prerequisites"}: ${issue.message}`;
+                      const item = items[index];
+                      const key =
+                        item && typeof item === "object" && "key" in item ? String(item.key) : index;
+                      return `item "${key}"${part === undefined ? "" : ` ${String(part)}`}: ${issue.message}`;
+                    });
                     throw new Error(
-                      "ask_user prerequisites needs 1–10 items with unique key (≤200), title (≤300), steps (≤4000), verification automatic|manual, optional why (≤600) and blocks (≤10, text or {issue}), plus option, release each|all, priority p0–p3 and caseRef (tracker issue number)",
+                      `ask_user prerequisites refused: ${problems.join("; ")}. Each item needs a unique key (≤200), title (≤300), why (≤600), numbered steps (≤4000), verification automatic|manual and optional blocks (≤10, text or {issue}); also option, release each|all, priority p0–p3 and caseRef (tracker issue number). Secrets go into this bot's Credentials, never the chat.`,
                     );
                   }
                   todo = parsed.data;
-                  // Fleet: what the user is asked to do must come with clear instructions.
-                  const unclear = prerequisiteInstructionProblems(todo.prerequisites);
-                  if (unclear.length) {
-                    throw new Error(
-                      `ask_user prerequisites are not clear enough to hand to the user: ${unclear.join("; ")}. Fix them and ask again; secrets go into this bot's Credentials, never the chat.`,
-                    );
-                  }
                   if (!options.includes(todo.option)) {
                     throw new Error("ask_user option must be exactly one of the options");
                   }

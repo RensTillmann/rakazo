@@ -15,6 +15,8 @@ import {
   resolveSupervisorToken,
   uploadSizeFromEnv,
 } from "@rakazo/core";
+import type { CaseCoordination } from "@rakazo/db";
+import { caseCoordinationFromEnv } from "@rakazo/db";
 
 export { resolveCloudAgentProvider, resolveSandboxProvider } from "@rakazo/adapters";
 
@@ -131,6 +133,8 @@ export interface AppEnv {
   imageTag: string | undefined;
   /** Bot (name or id) that "Forward to bot…" sends flagged messages to; unset hides the action. */
   flagBot: string | undefined;
+  /** Who coordinates cases and internal work (to-do checks, recovery items). */
+  caseCoordination: CaseCoordination;
   /** Menu label for that action; defaults to "Forward to bot…". */
   flagLabel: string | undefined;
   /** URL with `{n}` that "case 174" in messages links to; unset leaves it as text. */
@@ -285,6 +289,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     updaterToken,
     imageTag: optional(source.RAKAZO_IMAGE_TAG),
     flagBot: optional(source.RAKAZO_FLAG_BOT),
+    caseCoordination: caseCoordinationFromEnv(source),
     flagLabel: optional(source.RAKAZO_FLAG_LABEL),
     caseLinkUrl: parseLinkTemplate("RAKAZO_CASE_LINK_URL", source.RAKAZO_CASE_LINK_URL),
     zendeskLinkUrl: parseLinkTemplate("RAKAZO_ZENDESK_LINK_URL", source.RAKAZO_ZENDESK_LINK_URL),

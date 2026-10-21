@@ -235,14 +235,13 @@ describe("expired source-question dependencies", () => {
   });
   it("does not invalidate if the cancellation CAS loses", async () => {
     const client = tx({ status: "waiting_input", cancelled: 0 });
+    const before = client.snapshot();
     await expect(
       expireStuckRun(client as unknown as Prisma.TransactionClient, input),
     ).resolves.toBeNull();
     expect(client.externalEffect.updateMany).not.toHaveBeenCalled();
-    // Only the open-card lookup ran; the dependency lookup needs a won cancellation.
-    expect(client.message.findMany).not.toHaveBeenCalledWith(
-      expect.objectContaining({ select: { id: true, thread: { select: { spaceId: true } } } }),
-    );
+    // Nothing written: no card retired, no status line, no event.
+    expect(client.snapshot()).toEqual(before);
   });
   it("propagates invalidation failure without starting a continuation or writing expiry evidence", async () => {
     const client = tx({ status: "waiting_input", steering: true });

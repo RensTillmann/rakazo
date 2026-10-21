@@ -9,11 +9,17 @@ const fleet = JSON.parse(
   readFileSync(new URL("./fixtures/zd_reply_context.json", import.meta.url), "utf8"),
 ) as {
   zd_reply_context: { arguments: { ticket: number }; structuredContent: unknown };
-  zd_reply: { inputSchema: { properties: Record<string, unknown>; required: string[] } };
+  zd_reply: {
+    inputSchema: {
+      properties: { status: { enum: string[] } } & Record<string, unknown>;
+      required: string[];
+    };
+  };
 };
 
 const actor = { userId: "owner", spaceId: "space" };
 const body = `Hello\n\n${"A complete response. ".repeat(300)}FINAL CHARACTER Ω`;
+const route = { connectorId: "mcp", resourceId: "fleet", toolName: "zd_reply" };
 function fixture(userId = "owner", spaceId = "space") {
   const effect = {
     spaceId,
@@ -22,12 +28,7 @@ function fixture(userId = "owner", spaceId = "space") {
       "__rakazoCatalogTool",
       "direct",
       {
-        route: {
-          connectorId: "mcp",
-          resourceId: "fleet",
-          toolName: "zd_reply",
-          resourceRevision: 2,
-        },
+        route: { ...route, resourceRevision: 2 },
         args: { ticket: 3529, body, status: "pending" },
       },
     ],
@@ -120,15 +121,31 @@ describe("saved approval review boundary", () => {
     expect(review?.cardVersion).toBe("98100");
     expect(review?.customerContext).toMatchObject({ status: "available", stale: true });
   });
-  it("matches the Fleet's zd_reply arguments: no comment-id binding left to read", () => {
-    expect(fleet.zd_reply.inputSchema.required).toEqual(["ticket", "body", "status"]);
-    expect(Object.keys(fleet.zd_reply.inputSchema.properties).sort()).toEqual([
-      "body",
-      "status",
-      "tags",
-      "ticket",
-    ]);
-  });
+  it.each(fleet.zd_reply.inputSchema.properties.status.enum)(
+    "reviews a zd_reply call shaped by the Fleet's schema (status %s)",
+    async (status) => {
+      // Exactly the Fleet's arguments: no comment-id binding is left for the review to need.
+      const { deps, effect } = fixture();
+      const args = { ticket: fleet.zd_reply_context.arguments.ticket, body, status, tags: ["vip"] };
+      expect(Object.keys(args).sort()).toEqual(
+        Object.keys(fleet.zd_reply.inputSchema.properties).sort(),
+      );
+      // A proposal without a server revision: the review reads the call alone, no connector.
+      effect.request[2] = { route, args };
+      const review = await reviewApproval(deps as never, actor, "effect");
+      expect(review).toEqual({
+        ticket: "3529",
+        proposedReply: body,
+        status,
+        tags: ["vip"],
+        cardVersion: "98123",
+        customerContext: { status: "unavailable" },
+      });
+      // Without the optional tags it is still a reply to review.
+      effect.request[2] = { route, args: { ticket: args.ticket, body, status } };
+      expect(await reviewApproval(deps as never, actor, "effect")).toMatchObject({ tags: [] });
+    },
+  );
   it("treats the old latestCommentId/customerMessage shape as unavailable", async () => {
     const { deps, execute } = fixture();
     execute.mockImplementation(async function* (): AsyncGenerator<ConnectorEvent> {

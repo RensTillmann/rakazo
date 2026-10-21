@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Actor, UserTodo, UserTodoStatus } from "@rakazo/contracts";
 import { ACTIVE_RUN_STATUSES } from "@rakazo/core";
+import type { CaseCoordination } from "./case-coordinators.js";
+import { caseCoordinatorOf } from "./case-coordinators.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { sendUserMessageInTransaction } from "./events.js";
 import { lockMaintenanceAdmission } from "./maintenance.js";
@@ -24,8 +26,7 @@ export class UserTodoNotFoundError extends Error {
 /** A message the to-do posted to its bot's thread; the caller notifies and wakes after commit. */
 export interface UserTodoWake {
   threadId: string;
-  /** The event to notify open tabs of; null when nothing was posted (a check run only). */
-  seq: number | null;
+  seq: number;
   /** Set when the message started a new queued run rather than steering or queueing behind one. */
   startedRunId: string | null;
 }
@@ -201,39 +202,21 @@ export function todoCheckRunTarget(
   return match ? { todoId: match[1]!, revision: Number(match[2]) } : null;
 }
 
-/** Bot names or ids (`RAKAZO_CASE_COORDINATOR_BOTS`, comma-separated) that coordinate cases; the first is the default. */
-export function caseCoordinatorNames(
-  env: Record<string, string | undefined> = process.env,
-): string[] {
-  return (env.RAKAZO_CASE_COORDINATOR_BOTS ?? "")
-    .split(",")
-    .map((name) => name.trim())
-    .filter(Boolean);
-}
-
 /**
- * Who checks a to-do: its case's coordinator. The bot that asked, when it is a coordinator itself
- * (only coordinators ask Rens: Josy, and Elena for fleet cases); for a case card another bot asked,
- * the default coordinator; without a case, the bot that asked.
+ * Who checks a to-do: its case's coordinator (`caseCoordinatorOf`); without a case, or with no
+ * coordinator configured, the bot that asked.
  */
 export async function userTodoCheckerBotId(
   db: Pick<Prisma.TransactionClient, "bot">,
   todo: { spaceId: string; userId: string; botId: string; caseRef: number | null },
-  coordinators: readonly string[] = caseCoordinatorNames(),
+  coordination: CaseCoordination,
 ): Promise<string> {
-  if (coordinators.length === 0) return todo.botId;
+  if (todo.caseRef === null || coordination.caseCoordinators.length === 0) return todo.botId;
   const bots = await db.bot.findMany({
     where: { spaceId: todo.spaceId, userId: todo.userId, archivedAt: null },
     select: { id: true, name: true },
   });
-  const ids = coordinators.flatMap((wanted) => {
-    const bot =
-      bots.find((candidate) => candidate.id === wanted) ??
-      bots.find((candidate) => candidate.name.toLowerCase() === wanted.toLowerCase());
-    return bot ? [bot.id] : [];
-  });
-  if (ids.includes(todo.botId) || todo.caseRef === null) return todo.botId;
-  return ids[0] ?? todo.botId;
+  return caseCoordinatorOf(bots, coordination, todo.botId)?.id ?? todo.botId;
 }
 
 /**
@@ -246,8 +229,9 @@ async function startTodoCheckRun(
   tx: Prisma.TransactionClient,
   row: TodoRow,
   heading: string,
-): Promise<{ runId: string; threadId: string } | null> {
-  const checkerId = await userTodoCheckerBotId(tx, row);
+  coordination: CaseCoordination,
+): Promise<string | null> {
+  const checkerId = await userTodoCheckerBotId(tx, row, coordination);
   const checker = await tx.bot.findFirst({
     where: { id: checkerId, spaceId: row.spaceId, archivedAt: null },
     select: { id: true, thread: { select: { id: true } } },
@@ -283,7 +267,13 @@ async function startTodoCheckRun(
       clientNonce: todoCheckRunNonce(row),
     },
   });
-  return { runId: run.id, threadId: checker.thread.id };
+  return run.id;
+}
+
+/** Done — check now: the to-do, now `checking`, and the check run to enqueue after commit. */
+export interface UserTodoCheckResult {
+  todo: UserTodo;
+  checkRunId: string | null;
 }
 
 /**
@@ -295,7 +285,8 @@ export async function requestUserTodoCheck(
   prisma: PrismaClient,
   actor: Pick<Actor, "spaceId" | "userId">,
   input: { todoId: string; revision: number },
-): Promise<UserTodoActionResult> {
+  coordination: CaseCoordination,
+): Promise<UserTodoCheckResult> {
   const todo = await ownedTodo(prisma, actor, input.todoId);
   return prisma.$transaction(async (tx) => {
     const row = await beginUserTodoCheck(
@@ -305,10 +296,14 @@ export async function requestUserTodoCheck(
       new Date(),
     );
     if (!row) throw new UserTodoConflictError();
-    const started = await startTodoCheckRun(tx, row, "Check, asked by the user just now,");
     return {
       todo: userTodoDto(row),
-      wake: started ? { threadId: started.threadId, seq: null, startedRunId: started.runId } : null,
+      checkRunId: await startTodoCheckRun(
+        tx,
+        row,
+        "Check, asked by the user just now,",
+        coordination,
+      ),
     };
   });
 }
@@ -326,6 +321,7 @@ export const USER_TODO_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
  */
 export async function sweepUserTodoChecks(
   prisma: PrismaClient,
+  coordination: CaseCoordination,
   options: { now?: Date; limit?: number; spaceId?: string } = {},
 ): Promise<string[]> {
   const now = options.now ?? new Date();
@@ -356,18 +352,19 @@ export async function sweepUserTodoChecks(
     const runId = await prisma.$transaction(async (tx) => {
       // Under the same admission lock a pause takes: nothing new starts once it holds.
       if (!(await lockMaintenanceAdmission(tx)).admitted) return "paused" as const;
-      // A check run still queued or running (a check-now held by the pause) is not repeated.
+      // A check run of this revision still queued or running (a check-now held by the pause)
+      // is not repeated.
       const waiting = await tx.run.count({
         where: {
           trigger: "todo_check",
-          clientNonce: { startsWith: `todo-check:${candidate.id}:` },
+          clientNonce: todoCheckRunNonce(candidate),
           status: { in: [...ACTIVE_RUN_STATUSES] },
         },
       });
       if (waiting > 0) return null;
       const row = await beginUserTodoCheck(tx, candidate, due, now);
       if (!row) return null;
-      return (await startTodoCheckRun(tx, row, "Scheduled check"))?.runId ?? null;
+      return startTodoCheckRun(tx, row, "Scheduled check", coordination);
     });
     if (runId === "paused") break;
     if (runId) started.push(runId);
@@ -418,6 +415,7 @@ export async function reportUserTodo(
     /** The revision the reporter read; defaults to the current one (a read-then-CAS). */
     expectedRevision?: number;
   },
+  coordination: CaseCoordination,
 ): Promise<UserTodoActionResult | { error: string }> {
   const evidence = input.evidence.trim();
   const remainingStep = input.remainingStep?.trim() ?? "";
@@ -434,7 +432,8 @@ export async function reportUserTodo(
   // The bot that asked, or the case coordinator that checks it for that bot.
   const allowed =
     todo &&
-    (todo.botId === input.botId || (await userTodoCheckerBotId(prisma, todo)) === input.botId);
+    (todo.botId === input.botId ||
+      (await userTodoCheckerBotId(prisma, todo, coordination)) === input.botId);
   if (!todo || !allowed) return { error: "To-do not found, or it belongs to another bot." };
   const outcome = input.outcome;
   const detail =

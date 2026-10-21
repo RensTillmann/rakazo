@@ -181,7 +181,15 @@ import {
   QUEUE_HOLDING_RUN_STATUSES,
   shellRulePattern,
 } from "@rakazo/core";
-import type { BoardEvents, Board as BoardRow, PrismaClient, ThreadEvents } from "@rakazo/db";
+import type {
+  BoardEvents,
+  Board as BoardRow,
+  CaseCoordination,
+  PrismaClient,
+  ThreadEvents,
+  UserTodoActionResult,
+  UserTodoCheckResult,
+} from "@rakazo/db";
 import {
   AskAttachmentsNotAllowedError,
   appendEventInTransaction,
@@ -224,6 +232,7 @@ import {
   listUserTodosForCase,
   lockOwnedGroup,
   modelCredentialProviderFilter,
+  NO_CASE_COORDINATION,
   newestModelCredentialOrder,
   newestVoiceCredentialOrder,
   Prisma,
@@ -235,8 +244,8 @@ import {
   renewSpaceDeletionClaim,
   replaceSpaceBackupModels,
   requestUserTodoCheck,
-  retireUserTodosForCase,
   restoreBotUnderComputerQuota,
+  retireUserTodosForCase,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
   SpaceLimitError,
@@ -248,7 +257,6 @@ import {
   toTicketCommentDto,
   toTicketDto,
   touchGroupUpdatedAt,
-  type UserTodoActionResult,
   UserTodoConflictError,
   UserTodoNotFoundError,
 } from "@rakazo/db";
@@ -655,6 +663,8 @@ export interface RouterDeps {
     mcpAllowPrivateEndpoint?: boolean;
     /** `RAKAZO_FLAG_BOT`: bot (name or id) that receives flagged messages; unset turns it off. */
     flagBot?: string;
+    /** Who coordinates cases: runs Done — check now for case to-dos. Unset: the asking bot. */
+    caseCoordination?: CaseCoordination;
     /** `RAKAZO_FLAG_LABEL`: menu label for flagging a message. */
     flagLabel?: string;
     /** `RAKAZO_CASE_LINK_URL`: URL with `{n}` that "case 174" in messages links to; unset = off. */
@@ -6482,7 +6492,14 @@ export function createRouter(deps: RouterDeps) {
         todos: await listUserTodos(deps.prisma, context.actor),
       })),
       check: authed.todos.check.handler(({ context, input }) =>
-        runUserTodoAction(deps, () => requestUserTodoCheck(deps.prisma, context.actor, input)),
+        runUserTodoAction(deps, () =>
+          requestUserTodoCheck(
+            deps.prisma,
+            context.actor,
+            input,
+            deps.env.caseCoordination ?? NO_CASE_COORDINATION,
+          ),
+        ),
       ),
       confirm: authed.todos.confirm.handler(({ context, input }) =>
         runUserTodoAction(deps, () => confirmUserTodo(deps.prisma, context.actor, input)),
@@ -7540,12 +7557,15 @@ async function clearGoneSandbox(
   return null;
 }
 
-/** Commits a to-do action, then publishes and wakes its bot message like any sent message. */
+/**
+ * Commits a to-do action, then publishes and wakes its bot message like any sent message, or
+ * enqueues the check run Done — check now started.
+ */
 async function runUserTodoAction(
   deps: RouterDeps,
-  action: () => Promise<UserTodoActionResult>,
+  action: () => Promise<UserTodoActionResult | UserTodoCheckResult>,
 ) {
-  let result: UserTodoActionResult;
+  let result: UserTodoActionResult | UserTodoCheckResult;
   try {
     result = await action();
   } catch (error) {
@@ -7555,18 +7575,17 @@ async function runUserTodoAction(
     }
     throw error;
   }
-  const { wake } = result;
-  if (!wake) return { todo: result.todo };
-  if (wake.seq !== null) {
-    await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
+  // Queued runs are durable; the reconciler repairs a missed wake.
+  const runId = "checkRunId" in result ? result.checkRunId : result.wake?.startedRunId;
+  if ("wake" in result && result.wake) {
+    await deps.events.notify(result.wake.threadId, result.wake.seq).catch((error: unknown) => {
       // The message is durable; subscribers recover it from their cursor.
       getLogger().error("to-do message notify", error);
     });
   }
-  if (wake.startedRunId) {
-    // The queued run is durable; the reconciler repairs a missed wake.
-    await deps.jobs.enqueue(runContinueJob(wake.startedRunId)).catch((error: unknown) => {
-      getLogger().error("to-do message enqueue", error);
+  if (runId) {
+    await deps.jobs.enqueue(runContinueJob(runId)).catch((error: unknown) => {
+      getLogger().error("to-do run enqueue", error);
     });
   }
   return { todo: result.todo };

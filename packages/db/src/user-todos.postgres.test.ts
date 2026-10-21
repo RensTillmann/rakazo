@@ -8,7 +8,9 @@ import {
   type UserTodo,
 } from "@rakazo/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, type Pool, type PrismaClient } from "./client.js";
+import { NO_CASE_COORDINATION } from "./case-coordinators.js";
+import type { Pool, PrismaClient } from "./client.js";
+import { createDb } from "./client.js";
 import { answerRunInput } from "./events.js";
 import { lockMaintenanceAdmission } from "./maintenance.js";
 import { createThreadMessage } from "./messages.js";
@@ -218,15 +220,24 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     }
     /** Done — check now, then the bot verifies it. */
     async function verify(todo: { id: string; revision: number }) {
-      await requestUserTodoCheck(prisma, actor, { todoId: todo.id, revision: todo.revision });
+      await requestUserTodoCheck(
+        prisma,
+        actor,
+        { todoId: todo.id, revision: todo.revision },
+        NO_CASE_COORDINATION,
+      );
       return succeeded(
-        await reportUserTodo(prisma, {
-          spaceId: id,
-          botId: bot.id,
-          todoId: todo.id,
-          outcome: "verified",
-          evidence: "elena-bot has Write on acme/site",
-        }),
+        await reportUserTodo(
+          prisma,
+          {
+            spaceId: id,
+            botId: bot.id,
+            todoId: todo.id,
+            outcome: "verified",
+            evidence: "elena-bot has Write on acme/site",
+          },
+          NO_CASE_COORDINATION,
+        ),
       );
     }
     return {
@@ -286,18 +297,27 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
   it("a replacement card for the same requirement keeps the to-do's identity and progress", async () => {
     const f = await fixture();
     const first = await f.chooseTodo();
-    const checking = await requestUserTodoCheck(f.prisma, f.actor, {
-      todoId: first.id,
-      revision: first.revision,
-    });
-    const reported = await reportUserTodo(f.prisma, {
-      spaceId: f.id,
-      botId: f.bot.id,
-      todoId: first.id,
-      outcome: "remaining",
-      evidence: "elena-bot is not a collaborator yet",
-      remainingStep: "Invite elena-bot with Write role",
-    });
+    const checking = await requestUserTodoCheck(
+      f.prisma,
+      f.actor,
+      {
+        todoId: first.id,
+        revision: first.revision,
+      },
+      NO_CASE_COORDINATION,
+    );
+    const reported = await reportUserTodo(
+      f.prisma,
+      {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: first.id,
+        outcome: "remaining",
+        evidence: "elena-bot is not a collaborator yet",
+        remainingStep: "Invite elena-bot with Write role",
+      },
+      NO_CASE_COORDINATION,
+    );
     expect(reported).toMatchObject({ todo: { status: "remaining" } });
     expect(checking.todo.status).toBe("checking");
 
@@ -320,14 +340,23 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
   it("materially changed steps reset the to-do to open and clear its old evidence", async () => {
     const f = await fixture();
     const first = await f.chooseTodo();
-    await requestUserTodoCheck(f.prisma, f.actor, { todoId: first.id, revision: first.revision });
-    await reportUserTodo(f.prisma, {
-      spaceId: f.id,
-      botId: f.bot.id,
-      todoId: first.id,
-      outcome: "verified",
-      evidence: "elena-bot has Write on acme/site",
-    });
+    await requestUserTodoCheck(
+      f.prisma,
+      f.actor,
+      { todoId: first.id, revision: first.revision },
+      NO_CASE_COORDINATION,
+    );
+    await reportUserTodo(
+      f.prisma,
+      {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: first.id,
+        outcome: "verified",
+        evidence: "elena-bot has Write on acme/site",
+      },
+      NO_CASE_COORDINATION,
+    );
 
     const changed = await f.chooseTodo({
       ...ACCESS,
@@ -348,8 +377,18 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
     const results = await Promise.allSettled([
-      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision }),
-      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision }),
+      requestUserTodoCheck(
+        f.prisma,
+        f.actor,
+        { todoId: todo.id, revision: todo.revision },
+        NO_CASE_COORDINATION,
+      ),
+      requestUserTodoCheck(
+        f.prisma,
+        f.actor,
+        { todoId: todo.id, revision: todo.revision },
+        NO_CASE_COORDINATION,
+      ),
     ]);
     const fulfilled = results.filter((result) => result.status === "fulfilled");
     const rejected = results.filter((result) => result.status === "rejected");
@@ -384,10 +423,15 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const todo = await f.chooseTodo();
     await f.prisma.$executeRaw`UPDATE maintenance_state SET active = true WHERE id = 'default'`;
     try {
-      const { todo: checking } = await requestUserTodoCheck(f.prisma, f.actor, {
-        todoId: todo.id,
-        revision: todo.revision,
-      });
+      const { todo: checking } = await requestUserTodoCheck(
+        f.prisma,
+        f.actor,
+        {
+          todoId: todo.id,
+          revision: todo.revision,
+        },
+        NO_CASE_COORDINATION,
+      );
       expect(checking.status).toBe("checking");
       const [run] = await f.prisma.run.findMany({
         where: { spaceId: f.id, trigger: "todo_check" },
@@ -399,7 +443,12 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       );
       // The hourly sweep does not stack a second check on the held one, even after resume.
       await f.prisma.$executeRaw`UPDATE maintenance_state SET active = false WHERE id = 'default'`;
-      expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(5) })).toEqual([]);
+      expect(
+        await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+          spaceId: f.id,
+          now: inHours(5),
+        }),
+      ).toEqual([]);
     } finally {
       await f.prisma.$executeRaw`UPDATE maintenance_state SET active = false WHERE id = 'default'`;
     }
@@ -407,77 +456,98 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
 
   it("a case to-do another bot asked is checked by the case coordinator, who may report it", async () => {
     const f = await fixture();
-    const previous = process.env.RAKAZO_CASE_COORDINATOR_BOTS;
     const josy = await f.prisma.bot.create({
       data: { spaceId: f.id, userId: f.id, name: "Josy", color: "test" },
     });
     await f.prisma.thread.create({ data: { spaceId: f.id, userId: f.id, botId: josy.id } });
-    process.env.RAKAZO_CASE_COORDINATOR_BOTS = "Josy,Elena-coordinator";
-    try {
-      const asked = await f.card([ACCESS], "all", undefined, 383);
-      expect(await asked.answer("choice-2")).toBe(true);
-      const todo = (await f.todos())[0]!;
-      await requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision });
-      const [run] = await f.prisma.run.findMany({
-        where: { spaceId: f.id, trigger: "todo_check" },
-      });
-      expect(run?.botId).toBe(josy.id);
-      const report = (botId: string) =>
-        reportUserTodo(f.prisma, {
+    const coordination = {
+      caseCoordinators: ["josy", "Elena-coordinator"],
+      fleetCoordinator: null,
+    };
+    const asked = await f.card([ACCESS], "all", undefined, 383);
+    expect(await asked.answer("choice-2")).toBe(true);
+    const todo = (await f.todos())[0]!;
+    const { checkRunId } = await requestUserTodoCheck(
+      f.prisma,
+      f.actor,
+      { todoId: todo.id, revision: todo.revision },
+      coordination,
+    );
+    const run = await f.prisma.run.findUniqueOrThrow({ where: { id: checkRunId! } });
+    expect(run.botId).toBe(josy.id);
+    const report = (botId: string) =>
+      reportUserTodo(
+        f.prisma,
+        {
           spaceId: f.id,
           botId,
           todoId: todo.id,
           outcome: "remaining",
           evidence: "elena-bot is not a collaborator",
           remainingStep: "Invite elena-bot",
-        });
-      expect(await report(f.other.id)).toHaveProperty("error");
-      expect(await report(josy.id)).toMatchObject({ todo: { status: "remaining" } });
-    } finally {
-      if (previous === undefined) delete process.env.RAKAZO_CASE_COORDINATOR_BOTS;
-      else process.env.RAKAZO_CASE_COORDINATOR_BOTS = previous;
-    }
+        },
+        coordination,
+      );
+    expect(await report(f.other.id)).toHaveProperty("error");
+    expect(await report(josy.id)).toMatchObject({ todo: { status: "remaining" } });
   });
 
   it("todo_report only takes the requesting bot's report against the current revision", async () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
-    const { todo: checking } = await requestUserTodoCheck(f.prisma, f.actor, {
-      todoId: todo.id,
-      revision: todo.revision,
-    });
+    const { todo: checking } = await requestUserTodoCheck(
+      f.prisma,
+      f.actor,
+      {
+        todoId: todo.id,
+        revision: todo.revision,
+      },
+      NO_CASE_COORDINATION,
+    );
 
     expect(
-      await reportUserTodo(f.prisma, {
-        spaceId: f.id,
-        botId: f.other.id,
-        todoId: todo.id,
-        outcome: "verified",
-        evidence: "looks fine",
-      }),
+      await reportUserTodo(
+        f.prisma,
+        {
+          spaceId: f.id,
+          botId: f.other.id,
+          todoId: todo.id,
+          outcome: "verified",
+          evidence: "looks fine",
+        },
+        NO_CASE_COORDINATION,
+      ),
     ).toHaveProperty("error");
     expect(
-      await reportUserTodo(f.prisma, {
-        spaceId: f.id,
-        botId: f.bot.id,
-        todoId: todo.id,
-        outcome: "verified",
-        evidence: "looks fine",
-        expectedRevision: todo.revision,
-      }),
+      await reportUserTodo(
+        f.prisma,
+        {
+          spaceId: f.id,
+          botId: f.bot.id,
+          todoId: todo.id,
+          outcome: "verified",
+          evidence: "looks fine",
+          expectedRevision: todo.revision,
+        },
+        NO_CASE_COORDINATION,
+      ),
     ).toHaveProperty("error");
     expect((await f.prisma.userTodo.findUniqueOrThrow({ where: { id: todo.id } })).status).toBe(
       "checking",
     );
 
-    const accepted = await reportUserTodo(f.prisma, {
-      spaceId: f.id,
-      botId: f.bot.id,
-      todoId: todo.id,
-      outcome: "verified",
-      evidence: "elena-bot has Write on acme/site",
-      expectedRevision: checking.revision,
-    });
+    const accepted = await reportUserTodo(
+      f.prisma,
+      {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: todo.id,
+        outcome: "verified",
+        evidence: "elena-bot has Write on acme/site",
+        expectedRevision: checking.revision,
+      },
+      NO_CASE_COORDINATION,
+    );
     expect(accepted).toMatchObject({
       todo: { status: "verified", evidence: "elena-bot has Write on acme/site" },
     });
@@ -486,31 +556,49 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
   it("'couldn't check' stays distinct from 'checked, still to do'", async () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
-    await requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision });
-    const unavailable = await reportUserTodo(f.prisma, {
-      spaceId: f.id,
-      botId: f.bot.id,
-      todoId: todo.id,
-      outcome: "unavailable",
-      evidence: "GitHub API timed out",
-    });
+    await requestUserTodoCheck(
+      f.prisma,
+      f.actor,
+      { todoId: todo.id, revision: todo.revision },
+      NO_CASE_COORDINATION,
+    );
+    const unavailable = await reportUserTodo(
+      f.prisma,
+      {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: todo.id,
+        outcome: "unavailable",
+        evidence: "GitHub API timed out",
+      },
+      NO_CASE_COORDINATION,
+    );
     expect(unavailable).toMatchObject({
       todo: { status: "unavailable", statusDetail: "GitHub API timed out" },
       wake: null,
     });
     // Unavailable is not a failed check: the user can ask again, and the bot then reports.
-    const again = await requestUserTodoCheck(f.prisma, f.actor, {
-      todoId: todo.id,
-      revision: succeeded(unavailable).todo.revision,
-    });
-    const remaining = await reportUserTodo(f.prisma, {
-      spaceId: f.id,
-      botId: f.bot.id,
-      todoId: todo.id,
-      outcome: "remaining",
-      evidence: "elena-bot has Read, not Write",
-      remainingStep: "Change elena-bot's role to Write",
-    });
+    const again = await requestUserTodoCheck(
+      f.prisma,
+      f.actor,
+      {
+        todoId: todo.id,
+        revision: succeeded(unavailable).todo.revision,
+      },
+      NO_CASE_COORDINATION,
+    );
+    const remaining = await reportUserTodo(
+      f.prisma,
+      {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: todo.id,
+        outcome: "remaining",
+        evidence: "elena-bot has Read, not Write",
+        remainingStep: "Change elena-bot's role to Write",
+      },
+      NO_CASE_COORDINATION,
+    );
     expect(again.todo.status).toBe("checking");
     expect(remaining).toMatchObject({
       todo: {
@@ -533,7 +621,12 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       verification: "manual",
     });
     await expect(
-      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision }),
+      requestUserTodoCheck(
+        f.prisma,
+        f.actor,
+        { todoId: todo.id, revision: todo.revision },
+        NO_CASE_COORDINATION,
+      ),
     ).rejects.toBeInstanceOf(UserTodoConflictError);
 
     const confirmed = await confirmUserTodo(f.prisma, f.actor, {
@@ -576,16 +669,20 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     });
     const revision = succeeded(retired).todo.revision;
     await expect(
-      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision }),
+      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision }, NO_CASE_COORDINATION),
     ).rejects.toBeInstanceOf(UserTodoConflictError);
     expect(
-      await reportUserTodo(f.prisma, {
-        spaceId: f.id,
-        botId: f.bot.id,
-        todoId: todo.id,
-        outcome: "verified",
-        evidence: "done",
-      }),
+      await reportUserTodo(
+        f.prisma,
+        {
+          spaceId: f.id,
+          botId: f.bot.id,
+          todoId: todo.id,
+          outcome: "verified",
+          evidence: "done",
+        },
+        NO_CASE_COORDINATION,
+      ),
     ).toHaveProperty("error");
     expect(
       await retireUserTodo(f.prisma, {
@@ -601,15 +698,24 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
   it("a verified to-do posts exactly one release message to its bot", async () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
-    await requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision });
+    await requestUserTodoCheck(
+      f.prisma,
+      f.actor,
+      { todoId: todo.id, revision: todo.revision },
+      NO_CASE_COORDINATION,
+    );
     const report = () =>
-      reportUserTodo(f.prisma, {
-        spaceId: f.id,
-        botId: f.bot.id,
-        todoId: todo.id,
-        outcome: "verified",
-        evidence: "elena-bot has Write on acme/site",
-      });
+      reportUserTodo(
+        f.prisma,
+        {
+          spaceId: f.id,
+          botId: f.bot.id,
+          todoId: todo.id,
+          outcome: "verified",
+          evidence: "elena-bot has Write on acme/site",
+        },
+        NO_CASE_COORDINATION,
+      );
     const results = await Promise.all([report(), report()]);
     expect(results.filter((result) => "todo" in result)).toHaveLength(1);
     expect(await report()).toHaveProperty("error");
@@ -780,9 +886,14 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const f = await fixture();
     const { access, badge } = await f.chooseBoth("all");
     // Not an hour old yet: nothing is due.
-    expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id })).toEqual([]);
+    expect(await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, { spaceId: f.id })).toEqual(
+      [],
+    );
 
-    const started = await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(1.1) });
+    const started = await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+      spaceId: f.id,
+      now: inHours(1.1),
+    });
     expect(started).toHaveLength(1);
     const [run] = await sweepRuns(f);
     expect(run).toMatchObject({ id: started[0], botId: f.bot.id, status: "queued" });
@@ -802,19 +913,28 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     // The run names its to-do at the revision it checks, so a refused command lands on it.
     expect(run!.clientNonce).toBe(`todo-check:${access.id}:${checking.revision}`);
     // The same hour does not start a second check.
-    expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(1.2) })).toEqual([]);
+    expect(
+      await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+        spaceId: f.id,
+        now: inHours(1.2),
+      }),
+    ).toEqual([]);
     // No message lands in the chat: the check reports through todo_report alone.
     expect(await f.messagesWithNonce("todo:")).toHaveLength(0);
     // A refused command is recorded the way the executor does it: on that revision.
     expect(
-      await reportUserTodo(f.prisma, {
-        spaceId: f.id,
-        botId: f.bot.id,
-        todoId: access.id,
-        outcome: "unavailable",
-        evidence: "Couldn't check: needs a command that may change something (gh api -X POST).",
-        expectedRevision: checking.revision,
-      }),
+      await reportUserTodo(
+        f.prisma,
+        {
+          spaceId: f.id,
+          botId: f.bot.id,
+          todoId: access.id,
+          outcome: "unavailable",
+          evidence: "Couldn't check: needs a command that may change something (gh api -X POST).",
+          expectedRevision: checking.revision,
+        },
+        NO_CASE_COORDINATION,
+      ),
     ).toMatchObject({ todo: { status: "unavailable" } });
   });
 
@@ -822,8 +942,13 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
     const results = await Promise.allSettled([
-      sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(2) }),
-      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision }),
+      sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, { spaceId: f.id, now: inHours(2) }),
+      requestUserTodoCheck(
+        f.prisma,
+        f.actor,
+        { todoId: todo.id, revision: todo.revision },
+        NO_CASE_COORDINATION,
+      ),
     ]);
     const swept = results[0].status === "fulfilled" ? results[0].value.length : 0;
     const clicked = results[1].status === "fulfilled" ? 1 : 0;
@@ -834,15 +959,24 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
 
     // Both checks may still run (a fresh check-now on the new revision); two verified reports
     // resolve the to-do once and wake the bot once.
-    await requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: row.revision });
+    await requestUserTodoCheck(
+      f.prisma,
+      f.actor,
+      { todoId: todo.id, revision: row.revision },
+      NO_CASE_COORDINATION,
+    );
     const report = () =>
-      reportUserTodo(f.prisma, {
-        spaceId: f.id,
-        botId: f.bot.id,
-        todoId: todo.id,
-        outcome: "verified",
-        evidence: "elena-bot has Write on acme/site",
-      });
+      reportUserTodo(
+        f.prisma,
+        {
+          spaceId: f.id,
+          botId: f.bot.id,
+          todoId: todo.id,
+          outcome: "verified",
+          evidence: "elena-bot has Write on acme/site",
+        },
+        NO_CASE_COORDINATION,
+      );
     const reports = await Promise.all([report(), report()]);
     expect(reports.filter((result) => "todo" in result)).toHaveLength(1);
     expect(await f.releases()).toHaveLength(1);
@@ -851,9 +985,12 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
   it("an unfinished or unavailable check keeps the to-do and is retried, never assumed done", async () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
-    expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(1.5) })).toHaveLength(
-      1,
-    );
+    expect(
+      await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+        spaceId: f.id,
+        now: inHours(1.5),
+      }),
+    ).toHaveLength(1);
     // The check never reported (its run failed): an hour later it is checked again, same to-do.
     const failRuns = () =>
       f.prisma.run.updateMany({
@@ -861,21 +998,30 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         data: { status: "failed" },
       });
     await failRuns();
-    expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(3) })).toHaveLength(1);
-    const unavailable = await reportUserTodo(f.prisma, {
-      spaceId: f.id,
-      botId: f.bot.id,
-      todoId: todo.id,
-      outcome: "unavailable",
-      evidence: "No GitHub read tool in this run",
-    });
+    expect(
+      await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, { spaceId: f.id, now: inHours(3) }),
+    ).toHaveLength(1);
+    const unavailable = await reportUserTodo(
+      f.prisma,
+      {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: todo.id,
+        outcome: "unavailable",
+        evidence: "No GitHub read tool in this run",
+      },
+      NO_CASE_COORDINATION,
+    );
     expect(unavailable).toMatchObject({
       todo: { id: todo.id, status: "unavailable", statusDetail: "No GitHub read tool in this run" },
       wake: null,
     });
     await failRuns();
     // Retried on the next hour, still the same to-do and still not done.
-    const retried = await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(4.5) });
+    const retried = await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+      spaceId: f.id,
+      now: inHours(4.5),
+    });
     expect(retried).toHaveLength(1);
     expect(await f.todos()).toHaveLength(1);
     expect((await f.todos())[0]).toMatchObject({ id: todo.id, status: "checking" });
@@ -887,7 +1033,12 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const todo = await f.chooseTodo();
     await f.prisma.$executeRaw`UPDATE maintenance_state SET active = true WHERE id = 'default'`;
     try {
-      expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(2) })).toEqual([]);
+      expect(
+        await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+          spaceId: f.id,
+          now: inHours(2),
+        }),
+      ).toEqual([]);
     } finally {
       await f.prisma.$executeRaw`UPDATE maintenance_state SET active = false WHERE id = 'default'`;
     }
@@ -993,7 +1144,12 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const { access } = await chooseForCase(f, 383);
     const reason = "No longer needed for case 383.";
     const [checked, retired] = await Promise.allSettled([
-      requestUserTodoCheck(f.prisma, f.actor, { todoId: access.id, revision: access.revision }),
+      requestUserTodoCheck(
+        f.prisma,
+        f.actor,
+        { todoId: access.id, revision: access.revision },
+        NO_CASE_COORDINATION,
+      ),
       retireUserTodosForCase(f.prisma, f.actor, { caseRef: 383, reason }),
     ]);
     expect(retired.status).toBe("fulfilled");
@@ -1004,13 +1160,17 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       expect(checked.reason).toBeInstanceOf(UserTodoConflictError);
     }
     expect(
-      await reportUserTodo(f.prisma, {
-        spaceId: f.id,
-        botId: f.bot.id,
-        todoId: access.id,
-        outcome: "verified",
-        evidence: "elena-bot has Write",
-      }),
+      await reportUserTodo(
+        f.prisma,
+        {
+          spaceId: f.id,
+          botId: f.bot.id,
+          todoId: access.id,
+          outcome: "verified",
+          evidence: "elena-bot has Write",
+        },
+        NO_CASE_COORDINATION,
+      ),
     ).toHaveProperty("error");
     expect(await f.releases()).toHaveLength(0);
   });

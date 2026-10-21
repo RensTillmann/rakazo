@@ -470,6 +470,7 @@ export async function createApp(
   const codexCatalog = new CodexCatalogCache();
   const maintenance = created.pool ? createMaintenanceStore(created.pool) : undefined;
   const executor = createRunExecutor({
+    caseCoordination: env.caseCoordination,
     maxUploadSizeBytes: env.maxUploadSizeBytes,
     contextStrategy,
     prisma,
@@ -543,6 +544,7 @@ export async function createApp(
     ? createJobReconciler({
         prisma,
         jobs,
+        caseCoordination: env.caseCoordination,
         events,
         notifications,
         reconcileMaintenanceRuns: () => executor.reconcileMaintenanceRuns(),
@@ -602,6 +604,7 @@ export async function createApp(
       integrationsCatalogUrl: env.integrationsCatalogUrl,
       mcpAllowPrivateEndpoint: env.mcpAllowPrivateEndpoint,
       flagBot: env.flagBot,
+      caseCoordination: env.caseCoordination,
       flagLabel: env.flagLabel,
       caseLinkUrl: env.caseLinkUrl,
       zendeskLinkUrl: env.zendeskLinkUrl,
@@ -677,7 +680,9 @@ export async function createApp(
   const sessionActor = async (request: Request) => (await requestSession(request))?.actor ?? null;
   mountMaintenanceRoutes(app, {
     store: maintenance ?? null,
-    recovery: created.pool ? createMaintenanceRecoveryStore(created.pool) : null,
+    recovery: created.pool
+      ? createMaintenanceRecoveryStore(created.pool, env.caseCoordination)
+      : null,
     authenticate: sessionActor,
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
   });
