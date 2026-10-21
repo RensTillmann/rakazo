@@ -169,6 +169,10 @@ msgstr ""
 msgid "{days}d ago"
 msgstr "{days} दिन पहले"
 
+#: src/components/TodosControl.tsx
+msgid "{done} of {total} done"
+msgstr ""
+
 #: src/components/ToolActivityDisclosure.tsx
 msgid "{hidden, plural, one {+# earlier step} other {+# earlier steps}}"
 msgstr ""
@@ -1215,6 +1219,7 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/TodosControl.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Checking…"
 msgstr ""
@@ -1470,6 +1475,10 @@ msgstr "पुष्टि करें कि यह URL इस ब्राउ
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Confirmed by you"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -2058,6 +2067,14 @@ msgstr ""
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "Couldn't check"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Couldn't check: {detail}"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr ""
@@ -2068,6 +2085,10 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't update messaging settings"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Couldn't update this to-do. Try again."
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
@@ -2122,6 +2143,14 @@ msgstr "अपना Rakazo बनाएं"
 
 #: src/components/AskCard.tsx
 msgid "Created"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Creates {prerequisiteCount} to-dos:"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Creates a to-do: {prerequisiteTitle}"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
@@ -3789,7 +3818,12 @@ msgid "No longer active"
 msgstr "अब सक्रिय नहीं"
 
 #: src/components/AskCard.tsx
+#: src/components/TodosControl.tsx
 msgid "No longer needed"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "No longer needed: {detail}"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5320,6 +5354,18 @@ msgstr ""
 msgid "Steps"
 msgstr "चरण"
 
+#: src/components/TodosControl.tsx
+msgid "Steps your bots need you to do yourself."
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Still to do"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Still to do: {detail}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Stop"
 msgstr "रोकें"
@@ -5606,9 +5652,21 @@ msgstr "यह सर्वर पहले से कनेक्टेड ह�
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "यह सब्सक्रिप्शन साइन-इन अभी Rakazo में उपलब्ध नहीं है। किसी डिप्लॉयमेंट क्रेडेंशियल का उपयोग करें या दूसरा प्रोवाइडर चुनें।"
 
+#: src/components/TodosControl.tsx
+msgid "This to-do changed; refreshed."
+msgstr ""
+
 #: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Tick when done; the bot checks it."
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Tick when you've done it."
 msgstr ""
 
 #: src/components/ReplyReview.tsx
@@ -5641,6 +5699,14 @@ msgstr ""
 
 #: src/lib/ticket-status.ts
 msgid "To do"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "To-dos"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "To-dos: {count}"
 msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
@@ -5926,6 +5992,10 @@ msgstr ""
 #: src/pages/shell/bot-credentials.tsx
 msgid "Values are encrypted and never shown again."
 msgstr "मान एन्क्रिप्ट किए जाते हैं और दोबारा नहीं दिखाए जाते।"
+
+#: src/components/TodosControl.tsx
+msgid "Verified"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

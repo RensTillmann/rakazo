@@ -186,6 +186,7 @@ import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { RosterAttentionBadge } from "../components/RosterAttentionBadge";
 import { RoutineLogFoldable } from "../components/RoutineLogRow";
 import { ThinkingText } from "../components/ThinkingText";
+import { TodosControl } from "../components/TodosControl";
 import {
   LIVE_TOOL_STEP_WINDOW,
   StandaloneToolActivity,
@@ -4405,6 +4406,7 @@ function SpaceShell() {
           </div>
           <div className="col-span-2 row-start-4 flex flex-wrap items-center gap-2 md:col-span-3 md:row-start-3">
             {userId ? <FleetPauseControls key={`${userId}:${currentSpaceId ?? "primary"}`} spaceId={currentSpaceId} /> : null}
+            {userId ? <TodosControl key={`${userId}:${currentSpaceId ?? "primary"}`} /> : null}
           <button
             type="button"
             onClick={() => {

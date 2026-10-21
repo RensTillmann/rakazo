@@ -169,6 +169,10 @@ msgstr ""
 msgid "{days}d ago"
 msgstr "{days} 天前"
 
+#: src/components/TodosControl.tsx
+msgid "{done} of {total} done"
+msgstr ""
+
 #: src/components/ToolActivityDisclosure.tsx
 msgid "{hidden, plural, one {+# earlier step} other {+# earlier steps}}"
 msgstr ""
@@ -1215,6 +1219,7 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/TodosControl.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Checking…"
 msgstr "正在检查…"
@@ -1470,6 +1475,10 @@ msgstr "请确认此浏览器会话可以访问该 URL，然后重新测试。"
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Confirmed by you"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -2058,6 +2067,14 @@ msgstr ""
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "Couldn't check"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Couldn't check: {detail}"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "无法加载消息设置"
@@ -2069,6 +2086,10 @@ msgstr "无法更新头像"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't update messaging settings"
 msgstr "无法更新消息设置"
+
+#: src/components/TodosControl.tsx
+msgid "Couldn't update this to-do. Try again."
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Couldn't update your timezone"
@@ -2123,6 +2144,14 @@ msgstr "创建你的 Rakazo"
 #: src/components/AskCard.tsx
 msgid "Created"
 msgstr "已创建"
+
+#: src/components/AskCard.tsx
+msgid "Creates {prerequisiteCount} to-dos:"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Creates a to-do: {prerequisiteTitle}"
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3789,7 +3818,12 @@ msgid "No longer active"
 msgstr "已停用"
 
 #: src/components/AskCard.tsx
+#: src/components/TodosControl.tsx
 msgid "No longer needed"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "No longer needed: {detail}"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5320,6 +5354,18 @@ msgstr ""
 msgid "Steps"
 msgstr "步骤"
 
+#: src/components/TodosControl.tsx
+msgid "Steps your bots need you to do yourself."
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Still to do"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Still to do: {detail}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Stop"
 msgstr "停止"
@@ -5606,9 +5652,21 @@ msgstr "此服务器已连接。请先断开再重新授权。"
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "此订阅登录在 Rakazo 中尚不可用。请使用部署凭据或选择其他提供方。"
 
+#: src/components/TodosControl.tsx
+msgid "This to-do changed; refreshed."
+msgstr ""
+
 #: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Tick when done; the bot checks it."
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Tick when you've done it."
 msgstr ""
 
 #: src/components/ReplyReview.tsx
@@ -5641,6 +5699,14 @@ msgstr ""
 
 #: src/lib/ticket-status.ts
 msgid "To do"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "To-dos"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "To-dos: {count}"
 msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
@@ -5926,6 +5992,10 @@ msgstr ""
 #: src/pages/shell/bot-credentials.tsx
 msgid "Values are encrypted and never shown again."
 msgstr "值会加密保存，之后不再显示。"
+
+#: src/components/TodosControl.tsx
+msgid "Verified"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

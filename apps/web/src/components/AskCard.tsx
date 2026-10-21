@@ -180,6 +180,9 @@ export function AskCard({
         action.id === "allow" ? [action, { id: "edit", label: t`Edit` }] : [action],
       )
     : askActions;
+  const prerequisiteItems = block.prerequisites?.items ?? [];
+  const prerequisiteTitle = prerequisiteItems[0]?.title;
+  const prerequisiteCount = prerequisiteItems.length;
   const secretInput = isSecretAskBlock(block);
   const loginInput = secretInput && block.credential?.auth.type === "login";
   const secretLabel = loginInput ? t`Password` : secretFieldLabel(block.purpose);
@@ -463,6 +466,26 @@ export function AskCard({
                 ) : (
                   approvalActionLabel(action.id, action.label, action.outcome)
                 )
+              ) : "todo" in action && action.todo && prerequisiteCount ? (
+                <span className="flex min-w-0 flex-col items-start gap-1">
+                  <span>{action.label}</span>
+                  {prerequisiteCount === 1 ? (
+                    <span className="text-xs text-muted-foreground">
+                      {t`Creates a to-do: ${prerequisiteTitle}`}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {t`Creates ${prerequisiteCount} to-dos:`}
+                      <span className="mt-0.5 block ps-3">
+                        {prerequisiteItems.map((item) => (
+                          <span key={item.key} className="block">
+                            • {item.title}
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  )}
+                </span>
               ) : (
                 action.label
               )}

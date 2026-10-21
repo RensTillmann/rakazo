@@ -169,6 +169,10 @@ msgstr ""
 msgid "{days}d ago"
 msgstr "hace {days} d"
 
+#: src/components/TodosControl.tsx
+msgid "{done} of {total} done"
+msgstr ""
+
 #: src/components/ToolActivityDisclosure.tsx
 msgid "{hidden, plural, one {+# earlier step} other {+# earlier steps}}"
 msgstr ""
@@ -1215,6 +1219,7 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/TodosControl.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Checking…"
 msgstr "Comprobando…"
@@ -1470,6 +1475,10 @@ msgstr "Confirma que la URL es accesible desde esta sesión del navegador y vuel
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Confirmed by you"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -2058,6 +2067,14 @@ msgstr ""
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "Couldn't check"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Couldn't check: {detail}"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "No se pudo cargar la configuración de mensajería"
@@ -2069,6 +2086,10 @@ msgstr "No se pudieron actualizar los avatares"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't update messaging settings"
 msgstr "No se pudo actualizar la configuración de mensajería"
+
+#: src/components/TodosControl.tsx
+msgid "Couldn't update this to-do. Try again."
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Couldn't update your timezone"
@@ -2123,6 +2144,14 @@ msgstr "Crea tu Rakazo"
 #: src/components/AskCard.tsx
 msgid "Created"
 msgstr "Creado"
+
+#: src/components/AskCard.tsx
+msgid "Creates {prerequisiteCount} to-dos:"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Creates a to-do: {prerequisiteTitle}"
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3789,7 +3818,12 @@ msgid "No longer active"
 msgstr "Ya no está activo"
 
 #: src/components/AskCard.tsx
+#: src/components/TodosControl.tsx
 msgid "No longer needed"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "No longer needed: {detail}"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5320,6 +5354,18 @@ msgstr ""
 msgid "Steps"
 msgstr "Pasos"
 
+#: src/components/TodosControl.tsx
+msgid "Steps your bots need you to do yourself."
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Still to do"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Still to do: {detail}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Stop"
 msgstr "Detener"
@@ -5606,9 +5652,21 @@ msgstr "Este servidor ya está conectado. Desconéctalo primero para autorizarlo
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "Este inicio de sesión por suscripción aún no está disponible en Rakazo. Usa una credencial de despliegue o elige otro proveedor."
 
+#: src/components/TodosControl.tsx
+msgid "This to-do changed; refreshed."
+msgstr ""
+
 #: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Tick when done; the bot checks it."
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Tick when you've done it."
 msgstr ""
 
 #: src/components/ReplyReview.tsx
@@ -5641,6 +5699,14 @@ msgstr ""
 
 #: src/lib/ticket-status.ts
 msgid "To do"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "To-dos"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "To-dos: {count}"
 msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
@@ -5926,6 +5992,10 @@ msgstr ""
 #: src/pages/shell/bot-credentials.tsx
 msgid "Values are encrypted and never shown again."
 msgstr "Los valores se cifran y no vuelven a mostrarse."
+
+#: src/components/TodosControl.tsx
+msgid "Verified"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

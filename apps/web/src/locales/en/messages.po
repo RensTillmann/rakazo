@@ -169,6 +169,10 @@ msgstr "{count} years"
 msgid "{days}d ago"
 msgstr "{days}d ago"
 
+#: src/components/TodosControl.tsx
+msgid "{done} of {total} done"
+msgstr "{done} of {total} done"
+
 #: src/components/ToolActivityDisclosure.tsx
 msgid "{hidden, plural, one {+# earlier step} other {+# earlier steps}}"
 msgstr "{hidden, plural, one {+# earlier step} other {+# earlier steps}}"
@@ -1215,6 +1219,7 @@ msgstr "Checking Fleet status…"
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
+#: src/components/TodosControl.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Checking…"
 msgstr "Checking…"
@@ -1471,6 +1476,10 @@ msgstr "Confirm the URL is reachable from this browser session, then test again.
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
 msgstr "Confirmations"
+
+#: src/components/TodosControl.tsx
+msgid "Confirmed by you"
+msgstr "Confirmed by you"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/HindsightSettingsForm.tsx
@@ -2058,6 +2067,14 @@ msgstr "Could not upload file"
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 
+#: src/components/TodosControl.tsx
+msgid "Couldn't check"
+msgstr "Couldn't check"
+
+#: src/components/TodosControl.tsx
+msgid "Couldn't check: {detail}"
+msgstr "Couldn't check: {detail}"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Couldn't load messaging settings"
@@ -2069,6 +2086,10 @@ msgstr "Couldn't update avatars"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Couldn't update messaging settings"
+
+#: src/components/TodosControl.tsx
+msgid "Couldn't update this to-do. Try again."
+msgstr "Couldn't update this to-do. Try again."
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Couldn't update your timezone"
@@ -2123,6 +2144,14 @@ msgstr "Create your Rakazo"
 #: src/components/AskCard.tsx
 msgid "Created"
 msgstr "Created"
+
+#: src/components/AskCard.tsx
+msgid "Creates {prerequisiteCount} to-dos:"
+msgstr "Creates {prerequisiteCount} to-dos:"
+
+#: src/components/AskCard.tsx
+msgid "Creates a to-do: {prerequisiteTitle}"
+msgstr "Creates a to-do: {prerequisiteTitle}"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3789,8 +3818,13 @@ msgid "No longer active"
 msgstr "No longer active"
 
 #: src/components/AskCard.tsx
+#: src/components/TodosControl.tsx
 msgid "No longer needed"
 msgstr "No longer needed"
+
+#: src/components/TodosControl.tsx
+msgid "No longer needed: {detail}"
+msgstr "No longer needed: {detail}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "No managed app catalog is configured on this deployment."
@@ -5320,6 +5354,18 @@ msgstr "Status unavailable. Last known state is stale; new actions are disabled.
 msgid "Steps"
 msgstr "Steps"
 
+#: src/components/TodosControl.tsx
+msgid "Steps your bots need you to do yourself."
+msgstr "Steps your bots need you to do yourself."
+
+#: src/components/TodosControl.tsx
+msgid "Still to do"
+msgstr "Still to do"
+
+#: src/components/TodosControl.tsx
+msgid "Still to do: {detail}"
+msgstr "Still to do: {detail}"
+
 #: src/pages/Shell.tsx
 msgid "Stop"
 msgstr "Stop"
@@ -5606,10 +5652,22 @@ msgstr "This server is already connected. Disconnect it first to authorize again
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 
+#: src/components/TodosControl.tsx
+msgid "This to-do changed; refreshed."
+msgstr "This to-do changed; refreshed."
+
 #: src/components/UsageBars.tsx
 #: src/pages/Artifacts.tsx
 msgid "This week"
 msgstr "This week"
+
+#: src/components/TodosControl.tsx
+msgid "Tick when done; the bot checks it."
+msgstr "Tick when done; the bot checks it."
+
+#: src/components/TodosControl.tsx
+msgid "Tick when you've done it."
+msgstr "Tick when you've done it."
 
 #: src/components/ReplyReview.tsx
 msgid "Ticket"
@@ -5642,6 +5700,14 @@ msgstr "To {0}"
 #: src/lib/ticket-status.ts
 msgid "To do"
 msgstr "To do"
+
+#: src/components/TodosControl.tsx
+msgid "To-dos"
+msgstr "To-dos"
+
+#: src/components/TodosControl.tsx
+msgid "To-dos: {count}"
+msgstr "To-dos: {count}"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
@@ -5926,6 +5992,10 @@ msgstr "Value"
 #: src/pages/shell/bot-credentials.tsx
 msgid "Values are encrypted and never shown again."
 msgstr "Values are encrypted and never shown again."
+
+#: src/components/TodosControl.tsx
+msgid "Verified"
+msgstr "Verified"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

@@ -849,4 +849,5 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Send as answer": "作为回答发送",
   "Routine log · {name} · {time}": "例行任务日志 · {name} · {time}",
   "Routine log · {name}": "例行任务日志 · {name}",
+  "To-do: {title}": "待办：{title}",
 };

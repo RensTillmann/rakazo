@@ -881,4 +881,5 @@ export const RU_MESSAGES: Record<string, string> = {
   "Send as answer": "Отправить как ответ",
   "Routine log · {name} · {time}": "Журнал рутины · {name} · {time}",
   "Routine log · {name}": "Журнал рутины · {name}",
+  "To-do: {title}": "Задача: {title}",
 };

@@ -883,4 +883,5 @@ export const DE_MESSAGES: Record<string, string> = {
   "Send as answer": "Als Antwort senden",
   "Routine log · {name} · {time}": "Routine-Protokoll · {name} · {time}",
   "Routine log · {name}": "Routine-Protokoll · {name}",
+  "To-do: {title}": "Aufgabe: {title}",
 };
