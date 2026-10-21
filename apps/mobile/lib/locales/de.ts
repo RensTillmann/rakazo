@@ -209,6 +209,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Messaged {peer}": "Nachricht an {peer} gesendet",
   "Message…": "Nachricht…",
   "No longer active": "Nicht mehr aktiv",
+  "No longer needed": "Nicht mehr nötig",
   "Opened its thread.": "Thread geöffnet.",
   "Photo library": "Fotomediathek",
   "Pull request": "Pull Request",
