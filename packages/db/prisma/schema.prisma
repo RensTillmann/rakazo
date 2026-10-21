@@ -49,6 +49,7 @@ model User {
   agentSecrets               AgentSecret[]
   createdTickets              Ticket[]                     @relation("TicketCreatorUser")
   ticketComments              TicketComment[]              @relation("TicketCommentAuthorUser")
+  userTodos                   UserTodo[]
 
   @@unique([email])
   @@map("user")
@@ -218,6 +219,7 @@ model Space {
   runs                        Run[]
   routines                    Routine[]
   scratchpadItems             ScratchpadItem[]
+  userTodos                   UserTodo[]
   taughtSkills                TaughtSkill[]
   agentSkills                 AgentSkill[]
   connections                 Connection[]
@@ -434,6 +436,7 @@ model Bot {
   fleetManagement        Boolean @default(false)
   routines          Routine[]
   scratchpadItems   ScratchpadItem[]
+  userTodos         UserTodo[]
   taughtSkills      TaughtSkill[]
   memoryDocuments   MemoryDocument[]
   agentHome         AgentHome?
@@ -555,6 +558,7 @@ model Thread {
   tasks                       Task[]
   runs                        Run[]
   routines                    Routine[]
+  userTodos                   UserTodo[]
 
   @@index([spaceId])
   @@map("threads")
@@ -837,6 +841,51 @@ model ScratchpadItem {
   @@index([spaceId, botId, status])
   @@index([spaceId, botId, updatedAt])
   @@map("scratchpad_items")
+}
+
+/// Fleet: a manual prerequisite the user chose to do themselves from a decision card. Records
+/// intent and verification evidence only; it never approves anything or clears a pause.
+model UserTodo {
+  id               String    @id @default(cuid())
+  spaceId          String
+  space            Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  /// The user who owns the to-do (answered the card).
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The bot that asked; only it may report or retire, and only its work is released.
+  botId            String
+  bot              Bot       @relation(fields: [botId], references: [id], onDelete: Cascade)
+  threadId         String
+  thread           Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  /// The run and card message of the latest answer that created or refreshed it. The card
+  /// message is the group: the items one answer created release work together.
+  runId            String
+  sourceMessageId  String
+  /// The card's question, shown as the group's header.
+  groupTitle       String
+  /// each | all: wake the bot per satisfied item, or once when the whole group is satisfied.
+  release          String    @default("all")
+  requirementKey   String
+  title            String
+  steps            String
+  /// automatic | manual
+  verification     String
+  /// open | checking | verified | remaining | unavailable | confirmed | retired
+  status           String    @default("open")
+  statusDetail     String?
+  evidence         String?
+  revision         Int       @default(0)
+  checkRequestedAt DateTime?
+  checkedAt        DateTime?
+  /// The revision whose satisfaction already woke the bot; a satisfaction never wakes twice.
+  releasedRevision Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([spaceId, requirementKey])
+  @@index([spaceId, userId, status])
+  @@index([sourceMessageId])
+  @@map("user_todos")
 }
 
 model TaughtSkill {

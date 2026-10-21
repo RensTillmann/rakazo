@@ -618,9 +618,14 @@ export type AgentRuntimeEvent =
       type: "ask";
       text: string;
       detail?: string;
-      actions?: Array<{ id: string; label: string }>;
+      actions?: Array<{ id: string; label: string; todo?: true }>;
       /** Fleet: a reply draft the card shows editable (`ask_user` `draft`). */
       draft?: string;
+      /** Fleet: the manual prerequisites the `todo` action hands to the user (`ask_user` `prerequisites`). */
+      prerequisites?: {
+        items: Array<{ key: string; title: string; steps: string; verification: "automatic" | "manual" }>;
+        release: "each" | "all";
+      };
       /**
        * Fleet (`patch/ask-dedupe`): present when the request set `settlesAsks`. The consumer calls
        * it with null once the card is stored (the run pauses), or with the text `ask_user` returns

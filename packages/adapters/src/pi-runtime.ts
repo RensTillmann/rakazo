@@ -37,6 +37,7 @@ import {
 } from "@rakazo/adapter-kit";
 import {
   ASK_DRAFT_MAX_LENGTH,
+  AskPrerequisitesInput,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   canonicalPiProviderId,
   FLEET_TOOL_NAMES,
@@ -1474,6 +1475,10 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           options,
           // Same: an invalid draft stays as-is for the schema to reject.
           ...(raw.draft == null ? {} : { draft: raw.draft }),
+          // Invalid to-do arguments are rejected when the tool runs, with the reason.
+          ...(raw.prerequisites == null ? {} : { prerequisites: raw.prerequisites }),
+          ...(raw.option == null ? {} : { option: raw.option }),
+          ...(raw.release == null ? {} : { release: raw.release }),
         };
       }
       if (tool.name === "request_secret") {
@@ -1607,14 +1612,35 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     `ask_user draft must be text of at most ${ASK_DRAFT_MAX_LENGTH} characters`,
                   );
                 }
+                let todo: AskPrerequisitesInput | undefined;
+                if (args.prerequisites !== undefined) {
+                  const parsed = AskPrerequisitesInput.safeParse({
+                    prerequisites: args.prerequisites,
+                    option: args.option,
+                    release: args.release ?? undefined,
+                  });
+                  if (!parsed.success) {
+                    throw new Error(
+                      "ask_user prerequisites needs 1–10 items with unique key (≤200), title (≤300), steps (≤4000) and verification automatic|manual, plus option and release each|all",
+                    );
+                  }
+                  todo = parsed.data;
+                  if (!options.includes(todo.option)) {
+                    throw new Error("ask_user option must be exactly one of the options");
+                  }
+                }
                 const ask = {
                   type: "ask" as const,
                   text: String(args.question ?? "What should I use?"),
                   actions: options.map((label, index) => ({
                     id: `choice-${index + 1}`,
                     label,
+                    ...(label === todo?.option ? { todo: true as const } : {}),
                   })),
                   ...(typeof draft === "string" && draft.trim() ? { draft } : {}),
+                  ...(todo
+                    ? { prerequisites: { items: todo.prerequisites, release: todo.release } }
+                    : {}),
                 };
                 // Fleet: the consumer may refuse a card that is already open; the run goes on.
                 let refusal: string | null = null;
@@ -2180,6 +2206,19 @@ function builtinParameters(tool: ConnectorTool) {
         uniqueItems: true,
       }),
       draft: Type.Optional(Type.String({ maxLength: ASK_DRAFT_MAX_LENGTH })),
+      prerequisites: Type.Optional(
+        Type.Array(
+          Type.Object({
+            key: Type.String({ minLength: 1, maxLength: 200 }),
+            title: Type.String({ minLength: 1, maxLength: 300 }),
+            steps: Type.String({ minLength: 1, maxLength: 4000 }),
+            verification: stringEnum(["automatic", "manual"], {}),
+          }),
+          { minItems: 1, maxItems: 10 },
+        ),
+      ),
+      option: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+      release: Type.Optional(stringEnum(["each", "all"], {})),
     });
   }
   if (tool.name === "remember") {

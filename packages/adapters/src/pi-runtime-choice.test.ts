@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fakeAgentState = vi.hoisted(() => ({
   options: ["Berlin", "Seoul", "Toronto"],
   draft: undefined as unknown,
+  todoArgs: undefined as Record<string, unknown> | undefined,
   results: [] as unknown[],
   tools: [] as Array<{
     name: string;
@@ -30,6 +31,7 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
         question: "Which city should I use?",
         options: fakeAgentState.options,
         ...(fakeAgentState.draft === undefined ? {} : { draft: fakeAgentState.draft }),
+        ...fakeAgentState.todoArgs,
       });
       fakeAgentState.results.push(result);
     }
@@ -100,6 +102,7 @@ describe("Pi choice asks", () => {
     fakeAgentState.tools = [];
     fakeAgentState.options = ["Berlin", "Seoul", "Toronto"];
     fakeAgentState.draft = undefined;
+    fakeAgentState.todoArgs = undefined;
     fakeAgentState.results = [];
   });
 
@@ -167,6 +170,79 @@ describe("Pi choice asks", () => {
       for await (const event of runtime.run(runRequest, runContext)) events.push(event);
     }).rejects.toThrow("ask_user draft must be text of at most 20000 characters");
     expect(events.some((event) => event.type === "ask")).toBe(false);
+  });
+
+  const seoul = {
+    key: "city-access:seoul",
+    title: "Open the Seoul office account",
+    steps: "Sign in at office.example and enable the Seoul account.",
+    verification: "automatic",
+  };
+  const badge = {
+    key: "city-badge:seoul",
+    title: "Pick up the Seoul door badge",
+    steps: "Collect the badge at reception.",
+    verification: "manual",
+  };
+
+  it("marks the to-do option and carries every prerequisite item onto the ask", async () => {
+    fakeAgentState.todoArgs = {
+      prerequisites: [seoul, badge],
+      option: "Seoul",
+      release: "each",
+    };
+    const runtime = new PiAgentRuntime();
+    const events: AgentRuntimeEvent[] = [];
+
+    for await (const event of runtime.run(runRequest, runContext)) events.push(event);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "ask",
+        actions: [
+          { id: "choice-1", label: "Berlin" },
+          { id: "choice-2", label: "Seoul", todo: true },
+          { id: "choice-3", label: "Toronto" },
+        ],
+        prerequisites: { items: [seoul, badge], release: "each" },
+      }),
+    );
+  });
+
+  it("releases all items together unless told otherwise", async () => {
+    fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Seoul" };
+    const runtime = new PiAgentRuntime();
+    const events: AgentRuntimeEvent[] = [];
+
+    for await (const event of runtime.run(runRequest, runContext)) events.push(event);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({ prerequisites: { items: [seoul], release: "all" } }),
+    );
+  });
+
+  it("rejects a to-do option that is not one of the options", async () => {
+    fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Paris" };
+    const runtime = new PiAgentRuntime();
+    const events: AgentRuntimeEvent[] = [];
+
+    await expect(async () => {
+      for await (const event of runtime.run(runRequest, runContext)) events.push(event);
+    }).rejects.toThrow("ask_user option must be exactly one of the options");
+    expect(events.some((event) => event.type === "ask")).toBe(false);
+  });
+
+  it("rejects items that repeat a key or miss their steps", async () => {
+    for (const prerequisites of [
+      [seoul, { ...badge, key: seoul.key }],
+      [{ ...seoul, steps: "" }],
+    ]) {
+      fakeAgentState.todoArgs = { prerequisites, option: "Seoul" };
+      const runtime = new PiAgentRuntime();
+      await expect(async () => {
+        for await (const _event of runtime.run(runRequest, runContext));
+      }).rejects.toThrow("ask_user prerequisites needs 1–10 items with unique key");
+    }
   });
 
   it("returns the consumer's refusal without pausing when no card was made", async () => {

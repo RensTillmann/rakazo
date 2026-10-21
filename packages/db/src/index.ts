@@ -43,4 +43,6 @@ export * from "./sessions.js";
 export * from "./spaces.js";
 export * from "./transaction-retry.js";
 export * from "./usage.js";
+export * from "./user-todo-actions.js";
+export * from "./user-todos.js";
 export * from "./voice-credentials.js";

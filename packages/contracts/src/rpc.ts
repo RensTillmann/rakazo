@@ -212,6 +212,63 @@ export type WithdrawDecisionInput = z.infer<typeof WithdrawDecisionInputSchema>;
 export const WithdrawDecisionOutputSchema = z.object({ withdrawn: z.boolean(), runId: Id });
 export type WithdrawDecisionOutput = z.infer<typeof WithdrawDecisionOutputSchema>;
 
+/**
+ * Fleet: a manual prerequisite the user chose to do themselves. `verified` needs the requesting
+ * bot's positive evidence; `confirmed` is the user's own word for a task no bot can check.
+ */
+export const USER_TODO_STATUSES = [
+  "open",
+  "checking",
+  "verified",
+  "remaining",
+  "unavailable",
+  "confirmed",
+  "retired",
+] as const;
+export const UserTodoStatusSchema = z.enum(USER_TODO_STATUSES);
+export type UserTodoStatus = z.infer<typeof UserTodoStatusSchema>;
+
+/** Statuses the user can still act on. */
+export const ACTIONABLE_USER_TODO_STATUSES = [
+  "open",
+  "checking",
+  "remaining",
+  "unavailable",
+] as const satisfies readonly UserTodoStatus[];
+
+export const UserTodoSchema = z.object({
+  id: Id,
+  botId: Id,
+  botName: z.string(),
+  threadId: Id,
+  /** The card the item came from; its items form one group in the list. */
+  groupId: Id,
+  /** The card's question, as the group's header. */
+  groupTitle: z.string(),
+  /** How the group's satisfied items wake the bot. */
+  release: z.enum(["each", "all"]),
+  requirementKey: z.string(),
+  title: z.string(),
+  steps: z.string(),
+  verification: z.enum(["automatic", "manual"]),
+  status: UserTodoStatusSchema,
+  /** The remaining step, why it could not be checked, or why it is no longer needed. */
+  statusDetail: z.string().nullable(),
+  evidence: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
+  checkRequestedAt: IsoDate.nullable(),
+  checkedAt: IsoDate.nullable(),
+  createdAt: IsoDate,
+  updatedAt: IsoDate,
+});
+export type UserTodo = z.infer<typeof UserTodoSchema>;
+
+/** A to-do action against the revision the user saw; a stale revision is a conflict. */
+export const UserTodoActionInputSchema = z
+  .object({ todoId: Id, revision: z.number().int().nonnegative() })
+  .strict();
+export type UserTodoActionInput = z.infer<typeof UserTodoActionInputSchema>;
+
 export const appContract = {
   aiConsent: {
     status: oc.input(AiConsentQuerySchema).output(AiConsentStatusSchema),
@@ -1061,6 +1118,14 @@ export const appContract = {
   decisions: {
     list: oc.output(z.object({ decisions: z.array(PendingDecisionSchema) })),
     withdraw: oc.input(WithdrawDecisionInputSchema).output(WithdrawDecisionOutputSchema),
+  },
+  /** Fleet: the caller's manual prerequisites, actionable first. */
+  todos: {
+    list: oc.output(z.object({ todos: z.array(UserTodoSchema) })),
+    /** Done — check now: asks the requesting bot to verify an automatic to-do. */
+    check: oc.input(UserTodoActionInputSchema).output(z.object({ todo: UserTodoSchema })),
+    /** I did it: the user confirms a manual to-do no bot can verify. */
+    confirm: oc.input(UserTodoActionInputSchema).output(z.object({ todo: UserTodoSchema })),
   },
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),

@@ -137,8 +137,10 @@ import {
   readHistory,
   recordSubscriptionLimitReading,
   recordUsage,
+  reportUserTodo,
   reserveInstructionProposal,
   retireModelCredential,
+  retireUserTodo,
   SpaceLimitError,
   searchHistory,
   settleReleasedTakeoverCards,
@@ -6443,6 +6445,45 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
             return finish(removed);
           }
+          if (name === "todo_report" || name === "todo_retire") {
+            const outcome = String(args.outcome ?? "");
+            const todoId = String(args.todo_id ?? "");
+            const result =
+              name === "todo_retire"
+                ? await retireUserTodo(deps.prisma, {
+                    spaceId: run.spaceId,
+                    botId: bot.id,
+                    todoId,
+                    reason: String(args.reason ?? ""),
+                  })
+                : outcome === "verified" || outcome === "remaining" || outcome === "unavailable"
+                  ? await reportUserTodo(deps.prisma, {
+                      spaceId: run.spaceId,
+                      botId: bot.id,
+                      todoId,
+                      outcome,
+                      evidence: String(args.evidence ?? ""),
+                      ...(args.remaining_step !== undefined
+                        ? { remainingStep: String(args.remaining_step) }
+                        : {}),
+                    })
+                  : { error: "outcome must be verified, remaining or unavailable." };
+            if ("error" in result) return finish(result);
+            // The item satisfied its work: the release message is already committed to the thread.
+            if (result.wake) {
+              const { wake } = result;
+              await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
+                getLogger().error("to-do release notify", error);
+              });
+              if (wake.startedRunId) {
+                // The queued run is durable; the reconciler repairs a missed wake.
+                await deps.jobs
+                  .enqueue(runContinueJob(wake.startedRunId))
+                  .catch((error: unknown) => getLogger().error("to-do release enqueue", error));
+              }
+            }
+            return finish({ todo: result.todo });
+          }
           if (name === "board_tickets") {
             return finish(
               await listBoardTickets(deps, {
@@ -8224,8 +8265,20 @@ export function createRunExecutor(deps: ExecutorDeps) {
               const safeActions = event.actions?.map((action) => ({
                 id: action.id,
                 label: redactSecrets(action.label, runSecrets),
+                ...(action.todo && event.prerequisites ? { todo: true as const } : {}),
               }));
               const safeDraft = event.draft ? redactSecrets(event.draft, runSecrets) : undefined;
+              const safePrerequisites = event.prerequisites
+                ? {
+                    release: event.prerequisites.release,
+                    items: event.prerequisites.items.map((item) => ({
+                      key: item.key,
+                      title: redactSecrets(item.title, runSecrets),
+                      steps: redactSecrets(item.steps, runSecrets),
+                      verification: item.verification,
+                    })),
+                  }
+                : undefined;
               await workspaceCheckpoint.flush();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
@@ -8243,6 +8296,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     status: "pending",
                     actions: safeActions,
                     ...(safeDraft ? { draft: safeDraft } : {}),
+                    ...(safePrerequisites ? { prerequisites: safePrerequisites } : {}),
                   },
                 ],
                 // Keep unredacted labels on the run for resume; message blocks stay redacted.

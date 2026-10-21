@@ -101,6 +101,52 @@ export const THINKING_BLOCK_MAX_CHARS = 8_000;
 /** Longest reply draft an ask card shows editable (`ask_user` `draft`, `threads.answer` `draftFinal`). */
 export const ASK_DRAFT_MAX_LENGTH = 20_000;
 
+/**
+ * Fleet: one manual prerequisite an ask card offers to hand to the user. Choosing the card's
+ * `todo` option creates or refreshes the user's to-do for `key`; it never marks it done.
+ */
+export const AskPrerequisite = z.object({
+  /** Stable requirement identity; a replacement card with the same key keeps the same to-do. */
+  key: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(300),
+  /** The exact steps the user takes. */
+  steps: z.string().trim().min(1).max(4000),
+  /** `automatic`: the bot can check it with its own read-only tools; `manual`: only the user can. */
+  verification: z.enum(["automatic", "manual"]),
+});
+export type AskPrerequisite = z.infer<typeof AskPrerequisite>;
+
+export const ASK_PREREQUISITES_MAX = 10;
+
+/**
+ * `each`: every satisfied item wakes the bot for the work that needed only it. `all`: the bot is
+ * woken once, when the last item of the card is satisfied.
+ */
+export const PrerequisiteRelease = z.enum(["each", "all"]);
+export type PrerequisiteRelease = z.infer<typeof PrerequisiteRelease>;
+
+/** Fleet: the to-do items a card's `todo` option hands to the user, and how they release work. */
+export const AskPrerequisites = z.object({
+  items: z
+    .array(AskPrerequisite)
+    .min(1)
+    .max(ASK_PREREQUISITES_MAX)
+    .refine((items) => new Set(items.map((item) => item.key)).size === items.length, {
+      message: "prerequisite keys must be unique within a card",
+    }),
+  release: PrerequisiteRelease,
+});
+export type AskPrerequisites = z.infer<typeof AskPrerequisites>;
+
+/** `ask_user`'s to-do arguments: the items, the option that accepts them, and the release mode. */
+export const AskPrerequisitesInput = z.object({
+  prerequisites: AskPrerequisites.shape.items,
+  /** The exact label of the option meaning "I will do it myself". */
+  option: z.string().trim().min(1).max(80),
+  release: PrerequisiteRelease.default("all"),
+});
+export type AskPrerequisitesInput = z.infer<typeof AskPrerequisitesInput>;
+
 export const MessageBlock = z.discriminatedUnion("kind", [
   /** `narration`: text written mid-turn before a tool call; clients may hide it. */
   z.object({ kind: z.literal("text"), text: z.string(), narration: z.boolean().optional() }),
@@ -138,6 +184,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     purpose: SecretAskPurpose.optional(),
     /** Fleet: a reply the bot drafted, shown editable on the card above its options. */
     draft: z.string().optional(),
+    /** Fleet: the manual prerequisites the card's `todo` option hands to the user as to-dos. */
+    prerequisites: AskPrerequisites.optional(),
     /**
      * Fleet: the draft as the user sent it, set only when it differs from `draft`. The bot was
      * told to send exactly this; the fleet service diffs it against `draft`.
@@ -172,6 +220,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
           id: z.string(),
           label: z.string(),
           outcome: z.enum(["created", "cancelled"]).optional(),
+          /** Fleet: choosing this option creates the card's `prerequisite` to-do. */
+          todo: z.literal(true).optional(),
         }),
       )
       .optional(),

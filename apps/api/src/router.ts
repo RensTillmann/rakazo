@@ -195,6 +195,7 @@ import {
   claimEmptySpaceDeletionForMember,
   commitBotUpdate,
   comparePreferenceOrder,
+  confirmUserTodo,
   createExternalConversationRepos,
   createGroupRepos,
   createRepos,
@@ -219,6 +220,7 @@ import {
   listPendingDecisions,
   listSpaceBackupModels,
   listTicketComments,
+  listUserTodos,
   lockOwnedGroup,
   modelCredentialProviderFilter,
   newestModelCredentialOrder,
@@ -231,6 +233,7 @@ import {
   renameSpaceForMember,
   renewSpaceDeletionClaim,
   replaceSpaceBackupModels,
+  requestUserTodoCheck,
   restoreBotUnderComputerQuota,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
@@ -243,6 +246,9 @@ import {
   toTicketCommentDto,
   toTicketDto,
   touchGroupUpdatedAt,
+  type UserTodoActionResult,
+  UserTodoConflictError,
+  UserTodoNotFoundError,
 } from "@rakazo/db";
 import { enrichLogContext, getLogger } from "@rakazo/logging";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
@@ -6458,6 +6464,17 @@ export function createRouter(deps: RouterDeps) {
         return result;
       }),
     },
+    todos: {
+      list: authed.todos.list.handler(async ({ context }) => ({
+        todos: await listUserTodos(deps.prisma, context.actor),
+      })),
+      check: authed.todos.check.handler(({ context, input }) =>
+        runUserTodoAction(deps, () => requestUserTodoCheck(deps.prisma, context.actor, input)),
+      ),
+      confirm: authed.todos.confirm.handler(({ context, input }) =>
+        runUserTodoAction(deps, () => confirmUserTodo(deps.prisma, context.actor, input)),
+      ),
+    },
     runs: {
       list: authed.runs.list.handler(async ({ context, input }) => ({
         runs: await listSpaceRuns(deps.prisma, context.actor, input.filter),
@@ -7499,6 +7516,36 @@ async function clearGoneSandbox(
     data: { state: "stopped", providerRef: null },
   });
   return null;
+}
+
+/** Commits a to-do action, then publishes and wakes its bot message like any sent message. */
+async function runUserTodoAction(
+  deps: RouterDeps,
+  action: () => Promise<UserTodoActionResult>,
+) {
+  let result: UserTodoActionResult;
+  try {
+    result = await action();
+  } catch (error) {
+    if (error instanceof UserTodoNotFoundError) throw new ORPCError("NOT_FOUND");
+    if (error instanceof UserTodoConflictError) {
+      throw new ORPCError("CONFLICT", { message: error.message });
+    }
+    throw error;
+  }
+  const { wake } = result;
+  if (!wake) return { todo: result.todo };
+  await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
+    // The message is durable; subscribers recover it from their cursor.
+    getLogger().error("to-do message notify", error);
+  });
+  if (wake.startedRunId) {
+    // The queued run is durable; the reconciler repairs a missed wake.
+    await deps.jobs.enqueue(runContinueJob(wake.startedRunId)).catch((error: unknown) => {
+      getLogger().error("to-do message enqueue", error);
+    });
+  }
+  return { todo: result.todo };
 }
 
 async function keepComputerAwake(deps: RouterDeps, computerId: string) {

@@ -248,6 +248,8 @@ const BUILTIN_ACTIONS: Record<string, string | ((args: Record<string, unknown>) 
   scratchpad_update: "change a note",
   scratchpad_complete: "tick off a note",
   scratchpad_remove: "remove a note",
+  todo_report: "report on your to-do",
+  todo_retire: "close one of your to-dos",
   board_tickets: "look at the board",
   ticket_get: "read a ticket",
   ticket_create: "create a ticket",

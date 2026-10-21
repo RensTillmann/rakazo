@@ -445,7 +445,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "ask_user",
     description:
-      "Ask the user one short multiple-choice question with tappable options, then wait for their selection. Use this instead of asking them to type when two to four concise choices are enough. When the question is whether to send a reply you drafted, put the reply itself in `draft`: the user can edit it on the card before choosing, and if they do, their answer carries the edited reply to send exactly.",
+      "Ask the user one short multiple-choice question with tappable options, then wait for their selection. Use this instead of asking them to type when two to four concise choices are enough. When the question is whether to send a reply you drafted, put the reply itself in `draft`: the user can edit it on the card before choosing, and if they do, their answer carries the edited reply to send exactly. When one option means the user will do manual steps themselves (grant access, change a setting), list them in `prerequisites` and name that option in `option`: choosing it gives the user one to-do per item with the exact steps, which you later verify with todo_report.",
     inputSchema: {
       type: "object",
       properties: {
@@ -462,6 +462,50 @@ export const builtinAgentTools: ConnectorTool[] = [
           maxLength: ASK_DRAFT_MAX_LENGTH,
           description:
             "Optional: the full reply you drafted, nothing else (no headers or notes). Shown editable on the card.",
+        },
+        prerequisites: {
+          type: "array",
+          minItems: 1,
+          maxItems: 10,
+          description:
+            "Optional: the manual steps the user may take on themselves, one item per separate requirement. Choosing `option` creates their to-dos; it records intent only, never completion.",
+          items: {
+            type: "object",
+            properties: {
+              key: {
+                type: "string",
+                minLength: 1,
+                maxLength: 200,
+                description:
+                  "Stable identity of the requirement, unique on this card (e.g. `github-access:org/repo:write`). Reuse it when asking again about the same requirement.",
+              },
+              title: { type: "string", minLength: 1, maxLength: 300 },
+              steps: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4000,
+                description: "The exact steps the user takes, complete enough to follow alone.",
+              },
+              verification: {
+                type: "string",
+                enum: ["automatic", "manual"],
+                description:
+                  "automatic: you can check it with your own read-only tools; manual: only the user can tell.",
+              },
+            },
+            required: ["key", "title", "steps", "verification"],
+          },
+        },
+        option: {
+          type: "string",
+          description:
+            "With `prerequisites`: the exact label of the option that means the user will do them.",
+        },
+        release: {
+          type: "string",
+          enum: ["each", "all"],
+          description:
+            "With `prerequisites`: `each` wakes you as each item is satisfied (work that needs only that item); `all` (default) wakes you once when every item is satisfied.",
         },
       },
       required: ["question", "options"],
@@ -908,6 +952,42 @@ export const builtinAgentTools: ConnectorTool[] = [
         itemId: { type: "string" },
       },
       required: ["itemId"],
+    },
+  },
+  {
+    name: "todo_report",
+    description:
+      "Report your check of the user's to-do (only a to-do you asked for). verified: positive evidence it is done. remaining: you checked and it is not done; give remaining_step. unavailable: you could not check (tool missing, timeout); not the same as remaining. Never change anything to make a check pass.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        todo_id: { type: "string" },
+        outcome: { type: "string", enum: ["verified", "remaining", "unavailable"] },
+        evidence: {
+          type: "string",
+          maxLength: 4000,
+          description: "What you observed, or why you could not check.",
+        },
+        remaining_step: {
+          type: "string",
+          maxLength: 1000,
+          description: "Required for remaining: the step the user still has to do.",
+        },
+      },
+      required: ["todo_id", "outcome", "evidence"],
+    },
+  },
+  {
+    name: "todo_retire",
+    description:
+      "Retire a to-do you asked the user for when its requirement was cancelled or superseded. The user then no longer sees it as something to do.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        todo_id: { type: "string" },
+        reason: { type: "string", minLength: 1, maxLength: 1000 },
+      },
+      required: ["todo_id", "reason"],
     },
   },
   {
