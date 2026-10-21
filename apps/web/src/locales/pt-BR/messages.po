@@ -21,6 +21,10 @@ msgstr ""
 msgid " (unread)"
 msgstr " (não lido)"
 
+#: src/components/TodosControl.tsx
+msgid "(you)"
+msgstr ""
+
 #. placeholder {0}: Math.ceil(oauth.expiresInSeconds / 60)
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -168,10 +172,6 @@ msgstr ""
 #: src/lib/relative-time.ts
 msgid "{days}d ago"
 msgstr "{days}d atrás"
-
-#: src/components/TodosControl.tsx
-msgid "{done} of {total} done"
-msgstr ""
 
 #: src/components/ToolActivityDisclosure.tsx
 msgid "{hidden, plural, one {+# earlier step} other {+# earlier steps}}"
@@ -566,6 +566,14 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Adding…"
 msgstr "Adicionando"
+
+#: src/components/AskCard.tsx
+msgid "adds {prerequisiteCount} to-dos"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "adds 1 to-do"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1196,6 +1204,10 @@ msgstr ""
 msgid "Check in."
 msgstr "Acompanhamento"
 
+#: src/components/TodosControl.tsx
+msgid "Check requested {requestedAt}"
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the API key or sign-in, then test again."
 msgstr "Verifique a chave de API ou o login e teste novamente."
@@ -1208,6 +1220,10 @@ msgstr "Verifique a URL do servidor e a rede e teste novamente."
 msgid "Check your email"
 msgstr "Confira seu e-mail"
 
+#: src/components/TodosControl.tsx
+msgid "Checked {checkedAt}"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Checking computer setup…"
 msgstr ""
@@ -1216,10 +1232,13 @@ msgstr ""
 msgid "Checking Fleet status…"
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "checking…"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
-#: src/components/TodosControl.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Checking…"
 msgstr ""
@@ -1475,10 +1494,6 @@ msgstr "Confirme que a URL está acessível nesta sessão do navegador e teste n
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
-msgstr ""
-
-#: src/components/TodosControl.tsx
-msgid "Confirmed by you"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -2068,11 +2083,7 @@ msgid "Could not verify computer setup ({failureMessage}). Fix the connection, t
 msgstr ""
 
 #: src/components/TodosControl.tsx
-msgid "Couldn't check"
-msgstr ""
-
-#: src/components/TodosControl.tsx
-msgid "Couldn't check: {detail}"
+msgid "couldn't check — tick again to retry"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2143,14 +2154,6 @@ msgstr "Crie o seu Rakazo"
 
 #: src/components/AskCard.tsx
 msgid "Created"
-msgstr ""
-
-#: src/components/AskCard.tsx
-msgid "Creates {prerequisiteCount} to-dos:"
-msgstr ""
-
-#: src/components/AskCard.tsx
-msgid "Creates a to-do: {prerequisiteTitle}"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
@@ -2466,6 +2469,10 @@ msgstr "Não tem uma conta?"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Concluído"
+
+#: src/components/TodosControl.tsx
+msgid "Done ({finishedCount})"
+msgstr ""
 
 #: src/components/computer/FilesApp.tsx
 #: src/pages/Artifacts.tsx
@@ -2991,6 +2998,10 @@ msgstr "hora"
 msgid "hours"
 msgstr "horas"
 
+#: src/components/TodosControl.tsx
+msgid "How"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "How often"
 msgstr "Com que frequência"
@@ -3399,6 +3410,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual setup required"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Mark '{title}' as done"
 msgstr ""
 
 #: src/pages/BotContextMenu.tsx
@@ -3817,13 +3832,12 @@ msgstr ""
 msgid "No longer active"
 msgstr "Não está mais ativo"
 
-#: src/components/AskCard.tsx
 #: src/components/TodosControl.tsx
-msgid "No longer needed"
+msgid "no longer needed"
 msgstr ""
 
-#: src/components/TodosControl.tsx
-msgid "No longer needed: {detail}"
+#: src/components/AskCard.tsx
+msgid "No longer needed"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5134,6 +5148,10 @@ msgstr ""
 msgid "Show computer"
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "Show how"
+msgstr ""
+
 #: src/components/ThinkingText.tsx
 msgid "Show less"
 msgstr ""
@@ -5355,15 +5373,11 @@ msgid "Steps"
 msgstr "Passos"
 
 #: src/components/TodosControl.tsx
-msgid "Steps your bots need you to do yourself."
+msgid "still missing"
 msgstr ""
 
 #: src/components/TodosControl.tsx
-msgid "Still to do"
-msgstr ""
-
-#: src/components/TodosControl.tsx
-msgid "Still to do: {detail}"
+msgid "still missing: {detail}"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -5661,14 +5675,6 @@ msgstr ""
 msgid "This week"
 msgstr ""
 
-#: src/components/TodosControl.tsx
-msgid "Tick when done; the bot checks it."
-msgstr ""
-
-#: src/components/TodosControl.tsx
-msgid "Tick when you've done it."
-msgstr ""
-
 #: src/components/ReplyReview.tsx
 msgid "Ticket"
 msgstr ""
@@ -5804,6 +5810,10 @@ msgstr "Não atribuído"
 #: src/components/UsageBars.tsx
 #: src/pages/Shell.tsx
 msgid "Unavailable"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "unblocks {botName}"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -5993,10 +6003,6 @@ msgstr ""
 msgid "Values are encrypted and never shown again."
 msgstr "Os valores são criptografados e não são exibidos novamente."
 
-#: src/components/TodosControl.tsx
-msgid "Verified"
-msgstr ""
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "Verificar e adicionar"
@@ -6095,6 +6101,10 @@ msgstr "O que monitorar"
 
 #: src/components/FlagMessageDialog.tsx
 msgid "What went wrong, or what should be different?"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "What your bots need you to do."
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx

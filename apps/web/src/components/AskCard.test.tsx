@@ -119,19 +119,20 @@ describe("AskCard free-text option", () => {
       ],
     }) as unknown as AskBlock;
 
-  it("notes the to-do the accepting option creates", () => {
+  it("notes under the accepting option that it adds a to-do", () => {
     const html = renderToStaticMarkup(
       <AskCard block={withPrerequisites([dns])} canAnswer onAnswer={async () => {}} />,
     );
-    expect(html.match(/Creates a to-do: Add the DNS record/g)).toHaveLength(1);
-    expect(html.indexOf("Creates a to-do")).toBeGreaterThan(html.indexOf("do it myself"));
-    expect(html.indexOf("Creates a to-do")).toBeLessThan(html.indexOf("Skip"));
+    expect(html.match(/adds 1 to-do</g)).toHaveLength(1);
+    expect(html).toContain('title="Add the DNS record"');
+    expect(html.indexOf("adds 1 to-do")).toBeGreaterThan(html.indexOf("do it myself"));
+    expect(html.indexOf("adds 1 to-do")).toBeLessThan(html.indexOf("Skip"));
     expect(
       renderToStaticMarkup(<AskCard block={block} canAnswer onAnswer={async () => {}} />),
-    ).not.toContain("Creates");
+    ).not.toContain("to-do");
   });
 
-  it("lists every to-do when the option creates several", () => {
+  it("counts several to-dos and keeps their titles in the tooltip", () => {
     const html = renderToStaticMarkup(
       <AskCard
         block={withPrerequisites([dns, { ...dns, key: "mx", title: "Add the MX record" }])}
@@ -139,11 +140,8 @@ describe("AskCard free-text option", () => {
         onAnswer={async () => {}}
       />,
     );
-    expect(html).toContain("Creates 2 to-dos:");
-    expect(html).toContain("Add the DNS record");
-    expect(html).toContain("Add the MX record");
-    expect(html).not.toContain("Creates a to-do");
-    expect(html.indexOf("Add the MX record")).toBeLessThan(html.indexOf("Skip"));
+    expect(html).toContain("adds 2 to-dos");
+    expect(html).toContain('title="Add the DNS record\nAdd the MX record"');
   });
 
   describe("typing an answer", () => {

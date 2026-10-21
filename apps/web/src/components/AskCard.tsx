@@ -181,7 +181,6 @@ export function AskCard({
       )
     : askActions;
   const prerequisiteItems = block.prerequisites?.items ?? [];
-  const prerequisiteTitle = prerequisiteItems[0]?.title;
   const prerequisiteCount = prerequisiteItems.length;
   const secretInput = isSecretAskBlock(block);
   const loginInput = secretInput && block.credential?.auth.type === "login";
@@ -469,22 +468,14 @@ export function AskCard({
               ) : "todo" in action && action.todo && prerequisiteCount ? (
                 <span className="flex min-w-0 flex-col items-start gap-1">
                   <span>{action.label}</span>
-                  {prerequisiteCount === 1 ? (
-                    <span className="text-xs text-muted-foreground">
-                      {t`Creates a to-do: ${prerequisiteTitle}`}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {t`Creates ${prerequisiteCount} to-dos:`}
-                      <span className="mt-0.5 block ps-3">
-                        {prerequisiteItems.map((item) => (
-                          <span key={item.key} className="block">
-                            • {item.title}
-                          </span>
-                        ))}
-                      </span>
-                    </span>
-                  )}
+                  <span
+                    className="text-xs text-muted-foreground"
+                    title={prerequisiteItems.map((item) => item.title).join("\n")}
+                  >
+                    {prerequisiteCount === 1
+                      ? t`adds 1 to-do`
+                      : t`adds ${prerequisiteCount} to-dos`}
+                  </span>
                 </span>
               ) : (
                 action.label

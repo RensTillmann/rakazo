@@ -21,6 +21,10 @@ msgstr ""
 msgid " (unread)"
 msgstr "（未读）"
 
+#: src/components/TodosControl.tsx
+msgid "(you)"
+msgstr ""
+
 #. placeholder {0}: Math.ceil(oauth.expiresInSeconds / 60)
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -168,10 +172,6 @@ msgstr ""
 #: src/lib/relative-time.ts
 msgid "{days}d ago"
 msgstr "{days} 天前"
-
-#: src/components/TodosControl.tsx
-msgid "{done} of {total} done"
-msgstr ""
 
 #: src/components/ToolActivityDisclosure.tsx
 msgid "{hidden, plural, one {+# earlier step} other {+# earlier steps}}"
@@ -566,6 +566,14 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Adding…"
 msgstr "正在添加…"
+
+#: src/components/AskCard.tsx
+msgid "adds {prerequisiteCount} to-dos"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "adds 1 to-do"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1196,6 +1204,10 @@ msgstr "检查更新"
 msgid "Check in."
 msgstr "报到。"
 
+#: src/components/TodosControl.tsx
+msgid "Check requested {requestedAt}"
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the API key or sign-in, then test again."
 msgstr "请检查 API 密钥或登录，然后重新测试。"
@@ -1208,6 +1220,10 @@ msgstr "请检查服务器 URL 和网络，然后重新测试。"
 msgid "Check your email"
 msgstr "请查看邮箱"
 
+#: src/components/TodosControl.tsx
+msgid "Checked {checkedAt}"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Checking computer setup…"
 msgstr ""
@@ -1216,10 +1232,13 @@ msgstr ""
 msgid "Checking Fleet status…"
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "checking…"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
-#: src/components/TodosControl.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Checking…"
 msgstr "正在检查…"
@@ -1475,10 +1494,6 @@ msgstr "请确认此浏览器会话可以访问该 URL，然后重新测试。"
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
-msgstr ""
-
-#: src/components/TodosControl.tsx
-msgid "Confirmed by you"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -2068,11 +2083,7 @@ msgid "Could not verify computer setup ({failureMessage}). Fix the connection, t
 msgstr ""
 
 #: src/components/TodosControl.tsx
-msgid "Couldn't check"
-msgstr ""
-
-#: src/components/TodosControl.tsx
-msgid "Couldn't check: {detail}"
+msgid "couldn't check — tick again to retry"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2144,14 +2155,6 @@ msgstr "创建你的 Rakazo"
 #: src/components/AskCard.tsx
 msgid "Created"
 msgstr "已创建"
-
-#: src/components/AskCard.tsx
-msgid "Creates {prerequisiteCount} to-dos:"
-msgstr ""
-
-#: src/components/AskCard.tsx
-msgid "Creates a to-do: {prerequisiteTitle}"
-msgstr ""
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -2466,6 +2469,10 @@ msgstr "还没有账户？"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "完成"
+
+#: src/components/TodosControl.tsx
+msgid "Done ({finishedCount})"
+msgstr ""
 
 #: src/components/computer/FilesApp.tsx
 #: src/pages/Artifacts.tsx
@@ -2991,6 +2998,10 @@ msgstr "小时"
 msgid "hours"
 msgstr "小时"
 
+#: src/components/TodosControl.tsx
+msgid "How"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "How often"
 msgstr "频率"
@@ -3399,6 +3410,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual setup required"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Mark '{title}' as done"
 msgstr ""
 
 #: src/pages/BotContextMenu.tsx
@@ -3817,13 +3832,12 @@ msgstr "还没有群聊。"
 msgid "No longer active"
 msgstr "已停用"
 
-#: src/components/AskCard.tsx
 #: src/components/TodosControl.tsx
-msgid "No longer needed"
+msgid "no longer needed"
 msgstr ""
 
-#: src/components/TodosControl.tsx
-msgid "No longer needed: {detail}"
+#: src/components/AskCard.tsx
+msgid "No longer needed"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5134,6 +5148,10 @@ msgstr ""
 msgid "Show computer"
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "Show how"
+msgstr ""
+
 #: src/components/ThinkingText.tsx
 msgid "Show less"
 msgstr ""
@@ -5355,15 +5373,11 @@ msgid "Steps"
 msgstr "步骤"
 
 #: src/components/TodosControl.tsx
-msgid "Steps your bots need you to do yourself."
+msgid "still missing"
 msgstr ""
 
 #: src/components/TodosControl.tsx
-msgid "Still to do"
-msgstr ""
-
-#: src/components/TodosControl.tsx
-msgid "Still to do: {detail}"
+msgid "still missing: {detail}"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -5661,14 +5675,6 @@ msgstr ""
 msgid "This week"
 msgstr ""
 
-#: src/components/TodosControl.tsx
-msgid "Tick when done; the bot checks it."
-msgstr ""
-
-#: src/components/TodosControl.tsx
-msgid "Tick when you've done it."
-msgstr ""
-
 #: src/components/ReplyReview.tsx
 msgid "Ticket"
 msgstr ""
@@ -5805,6 +5811,10 @@ msgstr "未分配"
 #: src/pages/Shell.tsx
 msgid "Unavailable"
 msgstr "不可用"
+
+#: src/components/TodosControl.tsx
+msgid "unblocks {botName}"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Undo"
@@ -5993,10 +6003,6 @@ msgstr ""
 msgid "Values are encrypted and never shown again."
 msgstr "值会加密保存，之后不再显示。"
 
-#: src/components/TodosControl.tsx
-msgid "Verified"
-msgstr ""
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "校验并添加"
@@ -6095,6 +6101,10 @@ msgstr "监视内容"
 
 #: src/components/FlagMessageDialog.tsx
 msgid "What went wrong, or what should be different?"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "What your bots need you to do."
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx

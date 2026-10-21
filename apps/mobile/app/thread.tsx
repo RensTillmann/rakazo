@@ -3937,30 +3937,23 @@ const MessageBubble = memo(function MessageBubble({
                   {askBlock.draftFinal ?? askBlock.draft}
                 </Text>
               ) : null}
-              {askBlock.prerequisites?.items.map((item) => (
+              {askBlock.prerequisites?.items.length ? (
                 // Fleet: read-only; the to-dos themselves are tracked on the web.
-                <View
-                  key={item.key}
+                <Text
+                  numberOfLines={4}
                   style={{
-                    backgroundColor: tokens.muted,
-                    borderRadius: 12,
+                    color: tokens.mutedForeground,
                     marginTop: 8,
-                    paddingHorizontal: 12,
-                    paddingVertical: 10,
-                    gap: 4,
+                    fontSize: 12.5,
+                    lineHeight: 18,
                   }}
                 >
-                  <Text style={{ color: tokens.foreground, fontSize: 13.5, fontWeight: "600" }}>
-                    {t("To-do: {title}", { title: item.title })}
-                  </Text>
-                  <Text
-                    selectable
-                    style={{ color: tokens.mutedForeground, fontSize: 13.5, lineHeight: 20 }}
-                  >
-                    {item.steps}
-                  </Text>
-                </View>
-              ))}
+                  {askBlock.prerequisites.items.length === 1
+                    ? t("adds 1 to-do")
+                    : t("adds {count} to-dos", { count: askBlock.prerequisites.items.length })}
+                  {askBlock.prerequisites.items.map((item) => `\n• ${item.title}`).join("")}
+                </Text>
+              ) : null}
               {askBlock.status === "answered" ? (
                 <Text
                   {...actionProps}
