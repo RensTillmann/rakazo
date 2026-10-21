@@ -106,10 +106,11 @@ its evidence, and a retired one starts over. The answer stays in history as an a
 intent only: nothing is marked done and nothing is approved. The resumed bot is told the to-do ids and
 not to ask again.
 
-The To-dos button in the left sidebar (also in the collapsed rail) shows the open count and opens the
-list, grouped by card: cards with an unfinished item that blocks other work first, then by priority
+The To-dos button in the left sidebar (also in the collapsed rail) is always shown; it carries the open
+count when something is open and opens the list ("Nothing waiting on you" when nothing is), grouped by card: cards with an unfinished item that blocks other work first, then by priority
 (unknown after p3), then oldest asked; items keep the bot's order. A group has one header line (bot ·
-topic, progress "2/3", retired items excluded); each item is one line: a checkbox, a short title, a red
+topic, a "Show question" link that opens the card in its chat or room through the usual `?m=` message
+jump, progress "2/3", retired items excluded); each item is one line: a checkbox, a short title, a red
 "blocks …" chip while it blocks other work, and only when it matters one short muted line. Clicking the
 title opens why it is needed, the numbered steps, who checks it, and chips for the card's case and the
 asked date. Finished items fold into one "Done (N)" row; retired ones show ⊘ and a struck-through title.
