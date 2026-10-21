@@ -800,6 +800,10 @@ msgstr "Aprovar"
 msgid "Approve this server to let your agent use its tools."
 msgstr "Aprove este servidor para permitir que seu agente use suas ferramentas."
 
+#: src/components/ReplyReview.tsx
+msgid "Approved for version"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
 msgstr "Arquivar"
@@ -2245,11 +2249,8 @@ msgid "Customer context unavailable."
 msgstr ""
 
 #: src/components/AskCard.tsx
-msgid "Customer inquiry"
-msgstr ""
-
 #: src/components/ReplyReview.tsx
-msgid "Customer message"
+msgid "Customer inquiry"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -2700,10 +2701,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Expand {label}"
 msgstr "Expandir {label}"
-
-#: src/components/ReplyReview.tsx
-msgid "Expected last comment"
-msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
@@ -3826,6 +3823,10 @@ msgstr ""
 
 #: src/components/ReplyReview.tsx
 msgid "Newer comments exist since this reply was proposed."
+msgstr ""
+
+#: src/components/ReplyReview.tsx
+msgid "Newest customer message"
 msgstr ""
 
 #: src/components/DecisionDock.tsx

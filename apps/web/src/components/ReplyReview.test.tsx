@@ -20,11 +20,46 @@ const review: ApprovalReview = {
   proposedReply,
   status: "pending",
   tags: [],
-  expectedLastCommentId: "10",
+  cardVersion: "10",
   customerContext: { status: "unavailable" },
 };
 
 describe("reply review", () => {
+  it("shows the Fleet's full inquiry, the newest version and stale state", async () => {
+    const inquiry = `Zendesk #3529: Form\n\n[#98100 · first inquiry · customer · Customer A · 2026-10-20]\n${"Long text. ".repeat(500)}END Ω`;
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    await act(async () =>
+      root.render(
+        <ReplyReview
+          review={{
+            ...review,
+            ticket: "3529",
+            cardVersion: "98100",
+            customerContext: {
+              status: "available",
+              stale: true,
+              ticket: "3529",
+              subject: "Form",
+              source: { ref: "zendesk:3529", version: "98123" },
+              firstInquiry: "98100",
+              thread: [],
+              inquiry,
+              bounded: false,
+            },
+          }}
+          retry={() => {}}
+        />,
+      ),
+    );
+    expect(host.querySelector('[data-testid="reply-review-inquiry"]')?.textContent).toBe(inquiry);
+    expect(host.textContent).toContain("Newer comments exist since this reply was proposed.");
+    expect(host.textContent).toContain("Approved for version: 98100");
+    expect(host.textContent).toContain("Newest customer message: 98123");
+    await act(async () => root.unmount());
+  });
+
+
   it("retains the proposal's exact whitespace and final characters without interpreting customer-controlled HTML", async () => {
     const host = document.createElement("div");
     const root = createRoot(host);

@@ -800,6 +800,10 @@ msgstr "批准"
 msgid "Approve this server to let your agent use its tools."
 msgstr "批准此服务器后，Agent 才能使用它的工具。"
 
+#: src/components/ReplyReview.tsx
+msgid "Approved for version"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
 msgstr "归档"
@@ -2245,11 +2249,8 @@ msgid "Customer context unavailable."
 msgstr ""
 
 #: src/components/AskCard.tsx
-msgid "Customer inquiry"
-msgstr ""
-
 #: src/components/ReplyReview.tsx
-msgid "Customer message"
+msgid "Customer inquiry"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -2700,10 +2701,6 @@ msgstr "展开 {0}"
 #: src/pages/Shell.tsx
 msgid "Expand {label}"
 msgstr "展开 {label}"
-
-#: src/components/ReplyReview.tsx
-msgid "Expected last comment"
-msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
@@ -3826,6 +3823,10 @@ msgstr ""
 
 #: src/components/ReplyReview.tsx
 msgid "Newer comments exist since this reply was proposed."
+msgstr ""
+
+#: src/components/ReplyReview.tsx
+msgid "Newest customer message"
 msgstr ""
 
 #: src/components/DecisionDock.tsx

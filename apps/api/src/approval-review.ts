@@ -9,7 +9,7 @@ import {
   parseCatalogApprovalTarget,
 } from "@rakazo/adapters";
 import type { ApprovalReview } from "@rakazo/contracts";
-import { CustomerReplyContextSchema } from "@rakazo/contracts";
+import { CustomerReplyContextSchema, MessageBlock } from "@rakazo/contracts";
 import type { PrismaClient } from "@rakazo/db";
 
 const MARKER = "__rakazoCatalogTool";
@@ -57,7 +57,22 @@ export async function reviewApproval(
   )
     return null;
 
-  const expected = args.expect_last_comment_id;
+  // The Fleet sends only the text Rens approved on this bot's newest answered reply card for the
+  // ticket, at that card's version (zd_reply); show which version that was.
+  const ref = `zendesk:${args.ticket}`;
+  const card = await deps.prisma.message.findFirst({
+    where: {
+      botId: effect.run.botId,
+      role: "bot",
+      thread: { spaceId: actor.spaceId, userId: actor.userId },
+      blocks: { array_contains: [{ kind: "ask", status: "answered", source: { ref } }] },
+    },
+    orderBy: [{ createdAt: "desc" }, { seq: "desc" }],
+    select: { blocks: true },
+  });
+  const cardBlock = MessageBlock.array()
+    .safeParse(card?.blocks)
+    .data?.find((block) => block.kind === "ask" && block.source?.ref === ref);
   const review: ApprovalReview = {
     ticket: String(args.ticket),
     proposedReply: args.body,
@@ -65,8 +80,7 @@ export async function reviewApproval(
     tags: Array.isArray(args.tags)
       ? args.tags.filter((tag): tag is string => typeof tag === "string")
       : [],
-    expectedLastCommentId:
-      typeof expected === "number" && Number.isSafeInteger(expected) ? String(expected) : null,
+    cardVersion: cardBlock?.kind === "ask" ? (cardBlock.source?.version ?? null) : null,
     customerContext: { status: "unavailable" },
   };
   // A legacy proposal still has its complete body, but no provable original account identity.
@@ -110,14 +124,12 @@ export async function reviewApproval(
       if (!result || result.isError) return review;
       const parsed = CustomerReplyContextSchema.safeParse(result.structuredContent);
       if (!parsed.success || parsed.data.ticket !== review.ticket) return review;
-      const latest = parsed.data.latestCommentId;
+      const latest = parsed.data.source?.version ?? null;
       review.customerContext = {
         ...parsed.data,
         status: "available",
-        stale:
-          review.expectedLastCommentId !== null && latest !== null && /^\d+$/.test(latest)
-            ? BigInt(latest) > BigInt(review.expectedLastCommentId)
-            : null,
+        // zd_reply refuses to send unless the newest customer comment is still the card's version.
+        stale: review.cardVersion !== null && latest !== null ? latest !== review.cardVersion : null,
       };
     }
   } catch {

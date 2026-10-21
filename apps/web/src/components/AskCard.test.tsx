@@ -465,7 +465,7 @@ describe("AskCard reply approval review", () => {
     proposedReply: proposal,
     status: "pending",
     tags: ["reviewed"],
-    expectedLastCommentId: "10",
+    cardVersion: "10",
     customerContext: { status: "unavailable" },
   };
   const block: AskBlock = {

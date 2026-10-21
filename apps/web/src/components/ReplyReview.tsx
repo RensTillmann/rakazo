@@ -87,26 +87,24 @@ export function ReplyReview({
   const context = review.customerContext;
   return (
     <div className="mt-4 space-y-4 text-[15.5px] leading-[1.5] text-foreground">
-      <section aria-label={t`Customer message`}>
-        <h3 className="font-semibold">{t`Customer message`}</h3>
+      <section aria-label={t`Customer inquiry`}>
+        <h3 className="font-semibold">{t`Customer inquiry`}</h3>
         {context.status === "available" ? (
           <>
             <div className="mt-1 text-sm text-muted-foreground">{context.subject}</div>
-            {context.customerMessage ? (
-              <>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {context.customerMessage.author} · {context.customerMessage.createdAt}
-                </div>
-                <div
-                  dir="auto"
-                  className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words"
-                >
-                  {context.customerMessage.body}
-                </div>
-              </>
-            ) : (
+            {context.source ? null : (
               <p className="mt-2 text-muted-foreground">{t`No public customer message found.`}</p>
             )}
+            <div
+              data-testid="reply-review-inquiry"
+              dir="auto"
+              className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words"
+            >
+              {context.inquiry}
+            </div>
+            {context.note ? (
+              <p className="mt-2 text-sm text-muted-foreground">{context.note}</p>
+            ) : null}
             {context.stale === true ? (
               <p
                 role="status"
@@ -157,10 +155,16 @@ export function ReplyReview({
               <dd className="inline">{review.tags.join(", ")}</dd>
             </div>
           ) : null}
-          {review.expectedLastCommentId ? (
+          {review.cardVersion ? (
             <div>
-              <dt className="inline font-medium">{t`Expected last comment`}: </dt>
-              <dd className="inline">{review.expectedLastCommentId}</dd>
+              <dt className="inline font-medium">{t`Approved for version`}: </dt>
+              <dd className="inline">{review.cardVersion}</dd>
+            </div>
+          ) : null}
+          {context.status === "available" && context.source ? (
+            <div>
+              <dt className="inline font-medium">{t`Newest customer message`}: </dt>
+              <dd className="inline">{context.source.version}</dd>
             </div>
           ) : null}
         </dl>

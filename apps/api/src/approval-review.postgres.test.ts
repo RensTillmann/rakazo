@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { ConnectorEvent, ConnectorProvider } from "@rakazo/adapter-kit";
 import { ConnectorRegistry, DestinationEmulator } from "@rakazo/adapters";
 import type { Actor } from "@rakazo/contracts";
@@ -22,7 +23,10 @@ describePostgres("saved reply review (PostgreSQL)", () => {
     isDeploymentOwner: true,
   };
   const reply = "The complete proposed reply.\nFINAL Ω";
-  const customerBody = "The complete customer question.\nCUSTOMER END Ω";
+  /** The Fleet's pinned zd_reply_context result (tests/fixtures in the Fleet repo). */
+  const fleet = JSON.parse(
+    readFileSync(new URL("./fixtures/zd_reply_context.json", import.meta.url), "utf8"),
+  ) as { zd_reply_context: { structuredContent: { inquiry: string } } };
   const source: ConnectorProvider = {
     describe: () => ({
       id: "mcp",
@@ -38,17 +42,7 @@ describePostgres("saved reply review (PostgreSQL)", () => {
         type: "result",
         data: {
           isError: false,
-          structuredContent: {
-            ticket: "42",
-            subject: "Customer question",
-            latestCommentId: "100",
-            customerMessage: {
-              id: "100",
-              author: "Customer",
-              createdAt: "2026-01-01T00:00:00Z",
-              body: customerBody,
-            },
-          },
+          structuredContent: fleet.zd_reply_context.structuredContent,
         },
       };
     },
@@ -79,6 +73,25 @@ describePostgres("saved reply review (PostgreSQL)", () => {
       data: { userId, spaceId, name: "Support", color: "blue" },
     });
     const thread = await prisma.thread.create({ data: { userId, spaceId, botId: bot.id } });
+    // The reply card Rens approved, for the version the Fleet still reports as newest.
+    await prisma.message.create({
+      data: {
+        threadId: thread.id,
+        seq: 1,
+        role: "bot",
+        botId: bot.id,
+        blocks: [
+          {
+            kind: "ask",
+            text: "Case 7 · Reply to Customer A (ZD #3529)",
+            status: "answered",
+            answer: "choice-1",
+            draft: reply,
+            source: { ref: "zendesk:3529", version: "98123" },
+          },
+        ],
+      },
+    });
     const task = await prisma.task.create({
       data: {
         userId,
@@ -114,7 +127,7 @@ describePostgres("saved reply review (PostgreSQL)", () => {
         status: "awaiting_approval",
         request: boundDirectApprovalRequest(
           { connectorId: "mcp", resourceId: serverId, resourceRevision: 1, toolName: "zd_reply" },
-          { ticket: 42, body: reply, status: "pending", expect_last_comment_id: 100 },
+          { ticket: 3529, body: reply, status: "pending" },
           "__rakazoCatalogTool",
         ) as Prisma.InputJsonValue,
       },
@@ -129,14 +142,16 @@ describePostgres("saved reply review (PostgreSQL)", () => {
     await close();
   });
 
-  it("shows the original account's customer message to a full authenticated actor, but not after reauthorization", async () => {
+  it("shows the original account's full inquiry and the approved card's version to a full authenticated actor, but not after reauthorization", async () => {
     const deps = { prisma, connectors };
     expect(await reviewApproval(deps, actor, effectId)).toMatchObject({
       proposedReply: reply,
+      cardVersion: "98123",
       customerContext: {
         status: "available",
         stale: false,
-        customerMessage: { body: customerBody },
+        source: { ref: "zendesk:3529", version: "98123" },
+        inquiry: fleet.zd_reply_context.structuredContent.inquiry,
       },
     });
     await prisma.mcpServer.update({ where: { id: serverId }, data: { revision: 2 } });
