@@ -878,6 +878,11 @@ async function commitAnswerRunInput(
 
   if (approvalAsk) {
     if (!pendingAsk.actions?.some((action) => action.id === approvalAnswer)) return null;
+    // Serialize the status read and human decision with source invalidation.
+    // Without this row lock, a source transaction can invalidate the effect
+    // after our read and the later unconditional update resurrects approval.
+    // Keep the existing thread-first order; do not lock a source thread here.
+    await tx.$queryRaw`SELECT id FROM external_effects WHERE id = ${pendingAsk.approvalEffectId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
     approvalEffect = await tx.externalEffect.findFirst({
       where: {
         id: pendingAsk.approvalEffectId,

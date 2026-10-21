@@ -103,8 +103,13 @@ intended/approved effects in the same database transaction. The effect result re
 `source_question_unavailable`, not a fabricated human answer. Denied, completed,
 executing and uncertain effects, unrelated sources and other spaces remain unchanged.
 
+Approval answers lock the exact space-scoped effect row before reading its status,
+serializing the decision with source invalidation. An invalidation that wins first
+is rejected without queueing the approval run or recording a human answer; an answer
+that wins first is subsequently invalidated by the source-ending transaction.
+
 This is not complete lifecycle fencing: legacy-row reconciliation, general cancellation
-and replacement, transactional source binding, approval-answer race protection,
+and replacement, transactional source binding,
 execution-time checks and dependent-card UI refresh remain to be implemented. The
 reference is not a human answer or an authorization grant.
 
