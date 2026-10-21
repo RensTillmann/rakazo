@@ -26,6 +26,9 @@ const ACTIONABLE: readonly UserTodoStatus[] = ACTIONABLE_USER_TODO_STATUSES;
 /** Unticked boxes the user can tick: `checking` waits on the bot instead. */
 const TICKABLE: readonly UserTodoStatus[] = ["open", "remaining", "unavailable"];
 const FINISHED: readonly UserTodoStatus[] = ["verified", "confirmed", "retired"];
+/** Expanded-set key of the list-wide "Done (N)" fold. */
+const DONE_KEY = "done";
+const CHIP = "rounded-full bg-background px-2 py-0.5 text-muted-foreground";
 
 function clip(text: string) {
   return text.length > SHORT_TEXT ? `${text.slice(0, SHORT_TEXT - 1).trimEnd()}…` : text;
@@ -33,7 +36,7 @@ function clip(text: string) {
 
 /** Header control for the user's manual prerequisites; hidden until a bot hands one over. */
 export function TodosControl() {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const resource = useVisibleResource(() => rpc.todos.list(), { key: "todos" });
   const [open, setOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -97,6 +100,28 @@ export function TodosControl() {
     if (group) group.push(todo);
     else groups.set(todo.groupId, [todo]);
   }
+  const sections = [...groups].map(([groupId, items]) => ({
+    groupId,
+    items,
+    active: items.filter((todo) => !FINISHED.includes(todo.status)),
+    finished: items.filter((todo) => FINISHED.includes(todo.status)),
+  }));
+  const finishedCount = sections.reduce((sum, section) => sum + section.finished.length, 0);
+  const showFinished = expanded.has(DONE_KEY);
+
+  /** "<bot> · <topic>", wrapped to two lines; the full text stays in the tooltip. */
+  function groupLabel(items: UserTodo[], className: string) {
+    const { botName, groupTitle } = items[0]!;
+    return (
+      <p
+        className={`line-clamp-2 min-w-0 flex-1 ${className}`}
+        title={`${botName} · ${groupTitle}`}
+      >
+        <span className="font-medium">{botName}</span>
+        <span className="text-muted-foreground"> · {groupTitle}</span>
+      </p>
+    );
+  }
 
   /** One short muted line, only for states where it matters; full text in the tooltip. */
   function secondary(todo: UserTodo) {
@@ -120,6 +145,55 @@ export function TodosControl() {
       >
         {line}
       </p>
+    );
+  }
+
+  /** The opened item: why, steps, who checks it, and chips. The reason under the title is not repeated. */
+  function details(todo: UserTodo) {
+    const { botName, caseNumber } = todo;
+    const asked = i18n.date(new Date(todo.createdAt), { dateStyle: "medium" });
+    const format = (iso: string) =>
+      i18n.date(new Date(iso), { dateStyle: "medium", timeStyle: "short" });
+    const checkedAt = todo.checkedAt ? format(todo.checkedAt) : null;
+    const requestedAt = todo.checkRequestedAt ? format(todo.checkRequestedAt) : null;
+    // Evidence and timestamps stay in the tooltip, not as extra lines.
+    const tooltip = [
+      todo.evidence,
+      checkedAt ? t`Checked ${checkedAt}` : requestedAt ? t`Check requested ${requestedAt}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return (
+      <div
+        data-testid="todo-details"
+        title={tooltip || undefined}
+        className="ms-7 mt-1.5 space-y-1.5 rounded-md bg-muted/50 p-2.5 text-xs"
+      >
+        {todo.why ? (
+          <p data-testid="todo-why" className="whitespace-pre-wrap">
+            {todo.why}
+          </p>
+        ) : null}
+        <ol className="list-decimal space-y-0.5 ps-4">
+          {todo.steps
+            .split("\n")
+            .map((step) => step.replace(/^\s*\d+[.)]\s*/, "").trim())
+            .filter(Boolean)
+            .map((step, index) => (
+              <li key={`${index}:${step}`}>{step}</li>
+            ))}
+        </ol>
+        <p data-testid="todo-checker" className="text-muted-foreground">
+          {todo.verification === "automatic"
+            ? t`${botName} checks it when you tick the box`
+            : t`You confirm this one`}
+        </p>
+        <div data-testid="todo-chips" className="flex flex-wrap gap-1.5">
+          <span className={CHIP}>{t`unblocks ${botName}`}</span>
+          {caseNumber ? <span className={CHIP}>{t`Case ${caseNumber}`}</span> : null}
+          <span className={CHIP}>{t`asked ${asked}`}</span>
+        </div>
+      </div>
     );
   }
 
@@ -181,29 +255,7 @@ export function TodosControl() {
           ) : null}
         </div>
         {secondary(todo)}
-        {isOpen ? (
-          <div className="ms-7 mt-1.5 space-y-1.5 rounded-md bg-muted/50 p-2.5 text-xs">
-            <p className="font-medium">
-              <Trans>How</Trans>
-            </p>
-            <ol className="list-decimal space-y-0.5 ps-4">
-              {todo.steps
-                .split("\n")
-                .map((step) => step.replace(/^\s*\d+[.)]\s*/, "").trim())
-                .filter(Boolean)
-                .map((step, index) => (
-                  <li key={`${index}:${step}`}>{step}</li>
-                ))}
-            </ol>
-            {todo.statusDetail ? (
-              <p className="whitespace-pre-wrap text-muted-foreground">{todo.statusDetail}</p>
-            ) : null}
-            {todo.evidence ? (
-              <p className="whitespace-pre-wrap text-muted-foreground">{todo.evidence}</p>
-            ) : null}
-            <Timestamp todo={todo} />
-          </div>
-        ) : null}
+        {isOpen ? details(todo) : null}
       </li>
     );
   }
@@ -239,75 +291,62 @@ export function TodosControl() {
               </p>
             ) : null}
             <div className="max-h-[60vh] space-y-3 overflow-y-auto text-sm">
-              {[...groups].map(([groupId, items]) => {
+              {sections.map(({ groupId, items, active }) => {
+                if (!active.length) return null;
                 const counted = items.filter((todo) => todo.status !== "retired");
                 const done = counted.filter(
                   (todo) => todo.status === "verified" || todo.status === "confirmed",
                 ).length;
                 const total = counted.length;
-                const active = items.filter((todo) => !FINISHED.includes(todo.status));
-                const finished = items.filter((todo) => FINISHED.includes(todo.status));
-                const finishedCount = finished.length;
-                const { botName, groupTitle } = items[0]!;
-                const foldKey = `done:${groupId}`;
-                const showFinished = expanded.has(foldKey);
                 return (
                   <section
                     key={groupId}
                     data-todo-group={groupId}
-                    aria-label={groupTitle}
+                    aria-label={items[0]!.groupTitle}
                     className="rounded-md border px-2 py-1.5"
                   >
-                    <header className="flex items-center gap-2 px-1 py-1 text-xs">
-                      <p className="min-w-0 flex-1 truncate" title={groupTitle}>
-                        <span className="font-medium">{botName}</span>
-                        <span className="text-muted-foreground"> · {clip(groupTitle)}</span>
-                      </p>
+                    <header className="flex items-start gap-2 px-1 py-1 text-xs">
+                      {groupLabel(items, "")}
                       <span data-testid="todo-progress" className="shrink-0 tabular-nums">
                         {done}/{total}
                       </span>
-                      <span
-                        data-testid="todo-unblocks"
-                        className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-muted-foreground"
-                      >
-                        {t`unblocks ${botName}`}
-                      </span>
                     </header>
                     <ul>{active.map(item)}</ul>
-                    {finishedCount ? (
-                      <>
-                        <button
-                          type="button"
-                          aria-expanded={showFinished}
-                          onClick={() => toggle(foldKey)}
-                          className="w-full px-1 py-1 text-start text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          {t`Done (${finishedCount})`} {showFinished ? "▾" : "▸"}
-                        </button>
-                        {showFinished ? <ul>{finished.map(item)}</ul> : null}
-                      </>
-                    ) : null}
                   </section>
                 );
               })}
+              {finishedCount ? (
+                <div>
+                  <button
+                    type="button"
+                    aria-expanded={showFinished}
+                    onClick={() => toggle(DONE_KEY)}
+                    className="w-full px-1 py-1 text-start text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {t`Done (${finishedCount})`} {showFinished ? "▾" : "▸"}
+                  </button>
+                  {showFinished ? (
+                    <div data-testid="todo-done" className="space-y-2 px-1">
+                      {sections.map(({ groupId, items, finished }) =>
+                        finished.length ? (
+                          <section
+                            key={groupId}
+                            data-todo-group={groupId}
+                            aria-label={items[0]!.groupTitle}
+                          >
+                            {groupLabel(items, "text-xs")}
+                            <ul>{finished.map(item)}</ul>
+                          </section>
+                        ) : null,
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </DialogContent>
         </Dialog>
       ) : null}
     </>
   );
-}
-
-/** When the bot last checked, or when the user asked it to; expanded view only. */
-function Timestamp({ todo }: { todo: UserTodo }) {
-  const { t, i18n } = useLingui();
-  const format = (iso: string) =>
-    i18n.date(new Date(iso), { dateStyle: "medium", timeStyle: "short" });
-  const checkedAt = todo.checkedAt ? format(todo.checkedAt) : null;
-  const requestedAt = todo.checkRequestedAt ? format(todo.checkRequestedAt) : null;
-  if (checkedAt) return <p className="text-muted-foreground">{t`Checked ${checkedAt}`}</p>;
-  if (requestedAt) {
-    return <p className="text-muted-foreground">{t`Check requested ${requestedAt}`}</p>;
-  }
-  return null;
 }

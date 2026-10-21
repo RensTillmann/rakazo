@@ -49,6 +49,8 @@ function todo(id: string, overrides: Partial<UserTodo> = {}): UserTodo {
     requirementKey: `key-${id}`,
     title: `Title ${id}`,
     steps: "1. Open settings\n2. Turn it on",
+    why: null,
+    caseNumber: null,
     verification: "automatic",
     status: "open",
     statusDetail: null,
@@ -89,8 +91,8 @@ const secondary = (id: string) =>
   row(id)?.querySelector('[data-testid="todo-secondary"]')?.textContent ?? null;
 const group = (title: string) =>
   container.querySelector<HTMLElement>(`section[aria-label="${title}"]`)!;
-const doneRow = (scope: HTMLElement) =>
-  [...scope.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Done ("))!;
+const doneRow = () =>
+  [...container.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Done ("))!;
 
 async function click(element: HTMLElement) {
   await act(async () => element.click());
@@ -143,7 +145,7 @@ describe("TodosControl", () => {
     expect(headerButton()?.textContent).toBe("To-dos");
   });
 
-  it("heads each card's group with bot, short topic, progress, and an unblocks chip", async () => {
+  it("heads each card's group with bot, wrapped topic, and progress", async () => {
     const topic = "Set up rakazo.dev so outgoing mail passes SPF, DKIM and DMARC?";
     await render([
       todo("a", { status: "verified", groupTitle: topic }),
@@ -154,16 +156,14 @@ describe("TodosControl", () => {
     ]);
     await openDialog();
     const mail = group(topic);
-    const header = mail.querySelector("header")!;
-    expect(header.querySelector("p")?.textContent).toBe(
-      "Josy · Set up rakazo.dev so outgoing mail pass…",
-    );
-    expect(header.querySelector("p")?.title).toBe(topic);
+    const label = mail.querySelector("header p")!;
+    expect(label.textContent).toBe(`Josy · ${topic}`);
+    expect(label.getAttribute("title")).toBe(`Josy · ${topic}`);
+    expect(label.className).toContain("line-clamp-2");
     expect(mail.querySelector('[data-testid="todo-progress"]')?.textContent).toBe("2/3");
-    expect(mail.querySelector('[data-testid="todo-unblocks"]')?.textContent).toBe("unblocks Josy");
     const crm = group("Connect the CRM?");
+    expect(crm.querySelector("header p")?.getAttribute("title")).toBe("Lily · Connect the CRM?");
     expect(crm.querySelector('[data-testid="todo-progress"]')?.textContent).toBe("0/1");
-    expect(crm.querySelector('[data-testid="todo-unblocks"]')?.textContent).toBe("unblocks Lily");
   });
 
   it("shows one line per item with a clipped title and the full title as tooltip", async () => {
@@ -207,7 +207,7 @@ describe("TodosControl", () => {
       todo("confirmed", { status: "confirmed", verification: "manual" }),
     ]);
     await openDialog();
-    await click(doneRow(group("Set up the mail domain?")));
+    await click(doneRow());
     const state = (id: string) => [boxState(id), box(id).disabled];
     expect(state("open")).toEqual(["unchecked", false]);
     expect(state("remaining")).toEqual(["unchecked", false]);
@@ -240,9 +240,9 @@ describe("TodosControl", () => {
     });
     await act(async () => finish({ todo: todo("a", { status: "checking", revision: 8 }) }));
     await flush();
-    // Finished items fold away; the group's Done row holds them.
+    // Finished items fold away under the list's Done row.
     expect(row("a")).toBeNull();
-    await click(doneRow(group("Set up the mail domain?")));
+    await click(doneRow());
     expect([boxState("a"), box("a").disabled]).toEqual(["checked", true]);
   });
 
@@ -287,53 +287,123 @@ describe("TodosControl", () => {
     });
     await act(async () => finish({ todo: todo("m", { status: "confirmed" }) }));
     await flush();
-    await click(doneRow(group("Set up the mail domain?")));
+    await click(doneRow());
     expect(boxState("m")).toBe("checked");
   });
 
-  it("expands numbered How steps, evidence, and timestamps from the title", async () => {
+  it("opens why, numbered steps, who checks it, and chips from the title", async () => {
     await render([
       todo("a", {
-        status: "remaining",
-        statusDetail: "SPF lacks mailgun",
+        why: "Mailgun rejects mail without it.",
+        caseNumber: "3536",
         evidence: "dig TXT shows v=spf1 -all",
         checkedAt: "2026-10-21T09:15:00.000Z",
       }),
+      todo("m", { verification: "manual" }),
     ]);
     await openDialog();
     const title = row("a")!.querySelector<HTMLButtonElement>('button[aria-label="Show how"]')!;
     expect(title.getAttribute("aria-expanded")).toBe("false");
+    expect(row("a")!.querySelector('[data-testid="todo-details"]')).toBeNull();
     await click(title);
     expect(title.getAttribute("aria-expanded")).toBe("true");
-    expect([...row("a")!.querySelectorAll("ol > li")].map((li) => li.textContent)).toEqual([
+    const opened = row("a")!.querySelector<HTMLElement>('[data-testid="todo-details"]')!;
+    expect([...opened.children].map((child) => child.textContent)).toEqual([
+      "Mailgun rejects mail without it.",
+      "Open settingsTurn it on",
+      "Josy checks it when you tick the box",
+      "unblocks JosyCase 3536asked 2026-10-21T08:00",
+    ]);
+    expect([...opened.querySelectorAll("ol > li")].map((li) => li.textContent)).toEqual([
       "Open settings",
       "Turn it on",
     ]);
-    expect(row("a")!.textContent).toContain("dig TXT shows v=spf1 -all");
-    expect(row("a")!.textContent).toContain("Checked 2026-10-21T09:15");
+    expect(
+      [...opened.querySelectorAll('[data-testid="todo-chips"] > span')].map((c) => c.textContent),
+    ).toEqual(["unblocks Josy", "Case 3536", "asked 2026-10-21T08:00"]);
+    // Evidence and timestamps only in the tooltip.
+    expect(opened.title).toBe("dig TXT shows v=spf1 -all\nChecked 2026-10-21T09:15");
+    expect(opened.textContent).not.toContain("dig TXT");
     expect(rpc.todos.check).not.toHaveBeenCalled();
+
+    await click(row("m")!.querySelector<HTMLButtonElement>('button[aria-label="Show how"]')!);
+    const manual = row("m")!.querySelector<HTMLElement>('[data-testid="todo-details"]')!;
+    expect(manual.querySelector('[data-testid="todo-why"]')).toBeNull();
+    expect(manual.querySelector('[data-testid="todo-checker"]')?.textContent).toBe(
+      "You confirm this one",
+    );
+    expect(
+      [...manual.querySelectorAll('[data-testid="todo-chips"] > span')].map((c) => c.textContent),
+    ).toEqual(["unblocks Josy", "asked 2026-10-21T08:00"]);
+    expect(manual.title).toBe("");
+
     await click(title);
-    expect(row("a")!.querySelector("ol")).toBeNull();
+    expect(row("a")!.querySelector('[data-testid="todo-details"]')).toBeNull();
   });
 
-  it("folds finished and no-longer-needed items into one Done row", async () => {
+  it("does not repeat the reason under the title inside the opened item", async () => {
+    await render([
+      todo("r", { status: "remaining", statusDetail: "needs 6.3.727, found 6.3.725" }),
+      todo("u", { status: "unavailable", statusDetail: "No HubSpot read tool" }),
+    ]);
+    await openDialog();
+    for (const id of ["r", "u"]) {
+      await click(row(id)!.querySelector<HTMLButtonElement>('button[aria-label="Show how"]')!);
+    }
+    expect(row("r")!.textContent!.split("needs 6.3.727, found 6.3.725")).toHaveLength(2);
+    expect(row("u")!.textContent).not.toContain("No HubSpot read tool");
+    expect(row("u")!.textContent!.split("couldn't check")).toHaveLength(2);
+  });
+
+  it("folds finished items of every group into one Done row at the bottom, grouped", async () => {
     await render([
       todo("a"),
       todo("v", { status: "verified" }),
       todo("c", { status: "confirmed", verification: "manual" }),
       todo("r", { status: "retired", statusDetail: "Plan changed" }),
+      todo("x", { groupId: "card-2", groupTitle: "Connect the CRM?", botName: "Lily" }),
+      todo("y", {
+        groupId: "card-2",
+        groupTitle: "Connect the CRM?",
+        botName: "Lily",
+        status: "verified",
+      }),
+      todo("z", {
+        groupId: "card-3",
+        groupTitle: "Rotate the API key?",
+        botName: "Lily",
+        status: "confirmed",
+        verification: "manual",
+      }),
     ]);
     await openDialog();
-    const mail = group("Set up the mail domain?");
-    expect(mail.querySelectorAll("[data-todo-id]")).toHaveLength(1);
-    const fold = doneRow(mail);
-    expect(fold.textContent).toBe("Done (3) ▸");
+    const folds = [...container.querySelectorAll("button")].filter((b) =>
+      b.textContent?.startsWith("Done ("),
+    );
+    expect(folds).toHaveLength(1);
+    const fold = folds[0]!;
+    const list = fold.closest(".overflow-y-auto")!;
+    expect(list.lastElementChild!.contains(fold)).toBe(true);
+    expect(fold.textContent).toBe("Done (5) ▸");
     expect(fold.getAttribute("aria-expanded")).toBe("false");
-    await click(fold);
-    expect(fold.textContent).toBe("Done (3) ▾");
     expect(
-      [...mail.querySelectorAll<HTMLElement>("[data-todo-id]")].map((li) => li.dataset.todoId),
-    ).toEqual(["a", "v", "c", "r"]);
+      [...container.querySelectorAll<HTMLElement>("[data-todo-id]")].map((li) => li.dataset.todoId),
+    ).toEqual(["a", "x"]);
+    // A group with nothing left to do only appears under Done.
+    expect(container.querySelectorAll('section[aria-label="Rotate the API key?"]')).toHaveLength(0);
+    await click(fold);
+    expect(fold.textContent).toBe("Done (5) ▾");
+    const done = container.querySelector<HTMLElement>('[data-testid="todo-done"]')!;
+    expect(
+      [...done.querySelectorAll<HTMLElement>("section")].map((section) => [
+        section.querySelector("p")!.getAttribute("title"),
+        [...section.querySelectorAll<HTMLElement>("[data-todo-id]")].map((li) => li.dataset.todoId),
+      ]),
+    ).toEqual([
+      ["Josy · Set up the mail domain?", ["v", "c", "r"]],
+      ["Lily · Connect the CRM?", ["y"]],
+      ["Lily · Rotate the API key?", ["z"]],
+    ]);
     expect(secondary("r")).toBe("no longer needed");
     expect(row("r")!.querySelector<HTMLElement>('[data-testid="todo-secondary"]')!.title).toBe(
       "Plan changed",

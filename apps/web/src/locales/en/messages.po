@@ -125,6 +125,10 @@ msgstr "{addedCount} new decisions waiting"
 msgid "{amount} / {period}"
 msgstr "{amount} / {period}"
 
+#: src/components/TodosControl.tsx
+msgid "{botName} checks it when you tick the box"
+msgstr "{botName} checks it when you tick the box"
+
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "{botName}’s computer"
@@ -857,6 +861,10 @@ msgstr "Ask before shell commands matching {0}"
 msgid "Ask the server owner to configure this provider."
 msgstr "Ask the server owner to configure this provider."
 
+#: src/components/TodosControl.tsx
+msgid "asked {asked}"
+msgstr "asked {asked}"
+
 #. placeholder {0}: preset.time
 #: src/pages/RoutineSchedule.tsx
 msgid "at {0}"
@@ -1152,6 +1160,10 @@ msgstr "Cancelled"
 #: src/pages/Artifacts.tsx
 msgid "Card view"
 msgstr "Card view"
+
+#: src/components/TodosControl.tsx
+msgid "Case {caseNumber}"
+msgstr "Case {caseNumber}"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Change password"
@@ -2997,10 +3009,6 @@ msgstr "hour"
 #: src/pages/RoutineSchedule.tsx
 msgid "hours"
 msgstr "hours"
-
-#: src/components/TodosControl.tsx
-msgid "How"
-msgstr "How"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "How often"
@@ -6172,6 +6180,10 @@ msgstr "You can close this tab if it does not redirect automatically."
 #: src/pages/McpOAuthCallback.tsx
 msgid "You can close this window."
 msgstr "You can close this window."
+
+#: src/components/TodosControl.tsx
+msgid "You confirm this one"
+msgstr "You confirm this one"
 
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"

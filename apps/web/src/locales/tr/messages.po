@@ -125,6 +125,10 @@ msgstr ""
 msgid "{amount} / {period}"
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "{botName} checks it when you tick the box"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "{botName} adlı botun bilgisayarı"
@@ -857,6 +861,10 @@ msgstr ""
 msgid "Ask the server owner to configure this provider."
 msgstr ""
 
+#: src/components/TodosControl.tsx
+msgid "asked {asked}"
+msgstr ""
+
 #. placeholder {0}: preset.time
 #: src/pages/RoutineSchedule.tsx
 msgid "at {0}"
@@ -1151,6 +1159,10 @@ msgstr "İptal edildi"
 
 #: src/pages/Artifacts.tsx
 msgid "Card view"
+msgstr ""
+
+#: src/components/TodosControl.tsx
+msgid "Case {caseNumber}"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
@@ -2997,10 +3009,6 @@ msgstr "saat"
 #: src/pages/RoutineSchedule.tsx
 msgid "hours"
 msgstr "saat"
-
-#: src/components/TodosControl.tsx
-msgid "How"
-msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
 msgid "How often"
@@ -6172,6 +6180,10 @@ msgstr "Otomatik yönlendirilmezsen bu sekmeyi kapatabilirsin."
 #: src/pages/McpOAuthCallback.tsx
 msgid "You can close this window."
 msgstr "Bu pencereyi kapatabilirsin."
+
+#: src/components/TodosControl.tsx
+msgid "You confirm this one"
+msgstr ""
 
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"
