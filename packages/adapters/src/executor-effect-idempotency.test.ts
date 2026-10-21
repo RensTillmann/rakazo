@@ -89,10 +89,11 @@ function fixture(runId = "run-1") {
       async ({
         where,
       }: {
-        where: { runId?: string; kind?: string; request?: { equals: string } };
+        where: { id?: string; runId?: string; kind?: string; request?: { equals: string } };
       }) =>
         effects.find(
           (effect) =>
+            (!where.id || effect.id === where.id) &&
             (!where.runId || effect.runId === where.runId) &&
             (!where.kind || effect.kind === where.kind) &&
             (!where.request ||

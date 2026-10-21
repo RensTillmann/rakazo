@@ -62,6 +62,15 @@ the bot has to ask again.
 
 `list_fleet`, `organize_bot` and `update_bot` need no card.
 
+## Complete approval details
+
+Approval cards retain the complete redacted resolved summary and the displayed argument values,
+including multiline messages and evidence links. The tool description, intention and safety reason
+are not cut off at presentation length limits. Secret-named arguments remain omitted and known
+secret values are redacted before display. Push notifications are still shortened; they are not a
+substitute for reviewing the full card. This does not change authorization or mark external setup
+complete.
+
 ## Obsolete ordinary questions
 
 An authenticated integration can call `decisions.withdraw` with `botId`, `messageId` and a nonempty
@@ -79,6 +88,80 @@ distinguish this deliberate withdrawal from an unanswered expiry rather than aut
 After withdrawing an obsolete question, the integration may ask its corrected question normally.
 Unchanged pending questions still use the existing duplicate protection. This API is not a new
 built-in fleet-management tool and does not grant permission to perform the action being discussed.
+
+## Dependent-effect identity
+
+New MCP `question_withdraw` effects record the exact supporting question in
+`ExternalEffect.sourceMessageId`, independently of direct or catalog display aliases.
+Before recording a new binding, the recorder locks the source thread then run in a
+transaction, re-reads the exact source and creates the effect before releasing those
+locks. Answer/withdraw transactions use the same locks, preventing a new binding
+from appearing after their invalidation scan. The recorder checks the owning account, space and bot,
+that the source is a single ordinary unanswered question, and that its exact run/thread
+is waiting for input. Unrelated tools accepting `message_id` do not imply a dependency.
+The nullable indexed reference preserves existing effect requests and history.
+
+Answering or withdrawing an ordinary source question invalidates its explicitly bound
+intended/approved effects in the same database transaction. The effect result records
+`source_question_unavailable`, not a fabricated human answer. Denied, completed,
+executing and uncertain effects, unrelated sources and other spaces remain unchanged.
+
+Approval answers lock the exact space-scoped effect row before reading its status,
+serializing the decision with source invalidation. An invalidation that wins first
+is rejected without queueing the approval run or recording a human answer; an answer
+that wins first is subsequently invalidated by the source-ending transaction.
+
+Execution claims re-read the bound ordinary question and waiting source run under
+the same source-thread then source-run locks before the effect status CAS. An
+unavailable source invalidates the pending effect rather than executing it. The
+claim is the execution linearization point; a source ending cannot undo an external
+call whose claim already won. Missing account identity fails closed.
+
+The shared cancellation transaction also invalidates explicitly bound pending effects
+for messages attached to the cancelled runs, before callers delete any messages.
+This covers thread clearing, group archival/removal and group dissolution that use
+that seam. The run update holds the source-run lock until commit; new recorders and
+claims re-read the cancelled status under that lock and cannot proceed. Storage
+failures propagate to the owning transaction rather than leaving cleanup best-effort.
+
+Aged-run expiry uses that same dependency invalidation after its cancellation CAS
+wins and before status messages or steering continuation are created. An answer
+that wins the expiry fence causes no invalidation. An invalidation failure aborts
+the owning transaction, rather than starting continuation on partial cleanup.
+
+Explicit thread Stop also invalidates dependencies for only the runs its cancellation
+update returns, inside the same transaction and before steering/progress cleanup.
+No won cancellation means no dependency scan; storage failure aborts Stop before
+post-commit notification or sandbox teardown.
+
+Queued user/reaction supersession uses a single conditional cancellation returning
+only the rows that still qualify, then invalidates their source dependencies before
+task cleanup in that transaction. A run claimed since a prior observation is not
+cancelled, nor is its task or dependency touched. Failure aborts the owning send.
+
+Teaching takeover conditionally cancels only active runs owned by the requesting
+account and space, and invalidates their source dependencies inside that same
+transaction before progress cleanup. Only returned cancellations are scanned;
+invalidation failure aborts before computer lease changes.
+
+Team-chat fallback cancellation after a competing routine wake also invalidates
+source dependencies in the owning cancellation transaction before task cleanup.
+Only active runs matching the exact account, space, bot and thread can be cancelled;
+a lost cancellation does not modify the task or source dependencies. Invalidation
+failure propagates before the external-message reservation is abandoned.
+
+Execution claims also recover the source from exact persisted route-bound direct
+and MCP catalog withdrawal envelopes that predate the source column. They use the
+same ownership checks and source locks, invalidate unavailable sources, and persist
+the recovered binding only when the execution CAS wins. Terminal history is never
+rebound. Plain argument objects, unbound catalog requests, malformed envelopes and
+other tools do not establish source identity; their existing replay guards remain.
+This claim-time recovery is not a background backfill or automatic UI refresh for
+legacy pending cards.
+
+This is not complete lifecycle fencing: automatic legacy pending-card reconciliation,
+other cancellation or replacement paths, and dependent-card UI refresh remain to be
+implemented. The reference is not a human answer or an authorization grant.
 
 ## What a bot cannot do
 

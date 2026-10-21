@@ -86,25 +86,22 @@ describe("queued run supersession", () => {
   it("only cancels queued runs started by user messages or reactions", async () => {
     const tx = {
       run: {
-        findMany: vi.fn().mockResolvedValue([{ id: "run-old", taskId: "task-old" }]),
-        updateMany: vi.fn(),
+        updateManyAndReturn: vi.fn().mockResolvedValue([{ id: "run-old", taskId: "task-old" }]),
       },
       task: { updateMany: vi.fn() },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
     };
     await cancelSupersededQueuedRuns(tx as never, {
       threadId: "thread-1",
       botIds: ["bot-1"],
       keepRunIds: ["run-new"],
     });
-    expect(tx.run.findMany).toHaveBeenCalledWith(
+    expect(tx.run.updateManyAndReturn).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           OR: [{ trigger: "user", sourceMessage: { role: "user" } }, { trigger: "reaction" }],
         }),
       }),
-    );
-    expect(tx.run.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: { in: ["run-old"] } } }),
     );
     expect(tx.task.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ["task-old"] } },
@@ -224,6 +221,7 @@ describe("reaction turns", () => {
     withoutRelease?: boolean;
   }) {
     const tx = {
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) },
       $queryRaw: vi.fn().mockResolvedValue([{ id: "group-1" }]),
       thread: {
@@ -266,6 +264,7 @@ describe("reaction turns", () => {
         }),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue(options.activeRuns ?? []),
         findFirst: vi.fn(async (args?: { where?: { trigger?: string } }) =>
           args?.where?.trigger === "reaction"
@@ -1561,7 +1560,7 @@ function groupPrisma(findManyRuns: ReturnType<typeof groupRunFindMany>) {
       findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
     },
-    run: { findMany: findManyRuns },
+    run: { updateManyAndReturn: vi.fn().mockResolvedValue([]), findMany: findManyRuns },
   };
   return {
     $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
@@ -1607,6 +1606,7 @@ describe("sendThreadMessage", () => {
         update: vi.fn(),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn(async ({ where }: { where: { status: string | { in: string[] } } }) =>
           runs.filter((run) =>
             typeof where.status === "string"
@@ -1693,6 +1693,7 @@ describe("sendThreadMessage", () => {
         ),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue([
           { id: "run-waiting-1", taskId: "task-1", status: "queued" },
           { id: "run-waiting-2", taskId: "task-2", status: "queued" },
@@ -1778,6 +1779,7 @@ describe("sendThreadMessage", () => {
         update: vi.fn(),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn(async ({ where }: { where: { status: string | { in: string[] } } }) =>
           runs.filter((run) =>
             typeof where.status === "string"
@@ -1873,6 +1875,7 @@ describe("sendThreadMessage", () => {
         update: vi.fn(),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi
           .fn()
           .mockResolvedValue([
@@ -1952,6 +1955,7 @@ describe("sendThreadMessage", () => {
         update: vi.fn(),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi
           .fn()
           .mockResolvedValue([{ id: "run-waiting", taskId: "task-1", status: "waiting_takeover" }]),
@@ -2032,6 +2036,7 @@ describe("sendThreadMessage", () => {
         update: vi.fn(),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi
           .fn()
           .mockResolvedValueOnce([
@@ -2115,6 +2120,7 @@ describe("sendThreadMessage", () => {
         update: vi.fn(),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi
           .fn()
           .mockResolvedValueOnce([
@@ -2204,6 +2210,7 @@ describe("sendThreadMessage", () => {
         update: vi.fn(),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi
           .fn()
           .mockResolvedValueOnce([
@@ -2292,6 +2299,7 @@ describe("sendThreadMessage", () => {
         update: vi.fn(),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi
           .fn()
           .mockResolvedValueOnce([
@@ -2425,6 +2433,7 @@ describe("sendThreadMessage", () => {
         }),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
         create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -2502,6 +2511,7 @@ describe("sendThreadMessage", () => {
         }),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
         create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -2568,6 +2578,7 @@ describe("sendThreadMessage", () => {
           }),
         },
         run: {
+          updateManyAndReturn: vi.fn().mockResolvedValue([]),
           findMany: vi.fn().mockResolvedValue([]),
           findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
           create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -2644,6 +2655,7 @@ describe("sendThreadMessage", () => {
         }),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
         create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -2723,6 +2735,7 @@ describe("sendThreadMessage", () => {
         }),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
         create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -2829,6 +2842,7 @@ describe("sendThreadMessage", () => {
           }),
         },
         run: {
+          updateManyAndReturn: vi.fn().mockResolvedValue([]),
           findMany: vi.fn().mockResolvedValue([]),
           findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
           create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -2934,6 +2948,7 @@ describe("sendThreadMessage", () => {
           }),
         },
         run: {
+          updateManyAndReturn: vi.fn().mockResolvedValue([]),
           findMany: vi.fn().mockResolvedValue([]),
           findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
           create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -3024,6 +3039,7 @@ describe("sendThreadMessage", () => {
         }),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
         create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -3107,6 +3123,7 @@ describe("sendThreadMessage", () => {
         }),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
         create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
@@ -3177,6 +3194,7 @@ describe("sendThreadMessage", () => {
         }),
       },
       run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
         create: vi
@@ -3269,6 +3287,8 @@ describe("stopThreadRuns", () => {
         ]),
         findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }),
       },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: {
         // Production team ownership is lease-only: Computer.executionRunId stays null.
@@ -3413,6 +3433,8 @@ describe("stopThreadRuns", () => {
         updateManyAndReturn: vi.fn().mockResolvedValue([{ id: "run-a", botId: "bot-a" }]),
         findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }),
       },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: {
         // Selected via lease for cancelled run A, but legacy columns still name
@@ -3524,6 +3546,8 @@ describe("stopThreadRuns", () => {
         // appendEventInTransaction re-reads the run after the flip.
         findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }),
       },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: { findMany: vi.fn().mockResolvedValue([]) },
       computerExecutionLease: { findMany: vi.fn().mockResolvedValue([]) },
@@ -3609,6 +3633,8 @@ describe("stopThreadRuns", () => {
         updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn(),
       },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: { findMany: vi.fn() },
       computerExecutionLease: { findMany: vi.fn() },

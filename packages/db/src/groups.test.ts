@@ -211,6 +211,7 @@ describe("archiveGroup", () => {
       computerExecutionLease: { findMany: leaseFindMany, updateMany: leaseUpdateMany },
       computer: { findMany: findManyComputers, updateMany: computerUpdateMany },
       event: { deleteMany: eventDeleteMany },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
     };
     prisma = {
       $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),

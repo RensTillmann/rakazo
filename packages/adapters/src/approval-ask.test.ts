@@ -40,7 +40,7 @@ describe("buildApprovalAskBlock", () => {
     });
   });
 
-  it("bounds model-controlled summaries and details", () => {
+  it("keeps complete decision text and details", () => {
     const block = buildApprovalAskBlock(
       "effect-1",
       "destination.write",
@@ -50,8 +50,8 @@ describe("buildApprovalAskBlock", () => {
 
     expect(block.kind).toBe("ask");
     if (block.kind !== "ask") throw new Error("expected ask block");
-    expect(block.text.length).toBeLessThanOrEqual(501);
-    expect(block.detail?.length).toBeLessThanOrEqual(4_001);
+    expect(block.text).toContain("t".repeat(1_000));
+    expect(block.detail).toContain("b".repeat(10_000));
   });
 
   it("adds the safety check's reason after the argument lines", () => {
@@ -333,7 +333,9 @@ describe("plain-language approval cards", () => {
     );
 
     expect(block.text).toBe("Elena wants to search the shared memory for facts");
-    expect(block.detail).toBe("Search for: Ada's invoice");
+    expect(block.detail).toBe(
+      "Tool description: Searches the shared memory for facts. Returns up to 10 results.\nSearch for: Ada's invoice",
+    );
   });
 
   it("humanises an MCP tool name when it has no description of its own", () => {
@@ -372,7 +374,7 @@ describe("plain-language approval cards", () => {
     }
   });
 
-  it("cuts each argument to about 160 characters after blanking known secrets", () => {
+  it("keeps each complete argument after blanking known secrets", () => {
     const block = askOf(
       buildApprovalAskBlock(
         "effect-1",
@@ -383,11 +385,11 @@ describe("plain-language approval cards", () => {
       ),
     );
 
-    expect(block.detail).toBe(`Message: ${"x".repeat(150)}[redacted]…`);
+    expect(block.detail).toBe(`Message: ${"x".repeat(150)}[redacted] ${"y".repeat(400)}`);
     expect(block.detail).not.toContain("SECRETVAL");
   });
 
-  it("adds the bot's last stated intention as a one-line Why, cut to about 200 characters", () => {
+  it("adds the bot's complete last stated intention as a one-line Why", () => {
     const block = askOf(
       buildApprovalAskBlock("effect-1", "web_search", { query: "Ada invoice" }, [], {
         botName: "Elena",
@@ -401,7 +403,7 @@ describe("plain-language approval cards", () => {
     const long = askOf(
       buildApprovalAskBlock("effect-1", "web_search", {}, [], { intention: "w".repeat(500) }),
     );
-    expect(long.detail).toBe(`Why: ${"w".repeat(200)}…`);
+    expect(long.detail).toBe(`Why: ${"w".repeat(500)}`);
   });
 
   it("says a never-list card always asks, and only on such cards", () => {
@@ -459,7 +461,7 @@ describe("plain-language approval cards", () => {
       );
     });
 
-    it("blanks secrets before cutting to 160 characters", () => {
+    it("blanks secrets without cutting surrounding context", () => {
       expect(why({ trigger: { kind: "user", text: "use sk-123 now" } }, ["sk-123"])).toBe(
         'Why: You asked: "use [redacted] now"',
       );
@@ -467,7 +469,7 @@ describe("plain-language approval cards", () => {
         why({ trigger: { kind: "user", text: `${"x".repeat(155)}sk-123${"y".repeat(50)}` } }, [
           "sk-123",
         ]),
-      ).toBe(`Why: You asked: "${"x".repeat(155)}[reda…"`);
+      ).toBe(`Why: You asked: "${"x".repeat(155)}[redacted]${"y".repeat(50)}"`);
     });
 
     it("adds no Why line when nothing is known", () => {

@@ -10,11 +10,7 @@ import {
 
 export const MAX_APPROVAL_SUMMARY_LENGTH = 500;
 export const MAX_APPROVAL_DETAIL_LENGTH = 4_000;
-const MAX_FIELD_LENGTH = 160;
-const MAX_WHY_LENGTH = 200;
-const MAX_DESCRIPTION_ACTION_LENGTH = 100;
 const MAX_PUSH_LENGTH = 200;
-const MAX_FIELDS_PER_ACTION = 5;
 const FALLBACK_BOT_NAME = "Your bot";
 
 /** A fleet card built from the resolved request: a title and the lines under it. */
@@ -71,11 +67,8 @@ export function buildApprovalAskBlock(
     return {
       kind: "ask",
       approvalEffectId: effectId,
-      text: truncate(redactSecrets(options.summary.title, secrets), MAX_APPROVAL_SUMMARY_LENGTH),
-      detail: truncate(
-        redactSecrets(options.summary.lines.join("\n"), secrets),
-        approvalDetailLength(toolName),
-      ),
+      text: redactSecrets(options.summary.title, secrets),
+      detail: redactSecrets(options.summary.lines.join("\n"), secrets),
       detailFormat: toolName === "set_child_instructions" ? "code" : "text",
       status: "pending",
       actions: [
@@ -124,10 +117,8 @@ export function buildApprovalAskBlock(
   return {
     kind: "ask",
     approvalEffectId: effectId,
-    text: truncate(redactSecrets(title, secrets), MAX_APPROVAL_SUMMARY_LENGTH),
-    detail: detail
-      ? truncate(redactSecrets(detail, secrets), MAX_APPROVAL_DETAIL_LENGTH)
-      : undefined,
+    text: redactSecrets(title, secrets),
+    detail: detail ? redactSecrets(detail, secrets) : undefined,
     status: "pending",
     actions:
       toolName === "create_space"
@@ -436,7 +427,7 @@ function actionFromDescription(description: string | undefined, toolPart: string
   const [word, ...rest] = text.split(/\s+/);
   if (!word || /^(?:this|that|a|an|the|tool|returns?|it)$/i.test(word)) return undefined;
   const verb = word === word.toUpperCase() ? word : baseVerb(word.toLowerCase());
-  return truncate([verb, ...rest].join(" "), MAX_DESCRIPTION_ACTION_LENGTH);
+  return [verb, ...rest].join(" ");
 }
 
 /** "Searches" → "search", "Queries" → "query", "Lists" → "list"; base forms are unchanged. */
@@ -509,6 +500,9 @@ function formatApprovalDetail(
       "Bots, groups, chats, files, memory, and integrations in this space stay separate from other spaces.",
     );
   }
+  if (options?.toolDescription) {
+    lines.push(`Tool description: ${redactSecrets(options.toolDescription, secrets)}`);
+  }
   for (const action of actions) {
     const fields = actionFields(action, secrets);
     if (fields.length > 0 && actions.length > 1) {
@@ -516,11 +510,11 @@ function formatApprovalDetail(
     }
     lines.push(...fields);
   }
-  const intention = options?.intention ? oneLine(options.intention, secrets, MAX_WHY_LENGTH) : "";
+  const intention = options?.intention ? oneLine(options.intention, secrets) : "";
   const why = intention || triggerWhy(options?.trigger, secrets);
   if (why) lines.push(`Why: ${why}`);
   const reviewReason = options?.reviewReason
-    ? oneLine(options.reviewReason.replace(/\u2014|\u2013/g, "-"), secrets, MAX_WHY_LENGTH)
+    ? oneLine(options.reviewReason.replace(/\u2014|\u2013/g, "-"), secrets)
     : "";
   if (reviewReason) lines.push(`Safety check: ${reviewReason}`);
   if (options?.allowAlways === false) lines.push(APPROVAL_NEVER_AUTOMATIC_LINE);
@@ -531,11 +525,10 @@ function formatApprovalDetail(
 function actionFields(action: ApprovalAction, secrets: string[]): string[] {
   const fields: string[] = [];
   const add = (label: string, raw: unknown, spec?: FieldSpec) => {
-    if (fields.length >= MAX_FIELDS_PER_ACTION) return;
     let text = displayValue(raw);
     if (!text) return;
     if (spec?.file) text = fileName(text) ?? text;
-    const value = oneLine(text, secrets, MAX_FIELD_LENGTH);
+    const value = redactSecrets(text, secrets);
     if (!value) return;
     fields.push(`${label}: ${spec?.code ? `\`${value}\`` : value}`);
   };
@@ -573,15 +566,15 @@ function displayValue(value: unknown): string {
   return "";
 }
 
-/** Redact first, so a cut never leaves part of a secret behind. */
-function oneLine(value: string, secrets: string[], maxLength: number): string {
-  return truncate(redactSecrets(value, secrets).replace(/\s+/g, " ").trim(), maxLength);
+/** Keep complete context; only push notifications are shortened. */
+function oneLine(value: string, secrets: string[]): string {
+  return redactSecrets(value, secrets).replace(/\s+/g, " ").trim();
 }
 
 function triggerWhy(trigger: ApprovalTrigger | undefined, secrets: string[]): string {
   if (!trigger) return "";
   const quote = (text: string) => {
-    const line = oneLine(text, secrets, MAX_FIELD_LENGTH);
+    const line = oneLine(text, secrets);
     return line ? `"${line}"` : "";
   };
   switch (trigger.kind) {
@@ -590,19 +583,19 @@ function triggerWhy(trigger: ApprovalTrigger | undefined, secrets: string[]): st
       return text ? `You asked: ${text}` : "";
     }
     case "routine": {
-      const name = oneLine(trigger.routineName, secrets, MAX_FIELD_LENGTH);
+      const name = oneLine(trigger.routineName, secrets);
       if (!name) return "";
-      const event = trigger.event ? oneLine(trigger.event, secrets, MAX_FIELD_LENGTH) : "";
+      const event = trigger.event ? oneLine(trigger.event, secrets) : "";
       return event ? `Routine: ${name} (${event})` : `Routine: ${name}`;
     }
     case "bot_message": {
       const text = quote(trigger.text);
-      const name = oneLine(trigger.botName, secrets, MAX_FIELD_LENGTH) || "Another bot";
+      const name = oneLine(trigger.botName, secrets) || "Another bot";
       return text ? `${name} asked: ${text}` : "";
     }
     case "room": {
       const text = quote(trigger.text);
-      const name = oneLine(trigger.roomName, secrets, MAX_FIELD_LENGTH);
+      const name = oneLine(trigger.roomName, secrets);
       return text && name ? `In ${name}: ${text}` : "";
     }
   }

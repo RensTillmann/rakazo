@@ -2012,12 +2012,17 @@ describe("team chat bridge", () => {
     const messageFindUnique = vi.fn(async () => (woken ? { id: "msg-routine-wake" } : null));
     const enqueue = vi.fn();
     const updateMany = vi.fn(async () => ({ count: 1 }));
-    const runUpdateMany = vi.fn(async () => ({ count: 1 }));
+    const runUpdateMany = vi.fn(async () => [{ id: "run-1", taskId: "task-1" }]);
     const taskUpdateMany = vi.fn(async () => ({ count: 1 }));
     const sendUserMessage = vi.fn(async () => {
       await sendGate;
       return { messageId: "message-1", runId: "run-1", seq: 1, taskId: "task-1" };
     });
+    const tx = {
+      run: { updateManyAndReturn: runUpdateMany },
+      task: { updateMany: taskUpdateMany },
+      message: { findMany: vi.fn(async () => []) },
+    };
     const bridge = createTestBridge({
       prisma: {
         externalMessage: {
@@ -2028,8 +2033,7 @@ describe("team chat bridge", () => {
           })),
         },
         message: { findUnique: messageFindUnique, findMany: vi.fn(async () => []) },
-        run: { updateMany: runUpdateMany },
-        task: { updateMany: taskUpdateMany },
+        $transaction: vi.fn(async (callback: (store: typeof tx) => unknown) => callback(tx)),
       } as unknown as PrismaClient,
       events: { sendUserMessage },
       jobs: { enqueue },

@@ -307,7 +307,9 @@ describePostgres("withdrawing an obsolete question (PostgreSQL)", () => {
       data: { runId: f.run.id, fence: 2, status: "running" },
     });
     expect((await f.withdraw()).status).toBe(200);
-    expect(await prisma.attempt.findUniqueOrThrow({ where: { id: activeAttempt.id } })).toMatchObject({ status: "cancelled", finishedAt: expect.any(Date) });
+    // Withdrawal cancels the run and expires its lease, but only the attempt's own worker (or
+    // evidence) may settle the attempt: a cancelled run is not proof that it drained (Q35).
+    expect(await prisma.attempt.findUniqueOrThrow({ where: { id: activeAttempt.id } })).toMatchObject({ status: "running", finishedAt: null });
     expect(await prisma.computerExecutionLease.findUniqueOrThrow({ where: { id: oldLease.id } })).toMatchObject({ expiresAt: new Date(0), fence: 3 });
     expect(await prisma.computerExecutionLease.findUniqueOrThrow({ where: { id: otherLease.id } })).toEqual(otherLease);
     expect(await prisma.computer.findUniqueOrThrow({ where: { id: f.computer.id } })).toMatchObject({ executionRunId: newer.run.id, executionLeaseExpiresAt: expiresAt });

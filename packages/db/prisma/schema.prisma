@@ -769,6 +769,8 @@ model ExternalEffect {
   kind           String
   idempotencyKey String
   status         String
+  /// Exact owned ordinary question supporting this effect, not a human answer.
+  sourceMessageId String?
   request        Json
   result         Json?
   reviewDecision String?
@@ -779,6 +781,7 @@ model ExternalEffect {
 
   @@unique([idempotencyKey])
   @@index([runId, status])
+  @@index([spaceId, sourceMessageId, status])
   @@map("external_effects")
 }
 

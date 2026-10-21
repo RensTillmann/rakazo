@@ -37,6 +37,7 @@ import {
   expireComputerExecutionLeases,
   FLAG_STEERING_ORIGIN,
   IsolationError,
+  invalidateRunSourceApprovalEffects,
   lockOwnedGroup,
   QuestionNotWithdrawableError,
   touchGroupUpdatedAt,
@@ -243,7 +244,7 @@ export async function cancelSupersededQueuedRuns(
   tx: Prisma.TransactionClient,
   input: { threadId: string; botIds: string[]; keepRunIds: string[] },
 ) {
-  const superseded = await tx.run.findMany({
+  const superseded = await tx.run.updateManyAndReturn({
     where: {
       threadId: input.threadId,
       botId: { in: input.botIds },
@@ -251,14 +252,17 @@ export async function cancelSupersededQueuedRuns(
       OR: [{ trigger: "user", sourceMessage: { role: "user" } }, { trigger: "reaction" }],
       id: { notIn: input.keepRunIds },
     },
+    data: { status: "cancelled", completedAt: new Date() },
     select: { id: true, taskId: true },
   });
   if (superseded.length === 0) return;
-  const now = new Date();
-  await tx.run.updateMany({
-    where: { id: { in: superseded.map((run) => run.id) } },
-    data: { status: "cancelled", completedAt: now },
-  });
+  // Keep source invalidation in the cancellation transaction, after the status
+  // fence wins and before task cleanup. A stale queued snapshot cannot cancel
+  // a run already claimed by a worker or invalidate its dependencies.
+  await invalidateRunSourceApprovalEffects(
+    tx,
+    superseded.map((run) => run.id),
+  );
   await tx.task.updateMany({
     where: { id: { in: superseded.map((run) => run.taskId) } },
     data: { status: "cancelled" },
@@ -1533,6 +1537,9 @@ export async function stopThreadRuns(
       select: { id: true, botId: true },
     });
     const ids = cancelled.map((run) => run.id);
+    // Cancellation holds the source-run locks until commit. Invalidate before
+    // cleanup so bound requests cannot outlive Stop or execute from stale cards.
+    await invalidateRunSourceApprovalEffects(tx, ids);
     await tx.steeringMessage.deleteMany({
       where: {
         botId: { in: target.kind === "bot" ? [target.botId] : target.memberBotIds },

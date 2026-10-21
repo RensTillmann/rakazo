@@ -366,6 +366,16 @@ export function resolveDuplicateEffectGate(
   if (effect.status === "completed") {
     return { action: "return", result: effect.result ?? { duplicate: true } };
   }
+  if (effect.status === "invalidated") {
+    return {
+      action: "return",
+      result: effect.result ?? {
+        error:
+          "This approval no longer applies. Request a new decision only if it is still needed.",
+        invalidated: true,
+      },
+    };
+  }
   if (effect.status === "denied") {
     return {
       action: "return",
@@ -504,4 +514,16 @@ export async function replaceCompletedExternalEffectResult(
     data: { result: result as never },
   });
   return replaced.count === 1;
+}
+
+/** Only the resolved MCP tool identity, never a model-visible alias or arbitrary
+ * message_id argument, can declare this dependency. Ownership is checked by the
+ * recorder before the reference is persisted. */
+export function approvalSourceMessageId(
+  route: BoundApprovalRoute | undefined,
+  args: Record<string, unknown>,
+): string | undefined {
+  if (route?.connectorId !== "mcp" || route.toolName !== "question_withdraw") return undefined;
+  const id = args.message_id;
+  return typeof id === "string" && id.length > 0 && id.trim() === id ? id : undefined;
 }

@@ -53,6 +53,7 @@ import {
   HistoryReadInputSchema,
   HistorySearchInputSchema,
   isAttachmentImageMimeType,
+  MessageBlock as MessageBlockSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   thinkingBlock,
 } from "@rakazo/contracts";
@@ -79,11 +80,13 @@ import {
   formatSkillsCatalogInstruction,
   humanizeToolName,
   inferAttachmentMimeType,
+  isApprovalAskBlock,
   isBackgroundRunTrigger,
   isCallClientNonce,
   isMessagingChannelRun,
   isOneShotRoutineCrons,
   isOwnerStartedRun,
+  isSecretAskBlock,
   isTerminal,
   messagingChannelId,
   messagingChannelPrivacyBlock,
@@ -115,7 +118,8 @@ import {
 import type { MaintenanceCancellationStore, McpServer, PrismaClient, Run, ThreadEvents } from "@rakazo/db";
 import {
   appendEventInTransaction,
-  claimMaintenanceEffect,
+  casSourceCheckedEffect,
+  checkEffectSourceInTransaction,
   lockMaintenanceAdmission,
   maintenanceAttention,
   createSpaceForMember,
@@ -167,6 +171,7 @@ import {
   approvalReplayPathError,
   approvalReplayResourceError,
   approvalRoutesMatch,
+  approvalSourceMessageId,
   approvedCatalogReplay,
   approvedReplayArgs,
   boundDirectApprovalDetails,
@@ -5301,6 +5306,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 effectRequest,
                 executionId,
                 consumedEffectIds,
+                approvalSourceMessageId(liveRoute, args),
               );
 
           const runAutoReview = async () => {
@@ -5507,6 +5513,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const claimOrReturn = async (
             from: "approved" | "intended",
           ): Promise<unknown | undefined> => {
+            // One linearization point: maintenance admission, this worker's lease, the
+            // source question (thread -> run locks, invalidating an ended source), then the
+            // effect row, its exact request and MCP revision, and finally the claim CAS.
             const claimed = await deps.prisma.$transaction(async (tx) => {
               const admission = await lockMaintenanceAdmission(tx);
               if (!admission.admitted) {
@@ -5519,6 +5528,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 owned.leaseFence !== fence || owned.maintenanceCancelRequestedAt) {
                 throw new Error("Run execution lease cancelled or replaced");
               }
+              const source = await checkEffectSourceInTransaction(tx, run, applied!.effect.id, from);
+              if (!source) return false;
               await tx.$queryRaw`SELECT id FROM external_effects WHERE id = ${applied!.effect.id} FOR UPDATE`;
               const currentEffect = await tx.externalEffect.findUnique({ where: { id: applied!.effect.id } });
               if (!currentEffect || currentEffect.status !== from ||
@@ -5534,7 +5545,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   return false;
                 }
               }
-              return claimMaintenanceEffect(tx, applied!.effect.id, from);
+              return casSourceCheckedEffect(tx, run, applied!.effect.id, from, source);
             });
             if (maintenanceRevision !== undefined) throw new MaintenanceBoundary();
             if (claimed) {
@@ -10186,12 +10197,13 @@ export function isSubagentToolExecution(executionId: string): boolean {
 
 export async function recordEffect(
   deps: ExecutorDeps,
-  run: { id: string; spaceId: string; threadId: string; botId: string },
+  run: { id: string; spaceId: string; threadId: string; botId: string; userId?: string },
   kind: string,
   idempotencyKey: string,
   request: unknown,
   legacyIdempotencyKey?: string,
   consumedIds?: Set<string>,
+  sourceMessageId?: string,
 ) {
   const existing = await deps.prisma.externalEffect.findUnique({
     where: { idempotencyKey },
@@ -10305,16 +10317,81 @@ export async function recordEffect(
     return { duplicate: true, effect: legacy };
   }
 
-  const effect = await deps.prisma.externalEffect.create({
-    data: {
-      spaceId: run.spaceId,
-      runId: run.id,
-      kind,
-      idempotencyKey,
-      status: "intended",
-      request: request as never,
-    },
-  });
+  const create = (store: Pick<Prisma.TransactionClient, "externalEffect">) =>
+    store.externalEffect.create({
+      data: {
+        spaceId: run.spaceId,
+        runId: run.id,
+        kind,
+        idempotencyKey,
+        status: "intended",
+        ...(sourceMessageId ? { sourceMessageId } : {}),
+        request: request as never,
+      },
+    });
+
+  // Source endings take these same locks before invalidation. Re-read and create
+  // inside the transaction so an ending cannot slip between validation and insert.
+  const effect = sourceMessageId
+    ? await deps.prisma.$transaction(async (tx) => {
+        if (!run.userId) throw new Error("Approval source is unavailable.");
+        const candidate = await tx.message.findFirst({
+          where: {
+            id: sourceMessageId,
+            botId: run.botId,
+            role: "bot",
+            thread: { spaceId: run.spaceId, userId: run.userId },
+          },
+          select: { threadId: true, runId: true },
+        });
+        if (!candidate?.runId) throw new Error("Approval source is unavailable.");
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidate.threadId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM runs WHERE id = ${candidate.runId} FOR UPDATE`;
+        const source = await tx.message.findFirst({
+          where: {
+            id: sourceMessageId,
+            botId: run.botId,
+            threadId: candidate.threadId,
+            runId: candidate.runId,
+            role: "bot",
+            thread: { spaceId: run.spaceId, userId: run.userId },
+          },
+          select: { blocks: true, runId: true, threadId: true },
+        });
+        const blocks = MessageBlockSchema.array().safeParse(source?.blocks);
+        const asks = blocks.success ? blocks.data.filter((block) => block.kind === "ask") : [];
+        const ask = asks[0];
+        if (
+          !source?.runId ||
+          asks.length !== 1 ||
+          !ask ||
+          ask.status === "answered" ||
+          ask.answer !== undefined ||
+          ask.answeredBy ||
+          ask.syncedFrom ||
+          ask.draftFinal !== undefined ||
+          ask.approvalEffectId ||
+          isApprovalAskBlock(ask) ||
+          isSecretAskBlock(ask) ||
+          ask.credential ||
+          ask.instructionUpdate
+        )
+          throw new Error("Approval source is unavailable.");
+        const sourceRun = await tx.run.findFirst({
+          where: {
+            id: source.runId,
+            threadId: source.threadId,
+            spaceId: run.spaceId,
+            userId: run.userId,
+            botId: run.botId,
+            status: "waiting_input",
+          },
+          select: { id: true },
+        });
+        if (!sourceRun) throw new Error("Approval source is unavailable.");
+        return create(tx);
+      })
+    : await create(deps.prisma);
   consumedIds?.add(effect.id);
   return { duplicate: false, effect };
 }

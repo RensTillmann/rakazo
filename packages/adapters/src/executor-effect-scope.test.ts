@@ -10,6 +10,7 @@ type Effect = {
   request: unknown;
   status: string;
   result?: unknown;
+  sourceMessageId?: string;
 };
 function fixture(initial: Effect[] = []) {
   const stored = new Map(initial.map((effect) => [effect.idempotencyKey, effect]));
@@ -19,9 +20,21 @@ function fixture(initial: Effect[] = []) {
     stored.set(effect.idempotencyKey, effect);
     return effect;
   });
+  const sourceLookup = vi.fn().mockResolvedValue({
+    runId: "source-run",
+    threadId: "source-thread",
+    blocks: [{ kind: "ask", text: "Continue?", choices: ["Yes", "No"] }],
+  });
+  const sourceRunLookup = vi.fn().mockResolvedValue({ id: "source-run" });
   const append = vi.fn();
+  const query = vi.fn().mockResolvedValue([]);
+  const transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(deps.prisma));
   const deps = {
     prisma: {
+      $transaction: transaction,
+      $queryRaw: query,
+      message: { findFirst: sourceLookup },
+      run: { findFirst: sourceRunLookup },
       externalEffect: {
         findUnique: vi.fn(
           async ({ where }: { where: { idempotencyKey: string } }) =>
@@ -41,7 +54,7 @@ function fixture(initial: Effect[] = []) {
     },
     events: { append },
   } as unknown as Parameters<typeof recordEffect>[0];
-  return { deps, create, append, stored };
+  return { deps, create, append, stored, sourceLookup, sourceRunLookup, query, transaction };
 }
 const run = (id: string, spaceId = "space-a") => ({
   id,
@@ -191,5 +204,171 @@ describe("executor tool effect ownership", () => {
         legacyPiToolCallId(typeof invalid === "string" ? invalid : JSON.stringify(invalid)),
       ).toBeUndefined();
     }
+  });
+});
+
+describe("persisted approval source binding", () => {
+  const ownedRun = { ...run("one"), userId: "owner-a" };
+  it("records the exact owned ordinary question alongside unchanged request arguments", async () => {
+    const f = fixture();
+    const request = { message_id: "source-a", reason: "No longer needed" };
+    const result = await recordEffect(
+      f.deps,
+      ownedRun,
+      "withdraw",
+      "new-key",
+      request,
+      undefined,
+      undefined,
+      "source-a",
+    );
+    expect(result.effect.sourceMessageId).toBe("source-a");
+    expect(result.effect.request).toEqual(request);
+    expect(f.sourceLookup).toHaveBeenCalledWith({
+      where: {
+        id: "source-a",
+        threadId: "source-thread",
+        runId: "source-run",
+        botId: "bot-one",
+        role: "bot",
+        thread: { spaceId: "space-a", userId: "owner-a" },
+      },
+      select: { blocks: true, runId: true, threadId: true },
+    });
+    expect(f.sourceRunLookup).toHaveBeenCalledWith({
+      where: {
+        id: "source-run",
+        threadId: "source-thread",
+        botId: "bot-one",
+        spaceId: "space-a",
+        userId: "owner-a",
+        status: "waiting_input",
+      },
+      select: { id: true },
+    });
+  });
+  it.each([
+    null,
+    { runId: null, blocks: [] },
+    { runId: "source-run", blocks: [{ kind: "text", text: "not a question" }] },
+    {
+      runId: "source-run",
+      blocks: [
+        {
+          kind: "ask",
+          text: "Continue?",
+          choices: ["Yes", "No"],
+          status: "answered",
+          answer: "Yes",
+        },
+      ],
+    },
+    {
+      runId: "source-run",
+      blocks: [
+        {
+          kind: "ask",
+          text: "Approve?",
+          choices: ["Approve", "Deny"],
+          approvalEffectId: "protected",
+        },
+      ],
+    },
+    {
+      runId: "source-run",
+      blocks: [
+        { kind: "ask", text: "One?", choices: ["Yes", "No"] },
+        { kind: "ask", text: "Two?", choices: ["Yes", "No"] },
+      ],
+    },
+  ])(
+    "rejects unavailable, foreign, protected or ambiguous source without recording an effect",
+    async (source) => {
+      const f = fixture();
+      f.sourceLookup.mockResolvedValue(source);
+      await expect(
+        recordEffect(f.deps, ownedRun, "withdraw", "new-key", {}, undefined, undefined, "source-a"),
+      ).rejects.toThrow("Approval source is unavailable");
+      expect(f.create).not.toHaveBeenCalled();
+    },
+  );
+  it("rejects a no-longer-waiting source run", async () => {
+    const f = fixture();
+    f.sourceRunLookup.mockResolvedValue(null);
+    await expect(
+      recordEffect(f.deps, ownedRun, "withdraw", "new-key", {}, undefined, undefined, "source-a"),
+    ).rejects.toThrow("Approval source is unavailable");
+    expect(f.create).not.toHaveBeenCalled();
+  });
+  it("does not query or infer a source for unrelated effects", async () => {
+    const f = fixture();
+    await recordEffect(f.deps, ownedRun, "unrelated", "new-key", { message_id: "source-a" });
+    expect(f.sourceLookup).not.toHaveBeenCalled();
+    expect(f.create.mock.calls[0]?.[0].data).not.toHaveProperty("sourceMessageId");
+  });
+});
+
+describe("new approval source recorder interleavings", () => {
+  const ownedRun = { ...run("one"), userId: "owner-a" };
+  const record = (f: ReturnType<typeof fixture>) =>
+    recordEffect(f.deps, ownedRun, "withdraw", "new-key", {}, undefined, undefined, "source-a");
+
+  it("creates under the same source thread/run transaction after a locked re-read", async () => {
+    const f = fixture();
+    f.create.mockImplementationOnce(async ({ data }) => {
+      expect(f.transaction).toHaveBeenCalledTimes(1);
+      expect(f.query).toHaveBeenCalledTimes(2);
+      expect(f.query.mock.calls[0]?.slice(1)).toEqual(["source-thread"]);
+      expect(f.query.mock.calls[1]?.slice(1)).toEqual(["source-run"]);
+      expect(f.sourceLookup).toHaveBeenCalledTimes(2);
+      expect(f.sourceRunLookup).toHaveBeenCalledTimes(1);
+      return { ...data, id: "new-effect" };
+    });
+    expect((await record(f)).duplicate).toBe(false);
+  });
+
+  it.each(["answered", "cancelled", "replaced"])(
+    "rejects a source that becomes %s while waiting for its lock",
+    async (state) => {
+      const f = fixture();
+      f.query.mockImplementationOnce(async () => {
+        if (state === "answered") {
+          f.sourceLookup.mockResolvedValue({
+            runId: "source-run",
+            threadId: "source-thread",
+            blocks: [
+              {
+                kind: "ask",
+                text: "Continue?",
+                choices: ["Yes", "No"],
+                status: "answered",
+                answer: "Yes",
+              },
+            ],
+          });
+        } else if (state === "cancelled") {
+          f.sourceRunLookup.mockResolvedValue(null);
+        } else {
+          f.sourceLookup.mockResolvedValue(null);
+        }
+        return [];
+      });
+      await expect(record(f)).rejects.toThrow("Approval source is unavailable");
+      expect(f.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("propagates lock failure without recording an effect", async () => {
+    const f = fixture();
+    f.query.mockRejectedValueOnce(new Error("source lock failed"));
+    await expect(record(f)).rejects.toThrow("source lock failed");
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it("does not transact or lock unrelated unbound effects", async () => {
+    const f = fixture();
+    await recordEffect(f.deps, ownedRun, "other", "new-key", {});
+    expect(f.transaction).not.toHaveBeenCalled();
+    expect(f.query).not.toHaveBeenCalled();
   });
 });

@@ -69,6 +69,8 @@ function harness() {
       findMany: vi.fn(async () => control.leases), updateMany: vi.fn(async () => ({ count: 1 })) },
     externalEffect: { findMany: vi.fn(async ({ where }: { where: { status?: string } }) =>
       effects.filter((effect) => !where.status || effect.status === where.status).map((effect) => ({ ...effect }))) },
+    // Cancellation also invalidates source-bound approvals; this run's cards bind none.
+    message: { findMany: vi.fn(async () => []) },
     attempt: {
       findMany: vi.fn(async () => attempt.status === "running" ? [{ id: attempt.id }] : []),
       updateMany: vi.fn(async ({ data }: { data: object }) => { Object.assign(attempt, data); return { count: 1 }; }),

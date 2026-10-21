@@ -1,3 +1,12 @@
+export {
+  casSourceCheckedEffect,
+  checkEffectSourceInTransaction,
+  claimSourceCheckedEffect,
+} from "./approval-claim.js";
+export {
+  invalidatePendingApprovalEffect,
+  invalidateRunSourceApprovalEffects,
+} from "./approval-invalidation.js";
 export * from "./artifact-versions.js";
 export * from "./billing.js";
 export * from "./board.js";
