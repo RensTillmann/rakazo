@@ -8275,6 +8275,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       key: item.key,
                       title: redactSecrets(item.title, runSecrets),
                       steps: redactSecrets(item.steps, runSecrets),
+                      ...(item.why ? { why: redactSecrets(item.why, runSecrets) } : {}),
                       verification: item.verification,
                     })),
                   }

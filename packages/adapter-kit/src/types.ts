@@ -623,7 +623,13 @@ export type AgentRuntimeEvent =
       draft?: string;
       /** Fleet: the manual prerequisites the `todo` action hands to the user (`ask_user` `prerequisites`). */
       prerequisites?: {
-        items: Array<{ key: string; title: string; steps: string; verification: "automatic" | "manual" }>;
+        items: Array<{
+          key: string;
+          title: string;
+          steps: string;
+          why?: string;
+          verification: "automatic" | "manual";
+        }>;
         release: "each" | "all";
       };
       /**

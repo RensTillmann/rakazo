@@ -33,6 +33,7 @@ const BADGE: AskPrerequisite = {
   key: "office-badge:elena",
   title: "Collect Elena's office badge",
   steps: "Pick up the badge at reception and hand it over.",
+  why: "Elena cannot enter the office without it.",
   verification: "manual",
 };
 
@@ -551,6 +552,11 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     }
     const listed = await listUserTodos(f.prisma, f.actor);
     expect(new Set(listed.map((todo) => todo.groupId))).toEqual(new Set([asked.message.id]));
+    expect(listed.find((todo) => todo.requirementKey === BADGE.key)).toMatchObject({
+      why: BADGE.why,
+      caseNumber: null,
+    });
+    expect(listed.find((todo) => todo.requirementKey === ACCESS.key)?.why).toBeNull();
     const prompt = await asked.resumePrompt();
     expect(prompt).toContain(ACCESS.title);
     expect(prompt).toContain(BADGE.title);

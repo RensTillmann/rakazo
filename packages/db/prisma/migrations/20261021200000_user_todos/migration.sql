@@ -13,6 +13,7 @@ CREATE TABLE "user_todos" (
     "requirementKey" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "steps" TEXT NOT NULL,
+    "why" TEXT,
     "verification" TEXT NOT NULL CHECK ("verification" IN ('automatic', 'manual')),
     "status" TEXT NOT NULL DEFAULT 'open' CHECK ("status" IN ('open', 'checking', 'verified', 'remaining', 'unavailable', 'confirmed', 'retired')),
     "statusDetail" TEXT,

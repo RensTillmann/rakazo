@@ -486,6 +486,12 @@ export const builtinAgentTools: ConnectorTool[] = [
                 maxLength: 4000,
                 description: "The exact steps the user takes, complete enough to follow alone.",
               },
+              why: {
+                type: "string",
+                minLength: 1,
+                maxLength: 600,
+                description: "Optional: why this item is needed, in one or two plain sentences.",
+              },
               verification: {
                 type: "string",
                 enum: ["automatic", "manual"],

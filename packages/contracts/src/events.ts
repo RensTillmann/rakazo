@@ -111,6 +111,8 @@ export const AskPrerequisite = z.object({
   title: z.string().trim().min(1).max(300),
   /** The exact steps the user takes. */
   steps: z.string().trim().min(1).max(4000),
+  /** Why the item is needed, in the user's terms. */
+  why: z.string().trim().min(1).max(600).optional(),
   /** `automatic`: the bot can check it with its own read-only tools; `manual`: only the user can. */
   verification: z.enum(["automatic", "manual"]),
 });

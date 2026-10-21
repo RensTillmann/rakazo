@@ -868,6 +868,8 @@ model UserTodo {
   requirementKey   String
   title            String
   steps            String
+  /// Why the item is needed, when the bot said.
+  why              String?
   /// automatic | manual
   verification     String
   /// open | checking | verified | remaining | unavailable | confirmed | retired

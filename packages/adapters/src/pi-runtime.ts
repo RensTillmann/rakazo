@@ -2212,6 +2212,7 @@ function builtinParameters(tool: ConnectorTool) {
             key: Type.String({ minLength: 1, maxLength: 200 }),
             title: Type.String({ minLength: 1, maxLength: 300 }),
             steps: Type.String({ minLength: 1, maxLength: 4000 }),
+            why: Type.Optional(Type.String({ minLength: 1, maxLength: 600 })),
             verification: stringEnum(["automatic", "manual"], {}),
           }),
           { minItems: 1, maxItems: 10 },

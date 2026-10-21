@@ -250,6 +250,10 @@ export const UserTodoSchema = z.object({
   requirementKey: z.string(),
   title: z.string(),
   steps: z.string(),
+  /** Why the item is needed. */
+  why: z.string().nullable(),
+  /** The `Case <n>` number at the head of the card's question, when it has one. */
+  caseNumber: z.string().nullable(),
   verification: z.enum(["automatic", "manual"]),
   status: UserTodoStatusSchema,
   /** The remaining step, why it could not be checked, or why it is no longer needed. */

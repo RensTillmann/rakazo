@@ -8,6 +8,7 @@ import {
   UserTodoStatusSchema,
 } from "@rakazo/contracts";
 import type { Prisma, PrismaClient } from "./client.js";
+import { askCaseKey } from "./decisions.js";
 
 type UserTodoRow = Prisma.UserTodoGetPayload<{ include: { bot: { select: { name: true } } } }>;
 
@@ -23,6 +24,8 @@ export function userTodoDto(row: UserTodoRow): UserTodo {
     requirementKey: row.requirementKey,
     title: row.title,
     steps: row.steps,
+    why: row.why,
+    caseNumber: askCaseKey(row.groupTitle)?.replace(/^case /, "") ?? null,
     verification: row.verification === "manual" ? "manual" : "automatic",
     status: UserTodoStatusSchema.catch("open").parse(row.status),
     statusDetail: row.statusDetail,
@@ -104,6 +107,7 @@ export async function upsertUserTodosFromAnswerInTransaction(
           requirementKey: item.key,
           title: item.title,
           steps: item.steps,
+          why: item.why ?? null,
           verification: item.verification,
         },
       ],
@@ -125,6 +129,7 @@ export async function upsertUserTodosFromAnswerInTransaction(
       material ||
       existing.title !== item.title ||
       existing.steps !== item.steps ||
+      existing.why !== (item.why ?? null) ||
       existing.sourceMessageId !== input.sourceMessageId;
     const updated = await tx.userTodo.update({
       where: { id: existing.id },
@@ -132,6 +137,7 @@ export async function upsertUserTodosFromAnswerInTransaction(
         ...source,
         title: item.title,
         steps: item.steps,
+        why: item.why ?? null,
         verification: item.verification,
         ...(material
           ? {
