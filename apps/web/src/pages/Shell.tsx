@@ -8299,6 +8299,7 @@ const MessageView = memo(function MessageView({
               key={i}
               block={block}
               messageId={message.id}
+              botName={speakerName ?? speakerBot?.name}
               canAnswer={canAnswer}
               onAnswer={(text, username, _files, draftFinal) =>
                 onAnswer(message, text, username, draftFinal)

@@ -125,6 +125,18 @@ msgstr ""
 msgid "{amount} / {period}"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "{bot} gets your choice and the reply exactly as shown (with your edits); nothing is sent until {bot} does it, for {sourceRef}."
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "{bot} gets your choice and the reply exactly as shown (with your edits); nothing is sent until {bot} does it."
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "{bot} runs this only if you allow it. Allow once: this time only · Always allow: no card next time for this tool · Deny: nothing runs."
+msgstr ""
+
 #: src/components/TodosControl.tsx
 msgid "{botName} checks it when you tick the box"
 msgstr ""
@@ -770,6 +782,10 @@ msgstr "Apparence"
 #: src/components/AskCard.tsx
 msgid "Apply"
 msgstr "Appliquer"
+
+#: src/components/AskCard.tsx
+msgid "Apply changes {bot}'s instructions now · Edit first lets you change them · Dismiss keeps them as they are."
+msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Approval boundaries"
@@ -2164,6 +2180,10 @@ msgstr "Créer une routine"
 msgid "Create space"
 msgstr "Créer un espace"
 
+#: src/components/AskCard.tsx
+msgid "Create space creates it now; Cancel leaves everything as is."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Create your Rakazo"
 msgstr "Créez votre Rakazo"
@@ -2171,6 +2191,10 @@ msgstr "Créez votre Rakazo"
 #: src/components/AskCard.tsx
 msgid "Created"
 msgstr "Créé"
+
+#: src/components/AskCard.tsx
+msgid "Creates the space now"
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -2218,6 +2242,10 @@ msgstr ""
 
 #: src/components/ReplyReview.tsx
 msgid "Customer context unavailable."
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Customer inquiry"
 msgstr ""
 
 #: src/components/ReplyReview.tsx
@@ -2854,6 +2882,10 @@ msgstr ""
 msgid "Fleet: Status unavailable"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "For {sourceRef} · version {sourceVersion}"
+msgstr ""
+
 #: src/components/FleetPauseControls.tsx
 msgid "Force stop interrupts active work instead of waiting for a safe checkpoint. Progress may be incomplete. Already-started effects cannot be undone and their outcome may remain unknown. Fleet will be paused until you resume it."
 msgstr ""
@@ -3238,6 +3270,10 @@ msgstr ""
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Leave"
 msgstr "Quitter"
+
+#: src/components/AskCard.tsx
+msgid "Leaves everything as is"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Lets this bot organize, retune and schedule the bots it creates. You approve each change."
@@ -3980,6 +4016,10 @@ msgstr "Rien ne tourne encore"
 msgid "Nothing remembered yet"
 msgstr "Rien n'est mémorisé pour le moment"
 
+#: src/components/AskCard.tsx
+msgid "Nothing runs"
+msgstr ""
+
 #: src/components/TodosControl.tsx
 msgid "Nothing waiting on you"
 msgstr ""
@@ -4333,6 +4373,7 @@ msgstr "ID du projet"
 msgid "Prompt"
 msgstr ""
 
+#: src/components/AskCard.tsx
 #: src/components/ReplyReview.tsx
 msgid "Proposed reply"
 msgstr ""
@@ -4647,10 +4688,6 @@ msgstr "Répondre"
 msgid "Reply cancelled"
 msgstr ""
 
-#: src/components/AskCard.tsx
-msgid "Reply draft"
-msgstr ""
-
 #. placeholder {0}: replyNameRef.current
 #: src/pages/Shell.tsx
 msgid "Replying to {0}"
@@ -4860,6 +4897,14 @@ msgstr "En cours · Arrêter"
 msgid "Running…"
 msgstr "Exécution en cours…"
 
+#: src/components/AskCard.tsx
+msgid "Runs now and no card next time for this tool"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Runs this time only; asks again next time"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr "S'exécute lorsque ce bot reçoit un message vérifié de ce fournisseur."
@@ -4902,6 +4947,14 @@ msgstr "Enregistrer l’espace de travail et installer les logiciels actuels."
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Saved"
 msgstr "Enregistré"
+
+#: src/components/AskCard.tsx
+msgid "Saved encrypted for {bot} to use at {secretDestination}; never shown in chat."
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Saved encrypted for {bot} to use; never shown in chat."
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
@@ -5154,6 +5207,7 @@ msgstr "Shell"
 msgid "Shell command rule (regular expression)"
 msgstr ""
 
+#: src/components/AskCard.tsx
 #: src/pages/GroupPanel.tsx
 msgid "Show all"
 msgstr ""
@@ -5170,6 +5224,7 @@ msgstr "Afficher l'ordinateur"
 msgid "Show how"
 msgstr ""
 
+#: src/components/AskCard.tsx
 #: src/components/ThinkingText.tsx
 msgid "Show less"
 msgstr ""
@@ -5553,6 +5608,10 @@ msgstr ""
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "L'API n'est pas revenue. Actualisez cette page."
+
+#: src/components/AskCard.tsx
+msgid "the bot"
+msgstr ""
 
 #: src/components/FleetFeedback.tsx
 msgid "The configured feedback target is unavailable in this Space. Ask a Space administrator to check the feedback bot, then retry."
@@ -6216,6 +6275,10 @@ msgstr ""
 #: src/lib/run-error.ts
 msgid "Your Anthropic"
 msgstr "Votre Anthropic"
+
+#: src/components/AskCard.tsx
+msgid "Your choice goes to {bot}, which continues with it."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Your email address"

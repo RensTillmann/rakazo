@@ -586,3 +586,224 @@ describe("AskCard reply approval review", () => {
     },
   );
 });
+
+describe("AskCard reply context and who acts", () => {
+  const inquiryLines = Array.from({ length: 30 }, (_, index) => `Inquiry line ${index + 1}`);
+  const inquiry = inquiryLines.join("\n");
+  const draftCard = {
+    kind: "ask",
+    text: "Reply to Konstantin Grushko (#3529)?",
+    status: "pending",
+    inquiry,
+    draft: "Hi Konstantin,\n\nYour licence is active again.",
+    source: { ref: "zendesk:3529", version: "comment 98123" },
+    actions: [
+      { id: "choice-1", label: "Approve and send" },
+      { id: "choice-2", label: "Don't reply" },
+    ],
+  } as unknown as AskBlock;
+  const render = (block: AskBlock, botName: string | undefined = "Josy") =>
+    renderToStaticMarkup(
+      <AskCard block={block} botName={botName} canAnswer onAnswer={async () => {}} />,
+    );
+  const text = (html: string) => {
+    const element = document.createElement("div");
+    element.innerHTML = html;
+    return element;
+  };
+
+  it("shows the whole customer inquiry above the draft, folded when long", () => {
+    const card = text(render(draftCard));
+    const shown = card.querySelector<HTMLElement>('[data-testid="ask-inquiry"]')!;
+    // Nothing is cut: every line is in the DOM, only folded behind a fade.
+    expect(shown.textContent).toBe(inquiry);
+    expect(shown.getAttribute("dir")).toBe("auto");
+    expect(shown.className).toContain("whitespace-pre-wrap");
+    expect(shown.parentElement!.dataset.folded).toBe("true");
+    expect(card.textContent).not.toContain("…");
+    const sections = [...card.querySelectorAll("section")].map((s) => s.getAttribute("aria-label"));
+    expect(sections).toEqual(["Customer inquiry", "Proposed reply"]);
+    expect(card.textContent).toContain("Show all");
+  });
+
+  it("does not fold a short inquiry", () => {
+    const card = text(render({ ...draftCard, inquiry: "Is my licence active?" } as AskBlock));
+    expect(card.querySelector('[data-testid="ask-inquiry"]')!.parentElement!.dataset.folded).toBe(
+      undefined,
+    );
+    expect(card.textContent).not.toContain("Show all");
+  });
+
+  it("toggles the folded inquiry with Show all and Show less", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () =>
+      root.render(<AskCard block={draftCard} botName="Josy" canAnswer onAnswer={async () => {}} />),
+    );
+    const toggle = () =>
+      [...container.querySelectorAll("button")].find((b) =>
+        /^Show (all|less)$/.test(b.textContent!),
+      )!;
+    const fold = () => container.querySelector('[data-testid="ask-inquiry"]')!.parentElement!;
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    await act(async () => toggle().click());
+    expect(toggle().textContent).toBe("Show less");
+    expect(fold().dataset.folded).toBeUndefined();
+    await act(async () => toggle().click());
+    expect(toggle().textContent).toBe("Show all");
+    expect(fold().dataset.folded).toBe("true");
+    act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("labels the editable draft and names the source version", () => {
+    const card = text(render(draftCard));
+    const draft = card.querySelector('textarea[data-testid="ask-draft"]')!;
+    expect(draft.getAttribute("aria-label")).toBe("Proposed reply");
+    expect(card.querySelector('[data-testid="ask-source"]')?.textContent).toBe(
+      "For zendesk:3529 · version comment 98123",
+    );
+  });
+
+  it("shows the sent reply read-only once answered, folding a long one", () => {
+    const long = Array.from({ length: 20 }, (_, index) => `Reply line ${index + 1}`).join("\n");
+    const card = text(
+      render({
+        ...draftCard,
+        status: "answered",
+        answer: "choice-1",
+        draftFinal: long,
+      } as AskBlock),
+    );
+    const sent = card.querySelector<HTMLElement>('div[data-testid="ask-draft"]')!;
+    expect(sent.textContent).toBe(long);
+    expect(sent.parentElement!.dataset.folded).toBe("true");
+    expect(card.textContent).toContain("Edited before answering");
+    expect(card.querySelector('[data-testid="ask-who-acts"]')).toBeNull();
+  });
+
+  it("keeps a replaced card's reason", () => {
+    const card = text(
+      render({
+        ...draftCard,
+        status: "retired",
+        retiredReason: "Replaced by a newer card for zendesk:3529",
+      } as AskBlock),
+    );
+    expect(card.textContent).toContain("Replaced by a newer card for zendesk:3529");
+    expect(card.querySelector('[data-testid="ask-who-acts"]')).toBeNull();
+  });
+
+  const whoActs = (html: string) =>
+    text(html).querySelector('[data-testid="ask-who-acts"]')?.textContent;
+
+  it("says who acts on a draft card and for which source", () => {
+    expect(whoActs(render(draftCard))).toBe(
+      "Josy gets your choice and the reply exactly as shown (with your edits); nothing is sent until Josy does it, for zendesk:3529.",
+    );
+    expect(whoActs(render({ ...draftCard, source: undefined } as AskBlock))).toBe(
+      "Josy gets your choice and the reply exactly as shown (with your edits); nothing is sent until Josy does it.",
+    );
+  });
+
+  it("says who acts on an ordinary question", () => {
+    const question = {
+      kind: "ask",
+      text: "Which city?",
+      status: "pending",
+      actions: [{ id: "a", label: "Berlin" }],
+    } as unknown as AskBlock;
+    expect(whoActs(render(question))).toBe("Your choice goes to Josy, which continues with it.");
+  });
+
+  it("says who acts on an approval and titles each button with its effect", () => {
+    const approval = {
+      kind: "ask",
+      text: "Send the email?",
+      status: "pending",
+      approvalEffectId: "effect-1",
+      detail: "To: a@example.com",
+      actions: [
+        { id: "allow", label: "Allow" },
+        { id: "always", label: "Always" },
+        { id: "deny", label: "Deny" },
+      ],
+    } as unknown as AskBlock;
+    const html = render(approval);
+    expect(whoActs(html)).toBe(
+      "Josy runs this only if you allow it. Allow once: this time only · Always allow: no card next time for this tool · Deny: nothing runs.",
+    );
+    const titles = [...text(html).querySelectorAll("button")].map((b) => [b.textContent, b.title]);
+    expect(titles).toEqual([
+      ["Allow once", "Runs this time only; asks again next time"],
+      ["Always allow this tool", "Runs now and no card next time for this tool"],
+      ["Deny", "Nothing runs"],
+    ]);
+  });
+
+  it("says who acts on an instruction update", () => {
+    const update = {
+      kind: "ask",
+      text: "Update?",
+      status: "pending",
+      approvalEffectId: "effect-2",
+      instructionUpdate: { botId: "josy", before: "a", after: "b", reason: "r" },
+      actions: [
+        { id: "allow", label: "Allow" },
+        { id: "deny", label: "Deny" },
+      ],
+    } as unknown as AskBlock;
+    expect(whoActs(render(update))).toBe(
+      "Apply changes Josy's instructions now · Edit first lets you change them · Dismiss keeps them as they are.",
+    );
+  });
+
+  it("says who acts on a secret card", () => {
+    const secret = {
+      kind: "ask",
+      text: "API key for the CRM?",
+      status: "pending",
+      input: "secret",
+      purpose: "api_key",
+      credential: {
+        name: "CRM_KEY",
+        origin: "https://crm.example.com",
+        auth: { type: "bearer" },
+      },
+    } as unknown as AskBlock;
+    expect(whoActs(render(secret))).toBe(
+      "Saved encrypted for Josy to use at https://crm.example.com; never shown in chat.",
+    );
+  });
+
+  it("says what the create-space buttons do", () => {
+    const create = {
+      kind: "ask",
+      text: "Create the space Sales?",
+      status: "pending",
+      approvalEffectId: "effect-3",
+      actions: [
+        { id: "allow", label: "Create", outcome: "created" },
+        { id: "deny", label: "Cancel", outcome: "cancelled" },
+      ],
+    } as unknown as AskBlock;
+    expect(whoActs(render(create))).toBe(
+      "Create space creates it now; Cancel leaves everything as is.",
+    );
+  });
+
+  it("never calls anyone an operator or developer", () => {
+    const html = [draftCard, { ...draftCard, status: "answered", answer: "choice-1" }].map(
+      (block) =>
+        renderToStaticMarkup(
+          <AskCard block={block as AskBlock} canAnswer onAnswer={async () => {}} />,
+        ),
+    );
+    for (const markup of html) expect(markup).not.toMatch(/operator|developer/i);
+    // Without a bot name the line still reads as a sentence.
+    expect(whoActs(html[0]!)).toMatch(/^The bot gets your choice/);
+  });
+});

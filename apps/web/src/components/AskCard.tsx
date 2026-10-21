@@ -17,7 +17,7 @@ import {
 } from "@rakazo/core";
 import { Button, Input, Textarea } from "@rakazo/ui-web";
 import { Paperclip, Plus, X } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { answeredByDeviceLabel } from "../lib/answered-by-label";
 import {
   ATTACHMENT_ACCEPT,
@@ -84,6 +84,59 @@ function secretFieldLabel(purpose: AskBlock["purpose"]): string {
   return t`Code`;
 }
 
+/** What an approval button does, as its tooltip. */
+function approvalActionTitle(id: string, outcome?: "created" | "cancelled"): string | undefined {
+  if (outcome === "created") return t`Creates the space now`;
+  if (outcome === "cancelled") return t`Leaves everything as is`;
+  if (id === "allow") return t`Runs this time only; asks again next time`;
+  if (id === "always") return t`Runs now and no card next time for this tool`;
+  if (id === "deny") return t`Nothing runs`;
+  return undefined;
+}
+
+/** Longer than this many (wrapped) lines, inquiry, reply and detail text start folded. */
+const FOLD_LINES = 12;
+/** Characters per line when estimating how a long line wraps on the card. */
+const FOLD_LINE_CHARS = 80;
+
+/**
+ * Long card text folded behind a fade with Show all / Show less. The whole text stays in the DOM;
+ * nothing is cut.
+ */
+function Fold({ text, children }: { text: string; children: ReactNode }) {
+  const { t } = useLingui();
+  const [open, setOpen] = useState(false);
+  const lines = text
+    .split("\n")
+    .reduce((count, line) => count + Math.max(1, Math.ceil(line.length / FOLD_LINE_CHARS)), 0);
+  const long = lines > FOLD_LINES;
+  const folded = long && !open;
+  return (
+    <>
+      <div
+        data-folded={folded ? "true" : undefined}
+        className={
+          folded
+            ? "max-h-[17rem] overflow-hidden [mask-image:linear-gradient(to_bottom,black_65%,transparent)]"
+            : undefined
+        }
+      >
+        {children}
+      </div>
+      {long ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="mt-1 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {open ? t`Show less` : t`Show all`}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 /** Fleet: which device answered this card, so a stray tap can be traced. */
 export function AnsweredByLine({
   answeredBy,
@@ -106,6 +159,7 @@ export function AnsweredByLine({
 export function AskCard({
   block,
   messageId,
+  botName,
   canAnswer,
   onAnswer,
   voice,
@@ -114,6 +168,8 @@ export function AskCard({
   block: AskBlock;
   /** The card's message; once answered, the to-dos it handed over show under it. */
   messageId?: string;
+  /** The bot that asked; the card says what it does with each choice. */
+  botName?: string;
   canAnswer: boolean;
   /**
    * `files` only for a question card's typed answer, and only when `attachmentMaxBytes` is set.
@@ -189,6 +245,34 @@ export function AskCard({
   const secretInput = isSecretAskBlock(block);
   const loginInput = secretInput && block.credential?.auth.type === "login";
   const secretLabel = loginInput ? t`Password` : secretFieldLabel(block.purpose);
+  const bot = botName ?? t`the bot`;
+  const sourceRef = block.source?.ref;
+  const sourceVersion = block.source?.version;
+  const secretDestination =
+    block.credential?.auth.type === "command"
+      ? `$${commandVariableName(block.credential.name)}`
+      : block.credential?.origin;
+  // Who acts, what a click does, and what it affects: one line under an open card's buttons.
+  const whoActs =
+    !canAnswer || block.status === "answered" || block.status === "retired"
+      ? null
+      : secretInput
+        ? secretDestination
+          ? t`Saved encrypted for ${bot} to use at ${secretDestination}; never shown in chat.`
+          : t`Saved encrypted for ${bot} to use; never shown in chat.`
+        : block.instructionUpdate
+          ? editing
+            ? null
+            : t`Apply changes ${bot}'s instructions now · Edit first lets you change them · Dismiss keeps them as they are.`
+          : approvalActions?.some((action) => action.outcome)
+            ? t`Create space creates it now; Cancel leaves everything as is.`
+            : approvalActions
+              ? t`${bot} runs this only if you allow it. Allow once: this time only · Always allow: no card next time for this tool · Deny: nothing runs.`
+              : block.draft !== undefined
+                ? sourceRef
+                  ? t`${bot} gets your choice and the reply exactly as shown (with your edits); nothing is sent until ${bot} does it, for ${sourceRef}.`
+                  : t`${bot} gets your choice and the reply exactly as shown (with your edits); nothing is sent until ${bot} does it.`
+                : t`Your choice goes to ${bot}, which continues with it.`;
 
   async function submitAnswer(value: string) {
     if (submitting) return;
@@ -312,6 +396,11 @@ export function AskCard({
           <ChatMarkdown>{block.text}</ChatMarkdown>
         )}
       </div>
+      {block.source ? (
+        <div data-testid="ask-source" className="mt-1 text-[12.5px] text-muted-foreground">
+          {t`For ${sourceRef} · version ${sourceVersion}`}
+        </div>
+      ) : null}
       {secretInput && block.credential ? (
         <div
           data-testid="secret-ask-destination"
@@ -345,47 +434,72 @@ export function AskCard({
         approvalActions && !block.instructionUpdate && !block.detailFormat ? (
           <ApprovalDetail detail={approvalDetail} />
         ) : (
-          <pre
-            className={
-              block.detailFormat === "text"
-                ? "mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words font-sans text-[15.5px] leading-[1.5] text-foreground"
-                : "mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.7] text-muted-foreground"
-            }
-          >
-            {approvalDetail}
-          </pre>
+          <Fold text={approvalDetail}>
+            <pre
+              className={
+                block.detailFormat === "text"
+                  ? "mt-3 whitespace-pre-wrap break-words font-sans text-[15.5px] leading-[1.5] text-foreground"
+                  : "mt-3 whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.7] text-muted-foreground"
+              }
+            >
+              {approvalDetail}
+            </pre>
+          </Fold>
         )
       ) : null}
-      {block.draft !== undefined ? (
-        draftEditable ? (
-          <Textarea
-            data-testid="ask-draft"
-            aria-label={t`Reply draft`}
-            dir="auto"
-            maxLength={ASK_DRAFT_MAX_LENGTH}
-            disabled={submitting}
-            value={draftText}
-            ref={draftRef}
-            // Grows with the text (`field-sizing: content`); the dock body scrolls past that.
-            className="mt-3 min-h-24 resize-none bg-background text-[15.5px] leading-[1.5] md:text-[15.5px]"
-            onChange={(event) => setDraftText(event.target.value)}
-          />
-        ) : (
-          <div className="mt-3">
+      {block.inquiry ? (
+        <section aria-label={t`Customer inquiry`} className="mt-3">
+          <h3 className="text-[13px] font-medium text-muted-foreground">
+            <Trans>Customer inquiry</Trans>
+          </h3>
+          <Fold text={block.inquiry}>
             <div
-              data-testid="ask-draft"
+              data-testid="ask-inquiry"
               dir="auto"
-              className="whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 text-[15.5px] leading-[1.5] text-foreground"
+              className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 text-[15.5px] leading-[1.5] text-foreground"
             >
-              {block.draftFinal ?? block.draft}
+              {block.inquiry}
             </div>
-            {block.draftFinal !== undefined ? (
-              <div className="mt-1 text-[12px] text-muted-foreground">
-                <Trans>Edited before answering</Trans>
-              </div>
-            ) : null}
-          </div>
-        )
+          </Fold>
+        </section>
+      ) : null}
+      {block.draft !== undefined ? (
+        <section aria-label={t`Proposed reply`} className="mt-3">
+          <h3 className="text-[13px] font-medium text-muted-foreground">
+            <Trans>Proposed reply</Trans>
+          </h3>
+          {draftEditable ? (
+            <Textarea
+              data-testid="ask-draft"
+              aria-label={t`Proposed reply`}
+              dir="auto"
+              maxLength={ASK_DRAFT_MAX_LENGTH}
+              disabled={submitting}
+              value={draftText}
+              ref={draftRef}
+              // Grows with the text (`field-sizing: content`); the dock body scrolls past that.
+              className="mt-1 min-h-24 resize-none bg-background text-[15.5px] leading-[1.5] md:text-[15.5px]"
+              onChange={(event) => setDraftText(event.target.value)}
+            />
+          ) : (
+            <>
+              <Fold text={block.draftFinal ?? block.draft}>
+                <div
+                  data-testid="ask-draft"
+                  dir="auto"
+                  className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 text-[15.5px] leading-[1.5] text-foreground"
+                >
+                  {block.draftFinal ?? block.draft}
+                </div>
+              </Fold>
+              {block.draftFinal !== undefined ? (
+                <div className="mt-1 text-[12px] text-muted-foreground">
+                  <Trans>Edited before answering</Trans>
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
       ) : null}
       {block.instructionUpdate && editing && canAnswer && block.status !== "answered" ? (
         <form
@@ -447,6 +561,7 @@ export function AskCard({
           {displayActions?.map((action) => (
             <Button
               key={action.id}
+              title={approvalActions ? approvalActionTitle(action.id, action.outcome) : undefined}
               variant={approvalActions && action.id === "allow" ? "default" : "outline"}
               className={`h-auto min-w-0 whitespace-normal px-3.5 py-3 text-start font-normal ${approvalActions ? "" : "w-full justify-start"}`}
               disabled={
@@ -542,6 +657,12 @@ export function AskCard({
           </Button>
         </div>
       )}
+      {whoActs ? (
+        <p data-testid="ask-who-acts" className="mt-2.5 text-[12.5px] text-muted-foreground">
+          {/* "the bot" opens some lines when the card has no bot name. */}
+          {whoActs.charAt(0).toUpperCase() + whoActs.slice(1)}
+        </p>
+      ) : null}
       {error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}
     </div>
   );
