@@ -183,7 +183,7 @@ describe("Pi choice asks", () => {
     title: "Pick up the Seoul door badge",
     steps: "Collect the badge at reception.",
     verification: "manual",
-    blocks: ["Case 142"],
+    blocks: [{ issue: 142 }, "release 6.4"],
   };
 
   it("marks the to-do option and carries every prerequisite item onto the ask", async () => {
@@ -192,6 +192,7 @@ describe("Pi choice asks", () => {
       option: "Seoul",
       release: "each",
       priority: "p1",
+      caseRef: 383,
     };
     const runtime = new PiAgentRuntime();
     const events: AgentRuntimeEvent[] = [];
@@ -206,9 +207,24 @@ describe("Pi choice asks", () => {
           { id: "choice-2", label: "Seoul", todo: true },
           { id: "choice-3", label: "Toronto" },
         ],
-        prerequisites: { items: [seoul, badge], release: "each", priority: "p1" },
+        prerequisites: {
+          items: [seoul, badge],
+          release: "each",
+          priority: "p1",
+          caseRef: 383,
+        },
       }),
     );
+  });
+
+  it("rejects a case ref that is not a tracker issue number", async () => {
+    for (const caseRef of ["383", 0, 3.5]) {
+      fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Seoul", caseRef };
+      const runtime = new PiAgentRuntime();
+      await expect(async () => {
+        for await (const _event of runtime.run(runRequest, runContext));
+      }).rejects.toThrow("ask_user prerequisites needs");
+    }
   });
 
   it("releases all items together unless told otherwise", async () => {

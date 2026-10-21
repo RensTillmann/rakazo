@@ -874,8 +874,10 @@ model UserTodo {
   steps            String
   /// Why the item is needed, when the bot said.
   why              String?
-  /// Other cases or jobs that truly depend on this item ("Case 142", "#144").
-  blocks           String[]  @default([])
+  /// Other cases or jobs that truly depend on this item: [{ issue, label? }] or display text.
+  blocks           Json      @default("[]")
+  /// The tracker case (issue number) the to-do belongs to; its end retires the to-do.
+  caseRef          Int?
   /// automatic | manual
   verification     String
   /// open | checking | verified | remaining | unavailable | confirmed | retired
@@ -893,6 +895,7 @@ model UserTodo {
   @@unique([spaceId, requirementKey])
   @@index([spaceId, userId, status])
   @@index([sourceMessageId])
+  @@index([spaceId, caseRef])
   @@map("user_todos")
 }
 

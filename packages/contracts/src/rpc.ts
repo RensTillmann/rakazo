@@ -252,10 +252,13 @@ export const UserTodoSchema = z.object({
   steps: z.string(),
   /** Why the item is needed. */
   why: z.string().nullable(),
-  /** The `Case <n>` number at the head of the card's question, when it has one. */
-  caseNumber: z.string().nullable(),
-  /** Other cases or jobs that truly depend on this item; empty when only its own bot waits. */
-  blocks: z.array(z.string()),
+  /** The tracker case (issue number) the to-do belongs to; null when the card named none. */
+  caseRef: z.number().int().positive().nullable(),
+  /**
+   * Other cases or jobs that truly depend on this item; empty when only its own bot waits.
+   * `issue` is set only for a structured tracker ref; free text has `issue: null`.
+   */
+  blocks: z.array(z.object({ issue: z.number().int().positive().nullable(), label: z.string() })),
   /** The card's priority; null sorts after p3. */
   priority: z.enum(["p0", "p1", "p2", "p3"]).nullable(),
   /** The item's place on its card, in the bot's order. */
@@ -278,6 +281,13 @@ export const UserTodoActionInputSchema = z
   .object({ todoId: Id, revision: z.number().int().nonnegative() })
   .strict();
 export type UserTodoActionInput = z.infer<typeof UserTodoActionInputSchema>;
+
+export const UserTodoCaseInputSchema = z
+  .object({ caseRef: z.number().int().positive().max(2_147_483_647) })
+  .strict();
+export const UserTodoRetireForCaseInputSchema = UserTodoCaseInputSchema.extend({
+  reason: z.string().trim().min(1).max(1000),
+}).strict();
 
 export const appContract = {
   aiConsent: {
@@ -1139,6 +1149,15 @@ export const appContract = {
     check: oc.input(UserTodoActionInputSchema).output(z.object({ todo: UserTodoSchema })),
     /** I did it: the user confirms a manual to-do no bot can verify. */
     confirm: oc.input(UserTodoActionInputSchema).output(z.object({ todo: UserTodoSchema })),
+    /** Fleet service (deployment owner): every to-do of a tracker case, all statuses. */
+    byCase: oc.input(UserTodoCaseInputSchema).output(z.object({ todos: z.array(UserTodoSchema) })),
+    /**
+     * Fleet service (deployment owner): the case ended or no longer needs them. Retires its
+     * open, checking, remaining and unavailable to-dos with `reason`; returns those it retired.
+     */
+    retireForCase: oc
+      .input(UserTodoRetireForCaseInputSchema)
+      .output(z.object({ retired: z.array(UserTodoSchema) })),
   },
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),

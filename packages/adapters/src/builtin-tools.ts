@@ -517,9 +517,16 @@ export const builtinAgentTools: ConnectorTool[] = [
               blocks: {
                 type: "array",
                 maxItems: 10,
-                items: { type: "string", minLength: 1, maxLength: 60 },
+                items: {
+                  type: "object",
+                  properties: {
+                    issue: { type: "integer", minimum: 1, description: "Tracker issue number." },
+                    label: { type: "string", minLength: 1, maxLength: 60 },
+                  },
+                  required: ["issue"],
+                },
                 description:
-                  'Optional: other cases or jobs that truly depend on this item, e.g. "Case 142" or "#144". Never list your own waiting work.',
+                  "Optional: other tracker cases or jobs that truly depend on this item, as { issue: 142 } (label optional). Never list your own waiting work.",
               },
               verification: {
                 type: "string",
@@ -546,6 +553,12 @@ export const builtinAgentTools: ConnectorTool[] = [
           type: "string",
           enum: ["p0", "p1", "p2", "p3"],
           description: "With `prerequisites`: how urgent these to-dos are (p0 most urgent).",
+        },
+        caseRef: {
+          type: "integer",
+          minimum: 1,
+          description:
+            "With `prerequisites`: the tracker case (issue number) these to-dos belong to. When the case ends, they are retired.",
         },
       },
       required: ["question", "options"],

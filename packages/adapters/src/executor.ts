@@ -8307,12 +8307,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     ...(event.prerequisites.priority
                       ? { priority: event.prerequisites.priority }
                       : {}),
+                    ...(event.prerequisites.caseRef
+                      ? { caseRef: event.prerequisites.caseRef }
+                      : {}),
                     items: event.prerequisites.items.map((item) => ({
                       key: item.key,
                       title: redactSecrets(item.title, runSecrets),
                       steps: redactSecrets(item.steps, runSecrets),
                       ...(item.why ? { why: redactSecrets(item.why, runSecrets) } : {}),
-                      ...(item.blocks?.length ? { blocks: item.blocks } : {}),
+                      ...(item.blocks?.length
+                        ? {
+                            blocks: item.blocks.map((block) =>
+                              typeof block === "string"
+                                ? redactSecrets(block, runSecrets)
+                                : block,
+                            ),
+                          }
+                        : {}),
                       verification: item.verification,
                     })),
                   }

@@ -2,6 +2,7 @@ import {
   ACTIONABLE_USER_TODO_STATUSES,
   type Actor,
   type AskPrerequisites,
+  PrerequisiteBlock,
   PrerequisitePriority,
   type PrerequisiteRelease,
   type UserTodo,
@@ -9,9 +10,19 @@ import {
   UserTodoStatusSchema,
 } from "@rakazo/contracts";
 import type { Prisma, PrismaClient } from "./client.js";
-import { askCaseKey } from "./decisions.js";
 
 type UserTodoRow = Prisma.UserTodoGetPayload<{ include: { bot: { select: { name: true } } } }>;
+
+/** Stored blocks as the list shows them: a tracker issue with its label, or display text alone. */
+function blocksDto(stored: Prisma.JsonValue): UserTodo["blocks"] {
+  const parsed = PrerequisiteBlock.array().safeParse(stored);
+  if (!parsed.success) return [];
+  return parsed.data.map((block) =>
+    typeof block === "string"
+      ? { issue: null, label: block }
+      : { issue: block.issue, label: block.label ?? `#${block.issue}` },
+  );
+}
 
 export function userTodoDto(row: UserTodoRow): UserTodo {
   return {
@@ -26,8 +37,8 @@ export function userTodoDto(row: UserTodoRow): UserTodo {
     title: row.title,
     steps: row.steps,
     why: row.why,
-    caseNumber: askCaseKey(row.groupTitle)?.replace(/^case /, "") ?? null,
-    blocks: row.blocks,
+    caseRef: row.caseRef,
+    blocks: blocksDto(row.blocks),
     priority: PrerequisitePriority.nullable().catch(null).parse(row.priority),
     position: row.position,
     verification: row.verification === "manual" ? "manual" : "automatic",
@@ -53,22 +64,13 @@ export function userTodoBlocksOthers(todo: Pick<UserTodo, "blocks" | "status">):
 }
 
 /**
- * The caller's to-dos in this space, grouped by card. Cards with an item that blocks other cases
- * or jobs come first, then by priority (unknown after p3), then the oldest asked. Items keep the
- * bot's order on the card, whatever their status.
+ * Groups to-dos by card. Cards with an item that blocks other cases or jobs come first, then by
+ * priority (unknown after p3), then the oldest asked. Items keep the bot's order on the card,
+ * whatever their status.
  */
-export async function listUserTodos(
-  prisma: PrismaClient,
-  actor: Pick<Actor, "spaceId" | "userId">,
-): Promise<UserTodo[]> {
-  const rows = await prisma.userTodo.findMany({
-    where: { spaceId: actor.spaceId, userId: actor.userId },
-    include: { bot: { select: { name: true } } },
-    orderBy: { updatedAt: "desc" },
-    take: 200,
-  });
+function orderUserTodos(todos: UserTodo[]): UserTodo[] {
   const groups = new Map<string, UserTodo[]>();
-  for (const todo of rows.map(userTodoDto)) {
+  for (const todo of todos) {
     const group = groups.get(todo.groupId);
     if (group) group.push(todo);
     else groups.set(todo.groupId, [todo]);
@@ -90,6 +92,33 @@ export async function listUserTodos(
       a.items[0]!.groupId.localeCompare(b.items[0]!.groupId),
   );
   return ranked.flatMap((group) => group.items);
+}
+
+/** The caller's to-dos in this space, in panel order. */
+export async function listUserTodos(
+  prisma: PrismaClient,
+  actor: Pick<Actor, "spaceId" | "userId">,
+): Promise<UserTodo[]> {
+  const rows = await prisma.userTodo.findMany({
+    where: { spaceId: actor.spaceId, userId: actor.userId },
+    include: { bot: { select: { name: true } } },
+    orderBy: { updatedAt: "desc" },
+    take: 200,
+  });
+  return orderUserTodos(rows.map(userTodoDto));
+}
+
+/** Every to-do of one tracker case in the caller's space, all statuses, in panel order. */
+export async function listUserTodosForCase(
+  prisma: PrismaClient,
+  actor: Pick<Actor, "spaceId" | "userId">,
+  caseRef: number,
+): Promise<UserTodo[]> {
+  const rows = await prisma.userTodo.findMany({
+    where: { spaceId: actor.spaceId, userId: actor.userId, caseRef },
+    include: { bot: { select: { name: true } } },
+  });
+  return orderUserTodos(rows.map(userTodoDto));
 }
 
 /** Whitespace-only edits to the steps are not a material change. */
@@ -133,6 +162,7 @@ export async function upsertUserTodosFromAnswerInTransaction(
     groupTitle: input.question.trim().slice(0, 300),
     release: input.prerequisites.release,
     priority: input.prerequisites.priority ?? null,
+    caseRef: input.prerequisites.caseRef ?? null,
   };
   const chosen: ChosenUserTodo[] = [];
   // Key order, so two answers sharing requirements lock their rows in the same order.
@@ -177,7 +207,8 @@ export async function upsertUserTodosFromAnswerInTransaction(
       existing.title !== item.title ||
       existing.steps !== item.steps ||
       existing.why !== (item.why ?? null) ||
-      existing.blocks.join("\n") !== fields.blocks.join("\n") ||
+      JSON.stringify(existing.blocks) !== JSON.stringify(fields.blocks) ||
+      existing.caseRef !== source.caseRef ||
       existing.sourceMessageId !== input.sourceMessageId;
     const updated = await tx.userTodo.update({
       where: { id: existing.id },

@@ -116,6 +116,19 @@ export const AskSource = z.object({
 });
 export type AskSource = z.infer<typeof AskSource>;
 
+/** A tracker issue number: the case a to-do belongs to, or one it blocks. */
+export const TrackerIssueNumber = z.number().int().positive().max(2_147_483_647);
+
+/**
+ * What a prerequisite blocks: a tracker issue (`{ issue }`, optionally labelled) or, for display
+ * only, free text such as "release 6.4".
+ */
+export const PrerequisiteBlock = z.union([
+  z.string().trim().min(1).max(60),
+  z.object({ issue: TrackerIssueNumber, label: z.string().trim().min(1).max(60).optional() }).strict(),
+]);
+export type PrerequisiteBlock = z.infer<typeof PrerequisiteBlock>;
+
 /**
  * Fleet: one manual prerequisite an ask card offers to hand to the user. Choosing the card's
  * `todo` option creates or refreshes the user's to-do for `key`; it never marks it done.
@@ -129,10 +142,10 @@ export const AskPrerequisite = z.object({
   /** Why the item is needed, in the user's terms. */
   why: z.string().trim().min(1).max(600).optional(),
   /**
-   * Other cases or jobs that truly depend on this item (e.g. "Case 142", "#144"). Waiting on the
-   * asking bot itself is implied and never listed.
+   * Other cases or jobs that truly depend on this item, as tracker issues (`{ issue: 142 }`) or
+   * free text for display. Waiting on the asking bot itself is implied and never listed.
    */
-  blocks: z.array(z.string().trim().min(1).max(60)).max(10).optional(),
+  blocks: z.array(PrerequisiteBlock).max(10).optional(),
   /** `automatic`: the bot can check it with its own read-only tools; `manual`: only the user can. */
   verification: z.enum(["automatic", "manual"]),
 });
@@ -162,6 +175,8 @@ export const AskPrerequisites = z.object({
     }),
   release: PrerequisiteRelease,
   priority: PrerequisitePriority.optional(),
+  /** The tracker case (issue number) these to-dos belong to; its end retires them. */
+  caseRef: TrackerIssueNumber.optional(),
 });
 export type AskPrerequisites = z.infer<typeof AskPrerequisites>;
 
@@ -172,6 +187,7 @@ export const AskPrerequisitesInput = z.object({
   option: z.string().trim().min(1).max(80),
   release: PrerequisiteRelease.default("all"),
   priority: PrerequisitePriority.optional(),
+  caseRef: TrackerIssueNumber.optional(),
 });
 export type AskPrerequisitesInput = z.infer<typeof AskPrerequisitesInput>;
 

@@ -412,3 +412,51 @@ export async function retireUserTodo(
     return { todo: userTodoDto(row), wake: await releaseSatisfied(tx, row) };
   });
 }
+
+const RETIRABLE_FOR_CASE: UserTodoStatus[] = ["open", "checking", "remaining", "unavailable"];
+
+/**
+ * The tracker case ended or no longer needs its to-dos: each of the case's open, checking,
+ * remaining or unavailable to-dos is retired with `reason` through the same compare-and-set as
+ * `todo_retire` (status `retired`, the reason as its detail, a new revision). Verified, confirmed
+ * and already retired ones stay as they are; nothing is deleted. Unlike `todo_retire` it releases
+ * no work: the case itself is over. A check that was running is retired too; its later report is
+ * refused. Idempotent: a repeat retires nothing. Returns the to-dos this call retired.
+ */
+export async function retireUserTodosForCase(
+  prisma: PrismaClient,
+  actor: Pick<Actor, "spaceId" | "userId">,
+  input: { caseRef: number; reason: string },
+): Promise<UserTodo[]> {
+  const reason = input.reason.trim();
+  const candidates = await prisma.userTodo.findMany({
+    where: {
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      caseRef: input.caseRef,
+      status: { in: RETIRABLE_FOR_CASE },
+    },
+    select: { id: true, threadId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const retired: UserTodo[] = [];
+  for (const candidate of candidates) {
+    const row = await prisma.$transaction(async (tx) => {
+      // Every to-do write takes its thread lock first, so the row read under it is current.
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidate.threadId} FOR UPDATE`;
+      const current = await tx.userTodo.findFirst({
+        where: { id: candidate.id, caseRef: input.caseRef, status: { in: RETIRABLE_FOR_CASE } },
+        select: { id: true, threadId: true, revision: true },
+      });
+      if (!current) return null;
+      return casUserTodo(
+        tx,
+        current,
+        { status: { in: RETIRABLE_FOR_CASE } },
+        { status: "retired", statusDetail: reason },
+      );
+    });
+    if (row) retired.push(userTodoDto(row));
+  }
+  return retired;
+}

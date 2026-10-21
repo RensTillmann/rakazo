@@ -632,11 +632,12 @@ export type AgentRuntimeEvent =
           title: string;
           steps: string;
           why?: string;
-          blocks?: string[];
+          blocks?: Array<string | { issue: number; label?: string }>;
           verification: "automatic" | "manual";
         }>;
         release: "each" | "all";
         priority?: "p0" | "p1" | "p2" | "p3";
+        caseRef?: number;
       };
       /**
        * Fleet (`patch/ask-dedupe`): present when the request set `settlesAsks`. The consumer calls

@@ -1484,6 +1484,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           ...(raw.option == null ? {} : { option: raw.option }),
           ...(raw.release == null ? {} : { release: raw.release }),
           ...(raw.priority == null ? {} : { priority: raw.priority }),
+          ...(raw.caseRef == null ? {} : { caseRef: raw.caseRef }),
         };
       }
       if (tool.name === "request_secret") {
@@ -1640,10 +1641,11 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     option: args.option,
                     release: args.release ?? undefined,
                     priority: args.priority ?? undefined,
+                    caseRef: args.caseRef ?? undefined,
                   });
                   if (!parsed.success) {
                     throw new Error(
-                      "ask_user prerequisites needs 1–10 items with unique key (≤200), title (≤300), steps (≤4000), verification automatic|manual, optional why (≤600) and blocks (≤10), plus option, release each|all and priority p0–p3",
+                      "ask_user prerequisites needs 1–10 items with unique key (≤200), title (≤300), steps (≤4000), verification automatic|manual, optional why (≤600) and blocks (≤10, text or {issue}), plus option, release each|all, priority p0–p3 and caseRef (tracker issue number)",
                     );
                   }
                   todo = parsed.data;
@@ -1668,6 +1670,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                           items: todo.prerequisites,
                           release: todo.release,
                           ...(todo.priority ? { priority: todo.priority } : {}),
+                          ...(todo.caseRef ? { caseRef: todo.caseRef } : {}),
                         },
                       }
                     : {}),
@@ -2251,7 +2254,16 @@ function builtinParameters(tool: ConnectorTool) {
             steps: Type.String({ minLength: 1, maxLength: 4000 }),
             why: Type.Optional(Type.String({ minLength: 1, maxLength: 600 })),
             blocks: Type.Optional(
-              Type.Array(Type.String({ minLength: 1, maxLength: 60 }), { maxItems: 10 }),
+              Type.Array(
+                Type.Union([
+                  Type.String({ minLength: 1, maxLength: 60 }),
+                  Type.Object({
+                    issue: Type.Integer({ minimum: 1 }),
+                    label: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
+                  }),
+                ]),
+                { maxItems: 10 },
+              ),
             ),
             verification: stringEnum(["automatic", "manual"], {}),
           }),
@@ -2261,6 +2273,7 @@ function builtinParameters(tool: ConnectorTool) {
       option: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
       release: Type.Optional(stringEnum(["each", "all"], {})),
       priority: Type.Optional(stringEnum(["p0", "p1", "p2", "p3"], {})),
+      caseRef: Type.Optional(Type.Integer({ minimum: 1 })),
     });
   }
   if (tool.name === "remember") {

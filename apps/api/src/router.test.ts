@@ -5948,3 +5948,63 @@ describe("routine watch creation boundaries", () => {
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+describe("to-dos by tracker case", () => {
+  async function call(path: string, json: unknown, isDeploymentOwner: boolean) {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const deps = {
+      prisma: { userTodo: { findMany } },
+      env: {
+        defaultProvider: "fake",
+        defaultModel: "fake-model",
+        webOrigin: "http://127.0.0.1:5173",
+        screenProxySecret: "fake-test-secret",
+        sandboxProvider: "fake",
+      },
+      dataDir: "/tmp/rakazo-router-test",
+    } as unknown as RouterDeps;
+    const actor = {
+      spaceId: "workspace-1",
+      userId: "user-1",
+      email: "user@rakazo.test",
+      isDeploymentOwner,
+    } satisfies Actor;
+    const { response } = await new RPCHandler(createRouter(deps)).handle(
+      new Request(`http://127.0.0.1/rpc/todos/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ json }),
+      }),
+      { prefix: "/rpc", context: { actor } },
+    );
+    return { status: response.status, body: await response.json(), findMany };
+  }
+
+  it("lets only the deployment owner read or retire a case's to-dos", async () => {
+    for (const [path, json] of [
+      ["byCase", { caseRef: 383 }],
+      ["retireForCase", { caseRef: 383, reason: "Case cancelled" }],
+    ] as const) {
+      const refused = await call(path, json, false);
+      expect(refused.status).toBe(403);
+      expect(refused.findMany).not.toHaveBeenCalled();
+      const owner = await call(path, json, true);
+      expect(owner.status).toBe(200);
+      expect(owner.body).toEqual({ json: path === "byCase" ? { todos: [] } : { retired: [] } });
+      expect(owner.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            spaceId: "workspace-1",
+            userId: "user-1",
+            caseRef: 383,
+          }),
+        }),
+      );
+    }
+  });
+
+  it("refuses a case ref that is not a tracker issue number and an empty reason", async () => {
+    expect((await call("byCase", { caseRef: "383" }, true)).status).toBe(400);
+    expect((await call("retireForCase", { caseRef: 383, reason: "  " }, true)).status).toBe(400);
+  });
+});

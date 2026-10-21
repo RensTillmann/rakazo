@@ -221,6 +221,7 @@ import {
   listSpaceBackupModels,
   listTicketComments,
   listUserTodos,
+  listUserTodosForCase,
   lockOwnedGroup,
   modelCredentialProviderFilter,
   newestModelCredentialOrder,
@@ -234,6 +235,7 @@ import {
   renewSpaceDeletionClaim,
   replaceSpaceBackupModels,
   requestUserTodoCheck,
+  retireUserTodosForCase,
   restoreBotUnderComputerQuota,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
@@ -6485,6 +6487,15 @@ export function createRouter(deps: RouterDeps) {
       confirm: authed.todos.confirm.handler(({ context, input }) =>
         runUserTodoAction(deps, () => confirmUserTodo(deps.prisma, context.actor, input)),
       ),
+      // Fleet service, as the deployment owner: read and end the to-dos of one tracker case.
+      byCase: authed.todos.byCase.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return { todos: await listUserTodosForCase(deps.prisma, context.actor, input.caseRef) };
+      }),
+      retireForCase: authed.todos.retireForCase.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return { retired: await retireUserTodosForCase(deps.prisma, context.actor, input) };
+      }),
     },
     runs: {
       list: authed.runs.list.handler(async ({ context, input }) => ({

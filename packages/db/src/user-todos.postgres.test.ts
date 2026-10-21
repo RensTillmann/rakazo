@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   type AskPrerequisite,
   MessageBlock,
@@ -15,10 +16,11 @@ import {
   reportUserTodo,
   requestUserTodoCheck,
   retireUserTodo,
+  retireUserTodosForCase,
   sweepUserTodoChecks,
   UserTodoConflictError,
 } from "./user-todo-actions.js";
-import { listUserTodos } from "./user-todos.js";
+import { listUserTodos, listUserTodosForCase } from "./user-todos.js";
 
 // Fully migrated disposable local database only (VERIFY_DATABASE + DATABASE_URL).
 const enabled = process.env.VERIFY_DATABASE && process.env.DATABASE_URL;
@@ -115,6 +117,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       items?: AskPrerequisite[],
       release: PrerequisiteRelease = "all",
       priority?: PrerequisitePriority,
+      caseRef?: number,
     ) {
       const task = await prisma.task.create({
         data: {
@@ -156,7 +159,14 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
               },
             ],
             ...(items
-              ? { prerequisites: { items, release, ...(priority ? { priority } : {}) } }
+              ? {
+                  prerequisites: {
+                    items,
+                    release,
+                    ...(priority ? { priority } : {}),
+                    ...(caseRef ? { caseRef } : {}),
+                  },
+                }
               : {}),
           },
         ],
@@ -562,7 +572,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     expect(new Set(listed.map((todo) => todo.groupId))).toEqual(new Set([asked.message.id]));
     expect(listed.find((todo) => todo.requirementKey === BADGE.key)).toMatchObject({
       why: BADGE.why,
-      caseNumber: null,
+      caseRef: null,
     });
     expect(listed.find((todo) => todo.requirementKey === ACCESS.key)?.why).toBeNull();
     const prompt = await asked.resumePrompt();
@@ -656,7 +666,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const p1 = await answerCard([item("p1")], "p1");
     // The bot's order on the card is z then a, not key order.
     const blocking = await answerCard(
-      [item("z-first", { blocks: ["Case 142"] }), item("a-second")],
+      [item("z-first", { blocks: [{ issue: 142, label: "Case 142" }] }), item("a-second")],
       "p3",
     );
     const p0 = await answerCard([item("p0")], "p0");
@@ -677,7 +687,11 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       unranked,
     ]);
     expect(listed.slice(0, 2).map((todo) => todo.requirementKey)).toEqual(["z-first", "a-second"]);
-    expect(listed[0]).toMatchObject({ blocks: ["Case 142"], priority: "p3", position: 0 });
+    expect(listed[0]).toMatchObject({
+      blocks: [{ issue: 142, label: "Case 142" }],
+      priority: "p3",
+      position: 0,
+    });
     expect(listed.at(-1)).toMatchObject({ blocks: [], priority: null });
   });
 
@@ -805,5 +819,122 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       revision: todo.revision,
     });
     expect(await sweepRuns(f)).toHaveLength(0);
+  });
+
+  /** Answers one card for `caseRef` carrying both items. */
+  async function chooseForCase(f: Awaited<ReturnType<typeof fixture>>, caseRef: number) {
+    const asked = await f.card([ACCESS, BADGE], "all", undefined, caseRef);
+    expect(await asked.answer("choice-2")).toBe(true);
+    const rows = await f.todos();
+    return {
+      access: rows.find((row) => row.requirementKey === ACCESS.key)!,
+      badge: rows.find((row) => row.requirementKey === BADGE.key)!,
+    };
+  }
+
+  it("backfills a case only from an exact card head and leaves the rest unlinked", async () => {
+    const f = await fixture();
+    const titles: Array<[string, number | null]> = [
+      ["Case 383 · access: Give Jill write access?", 383],
+      ["URGENT · Case 77 · alert: Rotate the key?", 77],
+      ["case 383 · access: lower case is not the head", null],
+      ["Room for case 12 · repo: who joins?", null],
+      ["Case 383: no middle dot", null],
+      ["About Case 383 · elsewhere in the text", null],
+      ["Case 99999999999 · too large", null],
+    ];
+    const ids: string[] = [];
+    for (const [index, [groupTitle]] of titles.entries()) {
+      const row = await f.prisma.userTodo.create({
+        data: {
+          spaceId: f.id,
+          userId: f.id,
+          botId: f.bot.id,
+          threadId: f.thread.id,
+          runId: "legacy-run",
+          sourceMessageId: `legacy-card-${index}`,
+          groupTitle,
+          requirementKey: `legacy-${randomUUID()}`,
+          title: "Legacy to-do",
+          steps: "Do it.",
+          verification: "manual",
+        },
+      });
+      ids.push(row.id);
+    }
+    // The exact backfill statement of the migration.
+    const migration = readFileSync(
+      new URL(
+        "../prisma/migrations/20261022090000_user_todo_case_ref/migration.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const backfill = /UPDATE "user_todos"[\s\S]*?;/.exec(migration)![0];
+    await f.prisma.$executeRawUnsafe(backfill);
+    const rows = await f.prisma.userTodo.findMany({ where: { id: { in: ids } } });
+    for (const [index, [, caseRef]] of titles.entries()) {
+      expect(rows.find((row) => row.id === ids[index])?.caseRef).toBe(caseRef);
+    }
+  });
+
+  it("links a card's to-dos to its case and lists them by case", async () => {
+    const f = await fixture();
+    const { access, badge } = await chooseForCase(f, 383);
+    await f.chooseTodo({ ...ACCESS, key: "other-case-item" });
+    expect(access.caseRef).toBe(383);
+    const listed = await listUserTodosForCase(f.prisma, f.actor, 383);
+    expect(listed.map((todo) => todo.id).sort()).toEqual([access.id, badge.id].sort());
+    expect(listed.every((todo) => todo.caseRef === 383)).toBe(true);
+    expect(await listUserTodosForCase(f.prisma, f.actor, 384)).toEqual([]);
+    // Another account's case of the same number is not visible.
+    expect(
+      await listUserTodosForCase(f.prisma, { spaceId: f.id, userId: randomUUID() }, 383),
+    ).toEqual([]);
+  });
+
+  it("retires a case's unfinished to-dos once, keeps finished ones and releases nothing", async () => {
+    const f = await fixture();
+    const { access, badge } = await chooseForCase(f, 383);
+    await confirmUserTodo(f.prisma, f.actor, { todoId: badge.id, revision: badge.revision });
+    const reason = "Case 383 was cancelled by Rens.";
+
+    const retired = await retireUserTodosForCase(f.prisma, f.actor, { caseRef: 383, reason });
+    expect(retired.map((todo) => todo.id)).toEqual([access.id]);
+    expect(retired[0]).toMatchObject({ status: "retired", statusDetail: reason });
+    expect(await f.prisma.userTodo.findUniqueOrThrow({ where: { id: badge.id } })).toMatchObject({
+      status: "confirmed",
+    });
+    // Idempotent, and nothing deleted or woken: the case ended.
+    expect(await retireUserTodosForCase(f.prisma, f.actor, { caseRef: 383, reason })).toEqual([]);
+    expect(await f.todos()).toHaveLength(2);
+    expect(await f.releases()).toHaveLength(0);
+  });
+
+  it("racing a check, the case retirement wins once and the late report is refused", async () => {
+    const f = await fixture();
+    const { access } = await chooseForCase(f, 383);
+    const reason = "No longer needed for case 383.";
+    const [checked, retired] = await Promise.allSettled([
+      requestUserTodoCheck(f.prisma, f.actor, { todoId: access.id, revision: access.revision }),
+      retireUserTodosForCase(f.prisma, f.actor, { caseRef: 383, reason }),
+    ]);
+    expect(retired.status).toBe("fulfilled");
+    const row = await f.prisma.userTodo.findUniqueOrThrow({ where: { id: access.id } });
+    expect(row).toMatchObject({ status: "retired", statusDetail: reason });
+    // Either the check went first (and was then retired) or it found the to-do retired.
+    if (checked.status === "rejected") {
+      expect(checked.reason).toBeInstanceOf(UserTodoConflictError);
+    }
+    expect(
+      await reportUserTodo(f.prisma, {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: access.id,
+        outcome: "verified",
+        evidence: "elena-bot has Write",
+      }),
+    ).toHaveProperty("error");
+    expect(await f.releases()).toHaveLength(0);
   });
 });
