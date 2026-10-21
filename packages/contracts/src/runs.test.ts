@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { RunSchema } from "./domain.js";
+import { RunStatus } from "./ids.js";
 import { RUN_TRIGGERS, RunActivityRowSchema, RunTriggerSchema } from "./runs.js";
 
 describe("run triggers", () => {
+  it("accepts a durable maintenance checkpoint without treating it as terminal", () => {
+    expect(RunStatus.parse("maintenance_paused")).toBe("maintenance_paused");
+    expect(RunActivityRowSchema.parse({
+      runId: "run-1", botId: "bot-1", botName: "Helper",
+      groupId: null, groupName: null, threadId: "thread-1",
+      status: "maintenance_paused", trigger: "user", notificationsEnabled: false,
+      promptSnippet: "Preserved request", updatedAt: "2026-01-01T00:00:00.000Z",
+    }).status).toBe("maintenance_paused");
+  });
+
   it("accepts every shared trigger in the run output schemas", () => {
     for (const trigger of RUN_TRIGGERS) {
       expect(RunTriggerSchema.parse(trigger)).toBe(trigger);

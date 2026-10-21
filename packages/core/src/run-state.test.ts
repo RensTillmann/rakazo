@@ -2,12 +2,27 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   assertTransition,
+  isActive,
+  isTerminal,
+  QUEUE_HOLDING_RUN_STATUSES,
   canTransition,
   isBackgroundRunTrigger,
   isConversationalRun,
 } from "./run-state.js";
 
 describe("run state machine", () => {
+  it("retains a maintenance checkpoint as active queued work without admitting execution", () => {
+    expect(isActive("maintenance_paused")).toBe(true);
+    expect(isTerminal("maintenance_paused")).toBe(false);
+    expect(QUEUE_HOLDING_RUN_STATUSES).toContain("maintenance_paused");
+    expect(canTransition("running", "maintenance_paused")).toBe(true);
+    expect(canTransition("leased", "maintenance_paused")).toBe(true);
+    expect(canTransition("maintenance_paused", "queued")).toBe(true);
+    expect(canTransition("maintenance_paused", "running")).toBe(false);
+    expect(canTransition("maintenance_paused", "leased")).toBe(false);
+    expect(canTransition("maintenance_paused", "cancelled")).toBe(true);
+  });
+
   it("allows takeover resume onto a lease", () => {
     expect(canTransition("waiting_takeover", "leased")).toBe(true);
     expect(canTransition("waiting_takeover", "running")).toBe(false);

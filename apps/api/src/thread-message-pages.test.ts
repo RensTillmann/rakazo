@@ -11,6 +11,15 @@ import {
 } from "./thread-message-pages.js";
 
 describe("thread message pages", () => {
+  it.each([shouldForwardPeerThreadEvent, shouldForwardBackgroundThreadEvent])(
+    "forwards maintenance lifecycle checkpoints without forwarding arbitrary checkpoint data",
+    (forward) => {
+      expect(forward({ type: "run.checkpointed", payload: { status: "maintenance_paused" } })).toBe(true);
+      expect(forward({ type: "run.checkpointed", payload: { status: "queued" } })).toBe(true);
+      expect(forward({ type: "run.checkpointed", payload: {} })).toBe(false);
+    },
+  );
+
   it("caches peer-run classification for live events", async () => {
     const findUnique = vi.fn(async () => ({ trigger: "bot_message" }));
     const prisma = { run: { findUnique } } as unknown as PrismaClient;

@@ -20,6 +20,7 @@ import {
   recordUsage,
   retireModelCredential,
 } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 
 const MAX_RULES_CHARS = 4_000;
@@ -48,6 +49,8 @@ export interface TeamChatEngagementInput {
   channelName?: string;
   rules: string;
   messages: TeamChatEngagementMessage[];
+  /** Durable bridge cancellation, separate from the judge's ordinary timeout. */
+  signal?: AbortSignal;
 }
 
 export interface TeamChatEngagementDecision {
@@ -57,7 +60,7 @@ export interface TeamChatEngagementDecision {
 }
 
 export interface TeamChatEngagementJudge {
-  decide(input: TeamChatEngagementInput): Promise<TeamChatEngagementDecision>;
+  decide(input: TeamChatEngagementInput): Promise<TeamChatEngagementDecision | null>;
 }
 
 export function renderTeamChatEngagementPrompt(input: {
@@ -128,10 +131,22 @@ interface ModelTeamChatEngagementJudgeDeps {
 export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
   constructor(private readonly deps: ModelTeamChatEngagementJudgeDeps) {}
 
-  async decide(input: TeamChatEngagementInput): Promise<TeamChatEngagementDecision> {
+  async decide(input: TeamChatEngagementInput): Promise<TeamChatEngagementDecision | null> {
+    const judgeId = `team-chat-judge:${randomUUID()}`;
+    const timeout = AbortSignal.timeout(this.deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout;
+    let abortTask: Promise<void> | undefined;
+    const abort = () => {
+      abortTask ??= this.deps.runtime.abort(judgeId).catch((error) => {
+        getLogger().error("team chat engagement abort failed", safeError(error));
+      });
+    };
+    signal.addEventListener("abort", abort, { once: true });
     try {
+      signal.throwIfAborted();
       const resolved = await this.resolveModel(input.bot);
       if (!resolved) return { act: false };
+      signal.throwIfAborted();
       // Standing rules can be time-based ("only during work hours"): judge them in the owner's zone.
       let ownerTimeZone: string | null | undefined;
       try {
@@ -151,14 +166,21 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
         rules: input.rules,
         messages: input.messages,
       });
-      const judgeId = `team-chat-judge:${randomUUID()}`;
+      signal.throwIfAborted();
       let text = "";
+      let completed = false;
       for await (const event of this.deps.runtime.run(
         {
           botId: input.bot.id,
           threadId: judgeId,
           runId: judgeId,
           usageOperationKind: "setup",
+          beforeExecution: async () => {
+            signal.throwIfAborted();
+            return this.deps.prisma.$transaction(async (tx) =>
+              (await lockMaintenanceAdmission(tx)).admitted,
+            );
+          },
           onUsage: async (event) => {
             await recordUsage(this.deps.prisma, event, {
               spaceId: input.bot.spaceId,
@@ -186,10 +208,13 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
           spaceId: input.bot.spaceId,
           userId: input.bot.userId,
           botId: input.bot.id,
-          signal: AbortSignal.timeout(this.deps.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+          signal,
         },
       )) {
-        if (event.type === "done" && event.text) text = event.text;
+        if (event.type === "done") {
+          completed = true;
+          text = event.text ?? "";
+        }
         if (event.type === "usage" && !event.accounted) {
           await recordUsage(this.deps.prisma, event, {
             spaceId: input.bot.spaceId,
@@ -200,10 +225,18 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
           });
         }
       }
+      signal.throwIfAborted();
+      // A checkpoint-only stream is deferred work, not a negative judgment.
+      // The bridge keeps its original input unconsumed for safe read-only replay.
+      if (!completed) return null;
       return parseTeamChatEngagementDecision(text);
     } catch (error) {
+      if (input.signal?.aborted) throw error;
       getLogger().error("team chat engagement judge failed", safeError(error));
-      return { act: false };
+      return null;
+    } finally {
+      signal.removeEventListener("abort", abort);
+      await abortTask;
     }
   }
 

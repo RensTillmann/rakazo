@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, openSync } from "node:fs";
 import { mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
@@ -7,8 +7,13 @@ import type {
   NotificationMessage,
   NotificationProvider,
 } from "@rakazo/adapter-kit";
+import { runPushEnabled } from "@rakazo/core";
+import type { ExternalEffect, PrismaClient } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import koffi from "koffi";
+import { z } from "zod";
+import { watchBackgroundCancellation, type BackgroundCancellation } from "./background-cancellation.js";
 import { combineSignals } from "./connector-safety.js";
 import { readBodyCapped, withAbort } from "./web-ssrf.js";
 
@@ -374,11 +379,72 @@ export function expoPushErrorMessage(body: unknown, status: number): string | un
   return undefined;
 }
 
+const PushIntentSchema = z.object({
+  message: z.object({
+    kind: z.enum(["completion", "failure", "help", "takeover"]),
+    title: z.string(),
+    body: z.string(),
+    botId: z.string(),
+    threadId: z.string(),
+    groupId: z.string().optional(),
+  }),
+  operationId: z.string(),
+  traceId: z.string(),
+  spaceId: z.string(),
+  userId: z.string(),
+  runId: z.string(),
+});
+
+export class ExpoPushUncertainError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : "Expo push outcome is uncertain.", { cause });
+    this.name = "ExpoPushUncertainError";
+  }
+}
+
 export class ExpoPushProvider implements NotificationProvider {
   constructor(
     private readonly dataDir: string,
+    private readonly prisma: PrismaClient,
     private readonly sessionExpiresAt?: PushSessionExpiresAt,
   ) {}
+
+  private recoveryCursor?: { createdAt: Date; id: string };
+
+  /** Pending notices survive process exit; Expo has no safe replay for unknown submissions. */
+  async reconcile(admitted: boolean): Promise<void> {
+    await this.prisma.externalEffect.updateMany({
+      where: {
+        kind: "push_notification", status: "executing",
+        updatedAt: { lt: new Date(Date.now() - 60_000) },
+      },
+      data: { status: "uncertain" },
+    });
+    if (!admitted) return;
+    const cursor = this.recoveryCursor;
+    const pending = await this.prisma.externalEffect.findMany({
+      where: {
+        kind: "push_notification", status: "intended",
+        ...(cursor ? { OR: [
+          { createdAt: { gt: cursor.createdAt } },
+          { createdAt: cursor.createdAt, id: { gt: cursor.id } },
+        ] } : {}),
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 100,
+    });
+    for (const effect of pending) {
+      try {
+        await this.deliverEffect(effect, new AbortController().signal);
+      } catch (error) {
+        getLogger().error("push notification reconciliation", error);
+      }
+    }
+    const last = pending[pending.length - 1];
+    this.recoveryCursor = pending.length === 100 && last
+      ? { createdAt: last.createdAt, id: last.id }
+      : undefined;
+  }
 
   describe() {
     return {
@@ -397,15 +463,114 @@ export class ExpoPushProvider implements NotificationProvider {
     await this.deliver(message, context);
   }
 
-  /**
-   * Posts the push when a token is registered. `undeliverable` means this user
-   * has no token, which is not an Expo acceptance — callers must not record it
-   * as a successful reminder.
-   */
+  /** An undeliverable notice remains pending until a token becomes available. */
   async deliver(message: NotificationMessage, context: AdapterContext): Promise<ExpoPushDelivery> {
-    const token = await this.deliverableToken(context.userId);
+    if (!context.runId) throw new Error("Push notifications require a source run.");
+    const request = PushIntentSchema.parse({
+      message,
+      operationId: context.operationId,
+      traceId: context.traceId,
+      spaceId: context.spaceId,
+      userId: context.userId,
+      runId: context.runId,
+    });
+    const digest = createHash("sha256").update(JSON.stringify(request)).digest("hex");
+    const idempotencyKey = `push:${context.runId}:${digest}`;
+    const effect = await this.prisma.externalEffect.upsert({
+      where: { idempotencyKey },
+      create: {
+        spaceId: context.spaceId, runId: context.runId, kind: "push_notification",
+        idempotencyKey, status: "intended", request,
+      },
+      update: {},
+    });
+    return this.deliverEffect(effect, context.signal);
+  }
+
+  private async deliverEffect(effect: ExternalEffect, callerSignal: AbortSignal): Promise<ExpoPushDelivery> {
+    if (effect.status === "completed") return "delivered";
+    if (effect.status === "executing" || effect.status === "uncertain") return effect.status;
+    if (effect.status === "cancelled") return "cancelled";
+    if (effect.status !== "intended") return "undeliverable";
+    const request = PushIntentSchema.parse(effect.request);
+    const token = await this.deliverableToken(request.userId);
     if (!token) return "undeliverable";
-    const signal = combineSignals(context.signal, AbortSignal.timeout(EXPO_PUSH_TIMEOUT_MS));
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      if (!(await lockMaintenanceAdmission(tx)).admitted) return "pending" as const;
+      const [source, member] = await Promise.all([
+        tx.run.findFirst({
+          where: {
+            id: effect.runId, spaceId: request.spaceId, userId: request.userId,
+            threadId: request.message.threadId, botId: request.message.botId,
+            bot: { archivedAt: null },
+          },
+          select: {
+            bot: { select: { notifyOnFinish: true } },
+            thread: { select: { groupId: true, group: { select: { notify: true } } } },
+            routine: { select: { notify: true } },
+            maintenanceCancelRequestedAt: true,
+          },
+        }),
+        tx.spaceMember.findUnique({
+          where: { spaceId_userId: { spaceId: request.spaceId, userId: request.userId } },
+          select: { id: true },
+        }),
+      ]);
+      const enabled = source && (request.message.kind === "failure" && source.routine
+        ? source.routine.notify
+        : runPushEnabled({
+          groupNotify: source.thread.groupId ? (source.thread.group?.notify ?? false) : null,
+          notifyOnFinish: source.bot.notifyOnFinish, kind: request.message.kind,
+        }));
+      if (!enabled || !member || source?.maintenanceCancelRequestedAt) {
+        await tx.externalEffect.updateMany({
+          where: { id: effect.id, status: "intended" }, data: { status: "cancelled" },
+        });
+        return "cancelled" as const;
+      }
+      const result = await tx.externalEffect.updateMany({
+        where: { id: effect.id, status: "intended" }, data: { status: "executing" },
+      });
+      return result.count === 1 ? "claimed" as const : "pending" as const;
+    });
+    if (claimed !== "claimed") return claimed;
+    let cancellation: BackgroundCancellation | undefined;
+    let submitted = false;
+    try {
+      cancellation = await watchBackgroundCancellation(this.prisma, effect.runId);
+      if (cancellation.signal.aborted) {
+        await this.prisma.externalEffect.updateMany({
+          where: { id: effect.id, status: "executing" }, data: { status: "cancelled" },
+        });
+        return "cancelled";
+      }
+      submitted = true;
+      const result = await this.submit(
+        request.message, request.spaceId, effect.id, token,
+        combineSignals(callerSignal, cancellation.signal),
+      );
+      await this.prisma.externalEffect.updateMany({
+        where: { id: effect.id, status: { in: ["executing", "uncertain"] } },
+        data: { status: "completed" },
+      });
+      return result;
+    } catch (error) {
+      await this.prisma.externalEffect.updateMany({
+        where: { id: effect.id, status: "executing" },
+        data: { status: submitted ? "uncertain" : "intended" },
+      });
+      if (submitted) throw new ExpoPushUncertainError(error);
+      throw error;
+    } finally {
+      cancellation?.stop();
+    }
+  }
+
+  private async submit(
+    message: NotificationMessage, spaceId: string, deliveryId: string, token: string,
+    callerSignal: AbortSignal,
+  ): Promise<"delivered"> {
+    const signal = combineSignals(callerSignal, AbortSignal.timeout(EXPO_PUSH_TIMEOUT_MS));
     let response: Response;
     try {
       response = await fetch("https://exp.host/--/api/v2/push/send", {
@@ -417,7 +582,7 @@ export class ExpoPushProvider implements NotificationProvider {
           body: message.body,
           collapseId: message.threadId,
           tag: message.threadId,
-          data: expoPushData(message, context.spaceId, randomUUID()),
+          data: expoPushData(message, spaceId, deliveryId),
         }),
         signal,
       });
@@ -430,7 +595,11 @@ export class ExpoPushProvider implements NotificationProvider {
       throw new Error("Expo push returned an invalid response.");
     }
     const failure = expoPushErrorMessage(body, response.status);
-    if (!failure) return "delivered";
+    if (!failure) {
+      const tickets = expoPushTickets(body);
+      if (tickets.length === 1 && tickets[0]?.status === "ok") return "delivered";
+      throw new Error("Expo push returned an invalid response.");
+    }
     getLogger().error(failure);
     throw new Error(failure);
   }
@@ -464,7 +633,8 @@ export class ExpoPushProvider implements NotificationProvider {
   }
 }
 
-export type ExpoPushDelivery = "delivered" | "undeliverable";
+export type ExpoPushDelivery =
+  | "delivered" | "undeliverable" | "pending" | "executing" | "uncertain" | "cancelled";
 
 async function readExpoPushBody(response: Response, signal: AbortSignal): Promise<unknown> {
   const declared = Number(response.headers.get("content-length") ?? 0);

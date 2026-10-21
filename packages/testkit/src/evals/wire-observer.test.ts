@@ -113,7 +113,7 @@ it("bounds records, declares unsupported evidence, propagates aborts and restore
   expect(second).toEqual([]);
 });
 
-it("observes actual Pi post-selection JSON controls through twelve dependent compressed results", async () => {
+it.each([4096, 1050000])("observes usable Pi JSON controls across twelve dependent results with a %i context", async (contextWindow) => {
   const services = new EvalServices();
   services.enableDiagnosticChain();
   const server = await startModelEmulator({
@@ -133,6 +133,10 @@ it("observes actual Pi post-selection JSON controls through twelve dependent com
           const result = JSON.parse(
             String(request.messages.findLast((m) => m.role === "tool")?.content),
           );
+          if (result.nextCursor === null) {
+            expect(result.diagnostic).toContain("Verified Aurora component: ledger-indexer.");
+            expect(result.diagnostic).toContain("Approval pending; no deployment.");
+          }
           return result.nextCursor === null
             ? { type: "text" as const, text: "ledger-indexer pending" }
             : {
@@ -146,6 +150,7 @@ it("observes actual Pi post-selection JSON controls through twelve dependent com
     ],
   });
   const records: DiagnosticWireObservation[] = [];
+  const inputTokens: number[] = [];
   const restore = installDiagnosticWireObserver(server.model.id, records);
   const context = {
     operationId: "synthetic",
@@ -163,7 +168,7 @@ it("observes actual Pi post-selection JSON controls through twelve dependent com
       instructions: "Do not deploy.",
       history: [],
       contextStrategy: "retrieval",
-      model: { ...server.model, contextWindow: 1050000, maxTokens: 4096 },
+      model: { ...server.model, contextWindow, maxTokens: 512 },
       tools: [
         {
           name: "CRM_READ_DIAGNOSTIC",
@@ -180,21 +185,35 @@ it("observes actual Pi post-selection JSON controls through twelve dependent com
           if (event.type === "result") return event.data;
       },
     };
-    for await (const _event of new PiAgentRuntime().run(request)) {
+    for await (const _event of new PiAgentRuntime({
+      onContextDecision: (decision) => inputTokens.push(decision.estimatedInputTokens),
+    }).run(request)) {
       /* Consume the real runtime. */
     }
     server.assertComplete();
     expect(records).toHaveLength(13);
+    expect(inputTokens).toHaveLength(13);
+    expect(inputTokens.every((tokens) => tokens <= contextWindow - 512)).toBe(true);
+    const firstSeen = new Map<number, number>();
     for (const [index, record] of records.slice(1).entries()) {
       expect(record.availability).toBe("observed");
-      expect(record.results?.map((r) => r.segment)).toEqual(
-        Array.from({ length: index + 1 }, (_, i) => i + 1),
-      );
+      expect(record.results?.at(-1)?.segment).toBe(index + 1);
       expect(
         record.results?.every((r) => r.jsonValid && r.controlsValidated && r.nextCursorPresent),
       ).toBe(true);
-      expect(record.results?.at(-1)?.bytes).toBeLessThanOrEqual(12000);
-      expect(record.results?.slice(0, -1).every((r) => r.bytes <= 1024)).toBe(true);
+      for (const result of record.results ?? []) {
+        expect(result.bytes).toBeLessThanOrEqual(contextWindow - 512);
+        if (contextWindow === 1050000 && result.segment !== undefined) {
+          const previousBytes = firstSeen.get(result.segment);
+          if (previousBytes !== undefined) expect(result.bytes).toBe(previousBytes);
+          firstSeen.set(result.segment, result.bytes);
+        }
+      }
+    }
+    if (contextWindow === 4096) {
+      expect(records.some((record) => record.results?.some((result) => result.contextTruncated))).toBe(true);
+    } else {
+      expect(firstSeen.size).toBe(12);
     }
     expect(records.at(-1)?.results?.at(-1)?.nextCursor).toBeNull();
     expect(JSON.stringify(records)).not.toMatch(/private|Synthetic detailed|ledger-indexer/);

@@ -94,6 +94,7 @@ export function mountWebhookHttpRoutes(app: Hono, deps: WebhookDeps) {
         prompt: eventPrompt,
         routines: webhookRoutines,
         source: "webhook",
+        payload,
         idempotencyKey,
       }),
     );

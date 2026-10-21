@@ -116,12 +116,12 @@ describe("reconcileStuckWork", () => {
     ]);
   });
 
-  it("does not send again when this episode was already reminded", async () => {
+  it.each([undefined, "delivered", "uncertain", "cancelled"])("does not retry a reminder with persisted state %s", async (state) => {
     const run = candidate("waiting_input", 5);
     const stamps = [
       {
         runId: run.id,
-        payload: { notice: STUCK_WORK_NOTICE, updatedAt: run.updatedAt.toISOString() },
+        payload: { notice: STUCK_WORK_NOTICE, updatedAt: run.updatedAt.toISOString(), state },
       },
     ];
     const prisma = noticePrisma(run, stamps);
@@ -162,7 +162,7 @@ describe("reconcileStuckWork", () => {
     const stamps: Array<{ runId: string | null; payload: unknown }> = [];
     const prisma = noticePrisma(run, stamps);
     const { jobs } = publisher();
-    const push = new ExpoPushProvider(dataDir);
+    const push = new ExpoPushProvider(dataDir, prisma);
 
     await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
 
@@ -194,7 +194,7 @@ describe("reconcileStuckWork", () => {
     const stamps: Array<{ id?: string; runId: string | null; payload: unknown }> = [];
     const prisma = noticePrisma(run, stamps);
     const { jobs } = publisher();
-    const push = new ExpoPushProvider(dataDir);
+    const push = new ExpoPushProvider(dataDir, prisma);
     await savePushToken(dataDir, run.userId, "ExponentPushToken[test]");
     const fetchMock = vi.fn(async () => Response.json({ data: { status: "ok", id: "ticket" } }));
     vi.stubGlobal("fetch", fetchMock);
@@ -220,6 +220,57 @@ describe("reconcileStuckWork", () => {
         payload: expect.objectContaining({ state: "delivered" }),
       }),
     ]);
+  });
+
+  it("preserves a held push intent and only stamps it delivered after resume", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-stuck-push-"));
+    dirs.push(dataDir);
+    const run = candidate("waiting_takeover", 5);
+    const stamps: NoticeStamp[] = [];
+    const maintenance = { paused: true };
+    const prisma = noticePrisma(run, stamps, maintenance);
+    const { jobs } = publisher();
+    const push = new ExpoPushProvider(dataDir, prisma);
+    await savePushToken(dataDir, run.userId, "ExponentPushToken[test]");
+    const fetchMock = vi.fn(async () => Response.json({ data: { status: "ok", id: "ticket" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(stamps).toHaveLength(0);
+    expect(await prisma.externalEffect.findMany()).toEqual([
+      expect.objectContaining({ kind: "push_notification", status: "intended" }),
+    ]);
+    maintenance.paused = false;
+    await push.reconcile(true);
+    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(stamps).toEqual([
+      expect.objectContaining({ payload: expect.objectContaining({ state: "delivered" }) }),
+    ]);
+  });
+
+  it("keeps an unknown Expo submission visible instead of retrying its reminder", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-stuck-push-"));
+    dirs.push(dataDir);
+    const run = candidate("waiting_takeover", 5);
+    const stamps: NoticeStamp[] = [];
+    const prisma = noticePrisma(run, stamps);
+    const { jobs } = publisher();
+    const push = new ExpoPushProvider(dataDir, prisma);
+    await savePushToken(dataDir, run.userId, "ExponentPushToken[test]");
+    const fetchMock = vi.fn(async () => { throw new Error("unknown push outcome"); });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    expect(stamps).toEqual([
+      expect.objectContaining({ payload: expect.objectContaining({ state: "uncertain" }) }),
+    ]);
+    await reconcileStuckWork({
+      prisma, jobs, notifications: push,
+      now: new Date(now.getTime() + STUCK_NOTICE_CLAIM_TTL_MS * 2), batchSize: 100,
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("retries a pending reminder left behind when the worker stops", async () => {
@@ -483,6 +534,8 @@ describe("reconcileStuckWork", () => {
 
   it("continues the other scans when the stuck query fails", async () => {
     const prisma = {
+      $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
+      $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
       run: {
         findMany: vi.fn(async (args: { where?: { status?: { in?: string[] } } }) => {
           if (args.where?.status?.in?.includes("waiting_takeover")) throw new Error("stuck down");
@@ -531,16 +584,52 @@ function stampMatchesDelete(stamp: NoticeStamp, where: NoticeDeleteWhere | undef
   });
 }
 
-function noticePrisma(run: ReturnType<typeof candidate>, stamps: NoticeStamp[]) {
+function noticePrisma(
+  run: ReturnType<typeof candidate>, stamps: NoticeStamp[], maintenance = { paused: false },
+) {
   let nextId = 0;
+  const effects: Array<{
+    id: string; idempotencyKey: string; kind: string; status: string; request: unknown;
+    createdAt: Date; updatedAt: Date;
+  }> = [];
   const prisma = {
     run: {
       findMany: vi.fn(async () => [run]),
+      findFirst: vi.fn(async () => ({ ...run, routine: null })),
       findUnique: vi.fn(async () => ({
         status: run.status,
         updatedAt: run.updatedAt,
         startedAt: null,
       })),
+    },
+    spaceMember: { findUnique: vi.fn(async () => ({ id: "member" })) },
+    externalEffect: {
+      upsert: vi.fn(async ({ create }: {
+        create: { idempotencyKey: string; kind: string; status: string; request: unknown };
+      }) => {
+        let effect = effects.find((row) => row.idempotencyKey === create.idempotencyKey);
+        if (!effect) {
+          effect = { ...create, id: `push-${effects.length}`, createdAt: new Date(), updatedAt: new Date() };
+          effects.push(effect);
+        }
+        return { ...effect };
+      }),
+      findMany: vi.fn(async () => effects.filter((row) => row.status === "intended").map((row) => ({ ...row }))),
+      updateMany: vi.fn(async ({ where, data }: {
+        where: { id?: string; status: string | { in: string[] }; updatedAt?: { lt: Date } };
+        data: { status: string };
+      }) => {
+        let count = 0;
+        for (const row of effects) {
+          if (where.id && row.id !== where.id) continue;
+          if (typeof where.status === "string" ? row.status !== where.status : !where.status.in.includes(row.status)) continue;
+          if (where.updatedAt && row.updatedAt >= where.updatedAt.lt) continue;
+          row.status = data.status;
+          row.updatedAt = new Date();
+          count++;
+        }
+        return { count };
+      }),
     },
     event: {
       findMany: vi.fn(async () => stamps.map((stamp) => stamp)),
@@ -571,7 +660,7 @@ function noticePrisma(run: ReturnType<typeof candidate>, stamps: NoticeStamp[]) 
       }),
     },
     thread: { update: vi.fn(async () => ({ nextEventSeq: stamps.length + 1 })) },
-    $queryRaw: vi.fn(async () => []),
+    $queryRaw: vi.fn(async () => [{ active: maintenance.paused, revision: 1 }]),
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
   };
   return prisma as unknown as PrismaClient & { $transaction: ReturnType<typeof vi.fn> };

@@ -175,7 +175,7 @@ async function runTurn(
       updateManyAndReturn: vi.fn(async () => [{ fence: 1 }]),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
-    $queryRaw: vi.fn(async () => [{ id: "row-1", scope: "dedicated" }]),
+    $queryRaw: vi.fn(async () => [{ id: "row-1", scope: "dedicated", active: false, revision: 0 }]),
     $transaction: vi.fn(
       async (fn: (tx: unknown) => Promise<unknown>): Promise<unknown> => fn(prisma),
     ),
@@ -424,8 +424,11 @@ describe("held-back narration on peer requests", () => {
         botId: "bot-1",
         bot: { name: "Assistant" },
       };
+      const admission = { $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]) };
       const reconciler = createJobReconciler({
         prisma: {
+          ...admission,
+          $transaction: async <T>(work: (tx: typeof admission) => Promise<T>) => work(admission),
           run: {
             findMany: vi.fn(async ({ where }: { where: { trigger?: string } }) =>
               where.trigger === "bot_message" ? [terminalRun] : [],

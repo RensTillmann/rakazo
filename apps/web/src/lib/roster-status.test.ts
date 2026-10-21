@@ -25,6 +25,7 @@ describe("rosterWorkStatusLabel", () => {
     expect(rosterWorkStatusLabel("queued")).toBe("Waiting in line…");
     expect(rosterWorkStatusLabel("leased")).toBe("Starting…");
     expect(rosterWorkStatusLabel("running")).toBe("Working…");
+    expect(rosterWorkStatusLabel("maintenance_paused")).toBe("Paused");
   });
 
   it("leaves other statuses to the message preview", () => {
@@ -45,6 +46,7 @@ describe("compactRosterStatusLabel", () => {
     expect(compactRosterStatusLabel("running")).toBe("Working…");
     expect(compactRosterStatusLabel("waiting_input")).toBe("Needs your answer");
     expect(compactRosterStatusLabel("waiting_takeover")).toBe("Needs your answer");
+    expect(compactRosterStatusLabel("maintenance_paused")).toBe("Paused");
     expect(compactRosterStatusLabel("failed")).toBe("Error");
   });
 
@@ -57,7 +59,7 @@ describe("rosterNeedsAnswer", () => {
   it("flags only runs that wait for the user, never working runs", () => {
     expect(rosterNeedsAnswer("waiting_input")).toBe(true);
     expect(rosterNeedsAnswer("waiting_takeover")).toBe(true);
-    for (const status of ["queued", "leased", "running", "idle", "completed", "failed"]) {
+    for (const status of ["queued", "leased", "running", "maintenance_paused", "idle", "completed", "failed"]) {
       expect(rosterNeedsAnswer(status)).toBe(false);
     }
     expect(rosterNeedsAnswerLabel("waiting_input")).toBe("Needs your answer");

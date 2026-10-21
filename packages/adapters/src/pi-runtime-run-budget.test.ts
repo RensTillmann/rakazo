@@ -3,6 +3,7 @@ import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-s
 import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
 import type * as Core from "@rakazo/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MaintenanceBoundary } from "./pi-maintenance.js";
 
 const providerState = vi.hoisted(() => ({
   models: new Map<string, Record<string, unknown>>(),
@@ -140,7 +141,7 @@ function warningText(context: unknown): string | undefined {
   return text.startsWith(`${AUTOMATED_MESSAGE_LABEL} Run budget almost used (`) ? text : undefined;
 }
 
-function request(executeTool = vi.fn(async () => ({ ok: true }))): AgentRunRequest {
+function request(executeTool: NonNullable<AgentRunRequest["executeTool"]> = vi.fn(async () => ({ ok: true }))): AgentRunRequest {
   return {
     botId: "bot",
     threadId: "thread",
@@ -488,5 +489,159 @@ describe("run budget", () => {
     expect(contexts.some((context) => warningText(context) !== undefined)).toBe(false);
     expect(isFinalTurn(contexts.at(-1))).toBe(true);
     expect(events.at(-1)).toEqual({ type: "done", text: "Stopped." });
+  });
+});
+
+describe("durable maintenance continuation", () => {
+  it("checkpoints before the first model call and resumes the exact prompt on a new runtime", async () => {
+    const input = { ...request(), beforeExecution: async () => false };
+    const paused = await run(input);
+    expect(providerState.stream).not.toHaveBeenCalled();
+    expect(paused.some((event) => event.type === "done")).toBe(false);
+    const checkpoint = paused.find((event) => event.type === "checkpoint");
+    expect(checkpoint?.type).toBe("checkpoint");
+    if (checkpoint?.type !== "checkpoint") throw new Error("Missing continuation");
+    providerState.stream.mockReturnValue(stream(textTurn("Resumed exactly.")));
+    const resumed = await run({
+      ...input,
+      beforeExecution: async () => true,
+      resumeFromCheckpoint: checkpoint.blob,
+    });
+    expect(providerState.stream).toHaveBeenCalledTimes(1);
+    expect(providerState.stream.mock.calls[0]![2]).toMatchObject({ maxRetries: 0 });
+    expect(JSON.stringify(providerState.stream.mock.calls[0]![1])).toContain(input.prompt);
+    expect(resumed.at(-1)).toEqual({ type: "done", text: "Resumed exactly." });
+  });
+
+  it("drains an admitted tool, preserves its result and does not repeat it after restart", async () => {
+    let admitted = true;
+    const executeTool = vi.fn(async () => {
+      admitted = false;
+      return { receipt: "committed-once" };
+    });
+    providerState.stream.mockReturnValueOnce(stream(toolTurn()));
+    const input = { ...request(executeTool), beforeExecution: async () => admitted };
+    const paused = await run(input);
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(providerState.stream).toHaveBeenCalledTimes(1);
+    const checkpoint = paused.find((event) => event.type === "checkpoint");
+    if (checkpoint?.type !== "checkpoint") throw new Error("Missing continuation");
+    expect(checkpoint.blob).toContain("committed-once");
+    admitted = true;
+    providerState.stream.mockReturnValueOnce(stream(textTurn("The receipt is committed.")));
+    const resumed = await run({ ...input, resumeFromCheckpoint: checkpoint.blob });
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(providerState.stream.mock.calls[1]![1])).toContain("committed-once");
+    expect(resumed.at(-1)).toEqual({ type: "done", text: "The receipt is committed." });
+  });
+
+  it("replays a tool fenced after the model response with its original execution identity", async () => {
+    let admitted = true;
+    providerState.stream.mockImplementationOnce(() => {
+      admitted = false;
+      return stream(message([{ type: "toolCall", id: "exact-call", name: "shell",
+        arguments: { command: "echo exact" } }], "toolUse"));
+    });
+    const executeTool = vi.fn(async () => ({ receipt: "once" }));
+    const input = { ...request(executeTool), beforeExecution: async () => admitted };
+    const paused = await run(input);
+    expect(executeTool).not.toHaveBeenCalled();
+    const checkpoint = paused.find((event) => event.type === "checkpoint");
+    if (checkpoint?.type !== "checkpoint") throw new Error("Missing continuation");
+    admitted = true;
+    providerState.stream.mockReturnValueOnce(stream(textTurn("Done.")));
+    await run({ ...input, resumeFromCheckpoint: checkpoint.blob });
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(executeTool.mock.calls[0]).toEqual(expect.arrayContaining([
+      "shell", { command: "echo exact" }, JSON.stringify(["pi-tool", "main", "exact-call"]),
+    ]));
+  });
+
+  it("checkpoints a provider-held partial call and retries its exact identity before another model request", async () => {
+    const identities: string[] = [];
+    const executeTool: NonNullable<AgentRunRequest["executeTool"]> = async (_name, _args, id) => {
+      identities.push(id);
+      if (identities.length === 1) throw new MaintenanceBoundary(1);
+      return { receipt: "all-banks-settled" };
+    };
+    providerState.stream.mockReturnValueOnce(stream(toolTurn()));
+    const input = { ...request(executeTool), beforeExecution: async () => true };
+    const paused = await run(input);
+    const checkpoint = paused.find((event) => event.type === "checkpoint");
+    if (checkpoint?.type !== "checkpoint") throw new Error("Missing partial-call continuation");
+    expect(paused.some((event) => event.type === "done")).toBe(false);
+    expect(providerState.stream).toHaveBeenCalledTimes(1);
+    providerState.stream.mockReturnValueOnce(stream(textTurn("All banks settled.")));
+    const resumed = await run({ ...input, resumeFromCheckpoint: checkpoint.blob });
+    expect(identities).toHaveLength(2);
+    expect(identities[1]).toBe(identities[0]);
+    expect(JSON.stringify(providerState.stream.mock.calls[1]![1])).toContain("all-banks-settled");
+    expect(resumed.at(-1)).toEqual({ type: "done", text: "All banks settled." });
+  });
+
+  it("refences every deferred call across repeated pause/resume without replaying its settled sibling", async () => {
+    let admitted = true;
+    providerState.stream.mockImplementationOnce(() => {
+      admitted = false;
+      return stream(message([
+        { type: "toolCall", id: "first", name: "shell", arguments: { command: "echo first" } },
+        { type: "toolCall", id: "second", name: "shell", arguments: { command: "echo second" } },
+      ], "toolUse"));
+    });
+    const executeTool = vi.fn(async (_name: string, args: Record<string, unknown>) => {
+      if (args.command === "echo first") admitted = false;
+      return { receipt: args.command };
+    });
+    const input = { ...request(executeTool), beforeExecution: async () => admitted };
+    const first = (await run(input)).find((event) => event.type === "checkpoint");
+    if (first?.type !== "checkpoint") throw new Error("Missing initial continuation");
+    expect(executeTool).not.toHaveBeenCalled();
+    admitted = true;
+    const second = (await run({ ...input, resumeFromCheckpoint: first.blob }))
+      .find((event) => event.type === "checkpoint");
+    if (second?.type !== "checkpoint") throw new Error("Missing repeated continuation");
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    admitted = true;
+    providerState.stream.mockReturnValueOnce(stream(textTurn("Both original calls settled.")));
+    await run({ ...input, resumeFromCheckpoint: second.blob });
+    expect(executeTool.mock.calls.map(([, args]) => args.command)).toEqual(["echo first", "echo second"]);
+  });
+
+  it("preserves a helper's actual transcript and completed tool when its parent drains", async () => {
+    let admitted = true;
+    providerState.stream.mockReturnValueOnce(stream(message([
+      { type: "toolCall", id: "helper", name: "run_subagent", arguments: { name: "researcher", task: "Keep this exact helper task" } },
+    ], "toolUse")));
+    providerState.stream.mockReturnValueOnce(stream(toolTurn()));
+    const executeTool = vi.fn(async () => { admitted = false; return { receipt: "helper-once" }; });
+    const input = { ...request(executeTool), beforeExecution: async () => admitted };
+    input.tools.push({ name: "run_subagent", description: "Delegate one task",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, task: { type: "string" } }, required: ["task"] } });
+    const paused = (await run(input)).find((event) => event.type === "checkpoint");
+    if (paused?.type !== "checkpoint") throw new Error("Missing helper continuation");
+    expect(Object.keys(JSON.parse(paused.blob).agents)).toHaveLength(2);
+    expect(paused.blob).toContain("helper-once");
+    admitted = true;
+    providerState.stream.mockReturnValueOnce(stream(textTurn("Helper evidence preserved.")));
+    providerState.stream.mockReturnValueOnce(stream(textTurn("Parent completed.")));
+    const resumed = await run({ ...input, resumeFromCheckpoint: paused.blob });
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(providerState.stream.mock.calls[2]![1])).toContain("helper-once");
+    expect(resumed.at(-1)).toEqual({ type: "done", text: "Parent completed." });
+  });
+
+  it("does not replace original system context or silently retarget a changed tool", async () => {
+    const input = { ...request(), instructions: "Exact original system instruction", beforeExecution: async () => false };
+    const paused = (await run(input)).find((event) => event.type === "checkpoint");
+    if (paused?.type !== "checkpoint") throw new Error("Missing continuation");
+    providerState.stream.mockReturnValueOnce(stream(textTurn("Original context.")));
+    await run({ ...input, instructions: "Changed reconstruction must not replace the checkpoint",
+      beforeExecution: async () => true, resumeFromCheckpoint: paused.blob });
+    expect(JSON.stringify(providerState.stream.mock.calls[0]![1])).toContain("Exact original system instruction");
+    providerState.stream.mockClear();
+    await expect(run({ ...input, beforeExecution: async () => true, resumeFromCheckpoint: paused.blob,
+      tools: input.tools.map((tool) => ({ ...tool, description: "Different tool binding" })) }))
+      .rejects.toThrow("runtime-tool-binding-changed");
+    expect(providerState.stream).not.toHaveBeenCalled();
   });
 });

@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyMessagingOutboundStatus,
   deliverMessagingOutbound,
+  reconcileMessagingOutbound,
   MESSAGING_DM_OUTBOUND_CAP,
-  MESSAGING_OUTBOUND_MAX_ATTEMPTS,
   type MessagingDeliveryDeps,
 } from "./messaging-delivery.js";
 
@@ -36,7 +36,10 @@ const messagingRun = {
 };
 
 function createFakeSurface(sendError?: Error) {
-  const sendToThread = vi.fn(async () => ({ handle: "handle-out-1" }));
+  const sendToThread = vi.fn(async (
+    _input: Parameters<MessagingSurface["sendToThread"]>[0],
+    _context: AdapterContext,
+  ) => ({ handle: "handle-out-1" }));
   if (sendError) sendToThread.mockRejectedValue(sendError);
   const openDirectThread = vi.fn(
     async (_provider: string, address: string) => `sendblue:opened:${address}`,
@@ -68,6 +71,7 @@ function createDeps(overrides: {
   existingOutbox?: unknown;
   sendError?: Error;
   connectionStatus?: string | null;
+  maintenance?: { active: boolean };
 }) {
   const rows = [...(overrides.outboundRows ?? [])] as Array<Record<string, unknown>>;
   const { messaging, sendToThread, openDirectThread } = createFakeSurface(overrides.sendError);
@@ -93,6 +97,11 @@ function createDeps(overrides: {
         if (identityRow && typeof data.dmThreadId === "string") {
           identityRow.dmThreadId = data.dmThreadId;
         }
+        const counter = data.outboundSinceInbound;
+        if (identityRow && counter && typeof counter === "object" &&
+            "increment" in counter && typeof counter.increment === "number") {
+          identityRow.outboundSinceInbound += counter.increment;
+        }
         return identityRow;
       }),
     },
@@ -105,12 +114,21 @@ function createDeps(overrides: {
             : { status: "pending" },
       ),
     },
-    $queryRaw: vi.fn(async () =>
-      overrides.connectionStatus === null
-        ? []
-        : [{ status: overrides.connectionStatus ?? "pending" }],
-    ),
+    $queryRaw: vi.fn(async () => [{
+      active: overrides.maintenance?.active ?? false,
+      revision: 0,
+      status: overrides.connectionStatus ?? "pending",
+    }]),
     messagingOutbound: {
+      findFirst: vi.fn(async ({ where }: {
+        where: { id: { not: string }; identityId?: string | null; threadId?: string | null };
+      }) => {
+        const current = rows.findIndex((row) => row.id === where.id.not);
+        return rows.slice(0, current).find((row) =>
+          ["pending", "executing", "uncertain"].includes(String(row.status)) &&
+          (where.identityId ? row.identityId === where.identityId : row.threadId === where.threadId),
+        ) ?? null;
+      }),
       findUnique: vi.fn(async ({ where }: { where?: { id?: string } } = {}) => {
         if (overrides.existingOutbox) return overrides.existingOutbox;
         if (where?.id) return rows.find((row) => row.id === where.id) ?? null;
@@ -151,15 +169,23 @@ function createDeps(overrides: {
           where,
           data,
         }: {
-          where: { id?: string; providerHandle?: string; status?: string };
+          where: {
+            id?: string; providerHandle?: string; status?: string | { in: string[] };
+            updatedAt?: { lte: Date };
+          };
           data: Record<string, unknown>;
         }) => {
           let count = 0;
           for (const row of rows) {
             if (where.id && row.id !== where.id) continue;
             if (where.providerHandle && row.providerHandle !== where.providerHandle) continue;
-            if (where.status && row.status !== where.status) continue;
-            Object.assign(row, data);
+            if (typeof where.status === "string" && row.status !== where.status) continue;
+            if (typeof where.status === "object" && !where.status.in.includes(String(row.status))) continue;
+            if (where.updatedAt && (!(row.updatedAt instanceof Date) ||
+                row.updatedAt > where.updatedAt.lte)) continue;
+            Object.assign(row, data, {
+              ...(typeof data.attempts === "object" ? { attempts: Number(row.attempts ?? 0) + 1 } : {}),
+            });
             count += 1;
           }
           return { count };
@@ -282,6 +308,23 @@ describe("deliverMessagingOutbound", () => {
     expect(deps.rows).toEqual([expect.objectContaining({ kind: "dm", status: "pending" })]);
   });
 
+  it("preserves the independent DM cap when resumed messages reach it mid-drain", async () => {
+    const maintenance = { active: true };
+    const deps = createDeps({
+      maintenance,
+      identity: { outboundSinceInbound: MESSAGING_DM_OUTBOUND_CAP - 1 },
+      messages: [
+        { id: "m-1", blocks: [{ kind: "text", text: "allowed" }] },
+        { id: "m-2", blocks: [{ kind: "text", text: "held by provider cap" }] },
+      ],
+    });
+    await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+    maintenance.active = false;
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(deps.sendToThread).toHaveBeenCalledTimes(1);
+    expect(deps.rows.map((row) => row.status)).toEqual(["sent", "pending"]);
+  });
+
   it("does not apply the sendblue outbound cap to other providers", async () => {
     const deps = createDeps({
       identity: {
@@ -298,22 +341,70 @@ describe("deliverMessagingOutbound", () => {
     ]);
   });
 
-  it("returns a transient send failure to pending and schedules a delayed retry", async () => {
-    const deps = createDeps({ sendError: new Error("messaging provider 500") });
+  it("retains an ambiguous send as uncertain without ever resending it", async () => {
+    const deps = createDeps({ sendError: new Error("response lost after acceptance") });
+    await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
     await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
 
     expect(deps.rows).toEqual([
-      expect.objectContaining({
-        kind: "dm",
-        status: "pending",
-        attempts: 1,
-        nextAttemptAt: expect.any(Date),
-      }),
+      expect.objectContaining({ kind: "dm", status: "uncertain" }),
     ]);
-    expect(deps.rows[0]!.providerHandle ?? null).toBeNull();
-    expect(deps.jobs.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "messaging.deliver", availableAt: expect.any(Date) }),
-    );
+    expect(deps.sendToThread).toHaveBeenCalledTimes(1);
+    expect(deps.jobs.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("preserves pending messages across pause and delivers in order only after resume", async () => {
+    const maintenance = { active: true };
+    const deps = createDeps({
+      maintenance,
+      messages: [
+        { id: "m-1", blocks: [{ kind: "text", text: "first" }] },
+        { id: "m-2", blocks: [{ kind: "text", text: "second" }] },
+      ],
+    });
+    await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+    expect(deps.rows.map((row) => row.status)).toEqual(["pending", "pending"]);
+    expect(deps.sendToThread).not.toHaveBeenCalled();
+    expect(deps.openDirectThread).not.toHaveBeenCalled();
+    expect(deps.jobs.enqueue).not.toHaveBeenCalled();
+    maintenance.active = false;
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(deps.sendToThread.mock.calls.map(([input]) => input)).toEqual([
+      { threadId: "sendblue:dm-1", body: "first" },
+      { threadId: "sendblue:dm-1", body: "second" },
+    ]);
+    expect(deps.rows.map((row) => row.status)).toEqual(["sent", "sent"]);
+  });
+
+  it("shows executing until confirmation and holds later messages behind an uncertain send", async () => {
+    const deps = createDeps({
+      messages: [
+        { id: "m-1", blocks: [{ kind: "text", text: "first" }] },
+        { id: "m-2", blocks: [{ kind: "text", text: "second" }] },
+      ],
+    });
+    deps.sendToThread.mockImplementationOnce(async () => {
+      expect(deps.rows[0]?.status).toBe("executing");
+      throw new Error("unknown provider result");
+    });
+    await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(deps.rows.map((row) => row.status)).toEqual(["uncertain", "pending"]);
+    expect(deps.sendToThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks an abandoned executing delivery uncertain after restart without sending it", async () => {
+    const deps = createDeps({
+      outboundRows: [{
+        id: "out-crash", idempotencyKey: "msg:crash", kind: "dm",
+        identityId: "mi-1", body: "accepted before process died", status: "executing",
+        updatedAt: new Date(Date.now() - 180_000),
+      }],
+    });
+    await reconcileMessagingOutbound(deps.prisma);
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(deps.rows[0]?.status).toBe("uncertain");
+    expect(deps.sendToThread).not.toHaveBeenCalled();
   });
 
   it("skips pending rows whose nextAttemptAt is still in the future", async () => {
@@ -506,13 +597,13 @@ describe("deliverMessagingOutbound", () => {
     });
     await deliverMessagingOutbound(deps, {}, context);
 
-    // At-most-once: keep the claim rather than risk a duplicate YES/NO.
-    expect(deps.rows[0]).toEqual(expect.objectContaining({ status: "sent" }));
+    // At-most-once is not confirmation of delivery.
+    expect(deps.rows[0]).toEqual(expect.objectContaining({ status: "uncertain" }));
     expect(deps.jobs.enqueue).not.toHaveBeenCalled();
     expect(deps.prisma.messagingIdentity.update).not.toHaveBeenCalled();
   });
 
-  it("does not re-queue a connect invite after a delivery transaction timeout", async () => {
+  it("leaves a failed admission transaction pending without provider I/O", async () => {
     const deps = createDeps({
       run: null,
       connectionStatus: "pending",
@@ -531,10 +622,12 @@ describe("deliverMessagingOutbound", () => {
     (deps.prisma as unknown as { $transaction: unknown }).$transaction = vi.fn(async () => {
       throw new Error("Transaction API error: Transaction already closed");
     });
-    await deliverMessagingOutbound(deps, {}, context);
+    await expect(deliverMessagingOutbound(deps, {}, context)).rejects.toThrow(
+      "Transaction API error",
+    );
 
     expect(deps.sendToThread).not.toHaveBeenCalled();
-    expect(deps.rows[0]).toEqual(expect.objectContaining({ status: "sent" }));
+    expect(deps.rows[0]).toEqual(expect.objectContaining({ status: "pending" }));
     expect(deps.jobs.enqueue).not.toHaveBeenCalled();
   });
 });
@@ -687,6 +780,7 @@ function createChannelDeps(
       ]),
     },
     messagingOutbound: {
+      findFirst: vi.fn(async () => null),
       findMany: vi.fn(async ({ where }: { where?: { status?: string; OR?: unknown[] } } = {}) => {
         const now = Date.now();
         return rows.filter((row) => {
@@ -709,11 +803,14 @@ function createChannelDeps(
         return row;
       }),
       updateMany: vi.fn(
-        async ({ where, data }: { where: { id?: string; status?: string }; data: unknown }) => {
+        async ({ where, data }: {
+          where: { id?: string; status?: string | { in: string[] } }; data: unknown;
+        }) => {
           let count = 0;
           for (const row of rows) {
             if (where.id && row.id !== where.id) continue;
-            if (where.status && row.status !== where.status) continue;
+            if (typeof where.status === "string" && row.status !== where.status) continue;
+            if (typeof where.status === "object" && !where.status.in.includes(String(row.status))) continue;
             Object.assign(row, data);
             count += 1;
           }
@@ -732,7 +829,9 @@ function createChannelDeps(
       ),
     },
     thread: { findFirst: vi.fn(async () => ({ id: "thread-2" })) },
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock)),
+    $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ ...prisma, ...txMock })),
   };
   return {
     prisma: prisma as unknown as PrismaClient & typeof prisma,
@@ -899,59 +998,3 @@ describe("deliverMessagingOutbound channel runs", () => {
   });
 });
 
-describe("deliverMessagingOutbound transient failure retry", () => {
-  it("marks the row failed only once the attempt budget is exhausted", async () => {
-    const deps = createDeps({
-      run: null,
-      sendError: new Error("messaging provider 500"),
-      outboundRows: [
-        {
-          id: "out-9",
-          idempotencyKey: "msg:m-9",
-          kind: "dm",
-          identityId: "mi-1",
-          body: "fourth failure",
-          status: "pending",
-          providerHandle: null,
-          attempts: MESSAGING_OUTBOUND_MAX_ATTEMPTS - 1,
-        },
-      ],
-    });
-    await deliverMessagingOutbound(deps, {}, context);
-
-    expect(deps.rows).toEqual([
-      expect.objectContaining({ status: "failed", attempts: MESSAGING_OUTBOUND_MAX_ATTEMPTS }),
-    ]);
-    expect(deps.jobs.enqueue).not.toHaveBeenCalled();
-  });
-});
-
-describe("deliverMessagingOutbound retry enqueue failure", () => {
-  it("propagates the enqueue failure so the job queue retries the drain", async () => {
-    const deps = createDeps({});
-    deps.sendToThread.mockRejectedValueOnce(new Error("messaging provider 500"));
-    deps.jobs.enqueue.mockRejectedValueOnce(new Error("queue down"));
-
-    // A swallowed enqueue failure would strand the row in pending forever:
-    // no job reconciler reclaims messaging_outbound rows.
-    await expect(deliverMessagingOutbound(deps, { runId: "run-1" }, context)).rejects.toThrow(
-      "queue down",
-    );
-    expect(deps.rows).toEqual([
-      expect.objectContaining({
-        kind: "dm",
-        status: "pending",
-        attempts: 1,
-        nextAttemptAt: expect.any(Date),
-      }),
-    ]);
-
-    // The delayed messaging.deliver job fires at nextAttemptAt: make the row due.
-    deps.rows[0]!.nextAttemptAt = new Date(Date.now() - 1);
-    await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
-    expect(deps.sendToThread).toHaveBeenCalledTimes(2);
-    expect(deps.rows).toEqual([
-      expect.objectContaining({ kind: "dm", status: "sent", providerHandle: "handle-out-1" }),
-    ]);
-  });
-});

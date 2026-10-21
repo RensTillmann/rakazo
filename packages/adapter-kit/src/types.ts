@@ -269,6 +269,8 @@ export interface ConnectorCall {
 export type ConnectorEvent =
   | { type: "log"; message: string }
   | { type: "result"; data: unknown }
+  /** Trusted provider admission rejection with all prior sub-effects settled. */
+  | { type: "maintenance-held"; revision: number }
   | { type: "error"; message: string; logIds?: string[] };
 
 export interface ConnectorCapabilities {
@@ -517,6 +519,9 @@ export interface AgentRunRequest {
   preferFallback?: { reason: string };
   /** Resolve an explicitly requested helper model within the active user and space scope. */
   resolveModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
+  /** Atomic admission immediately before each model/tool request. False drains to a checkpoint,
+   * never aborts an already-started tool. Implementations must fail closed on lookup errors. */
+  beforeExecution?: () => Promise<boolean>;
   resumeFromCheckpoint?: string;
   script?: ScriptedTurn[];
   /**
@@ -604,7 +609,11 @@ export type AgentRuntimeEvent =
    * a turn whose tool calls were refused before they ran); consumers keep the turns' text apart.
    */
   | { type: "assistant_turn" }
-  | { type: "tool"; name: string; args: Record<string, unknown>; executionId: string }
+  | {
+      type: "tool"; name: string; args: Record<string, unknown>; executionId: string;
+      /** A consumer-side admission denial leaves this scripted call at its exact cursor. */
+      deferForMaintenance?: () => void;
+    }
   | {
       type: "ask";
       text: string;

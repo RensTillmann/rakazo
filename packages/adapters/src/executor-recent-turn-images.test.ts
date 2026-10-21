@@ -141,6 +141,8 @@ async function runWithModel(
     yield { type: "done" as const, text: "Done" };
   });
   const prisma = {
+    $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
+    $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma)),
     user: { findUnique: vi.fn(async () => null) },
     run: {
       findUnique: vi.fn(async () => run),

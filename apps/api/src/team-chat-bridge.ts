@@ -9,10 +9,11 @@ import { runContinueJob } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { ATTACHMENT_MAX_COUNT, AutomatedSenderPoliciesSchema } from "@rakazo/contracts";
 import { botMessageMaxHops, messageBlockForArtifact, promptTextForAttachments } from "@rakazo/core";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
+import { claimMaintenanceEffect, lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import type { MessagingReceipts } from "./messaging-receipts.js";
-import type { TeamChatEngagementJudge } from "./team-chat-judge.js";
+import type { TeamChatEngagementDecision, TeamChatEngagementJudge } from "./team-chat-judge.js";
 import {
   MESSAGE_ROUTING_REARMED_REASON,
   MESSAGE_ROUTING_REASON,
@@ -49,7 +50,7 @@ function isRoutingOwnershipReason(reason: string | null | undefined): boolean {
   return reason === ROUTING_OWNERSHIP_REASON || reason === ROUTING_OWNERSHIP_REARMED_REASON;
 }
 
-interface TeamChatBridgeDeps {
+export interface TeamChatBridgeDeps {
   prisma: PrismaClient;
   events: Pick<ThreadEvents, "sendUserMessage">;
   jobs: Pick<JobPublisher, "enqueue">;
@@ -895,6 +896,9 @@ export class TeamChatBridge {
       },
       data: { status: "received", engagementReason: null, nextAttemptAt: null },
     });
+    // A judging row owns its whole ambient batch until the producer confirms
+    // drain. Lease expiry cannot prove the model stopped, even after restart.
+    // Keep its identity counted and reachable by force-stop in every Fleet state.
     await this.evaluateAmbient(now);
     const received = await this.deps.prisma.externalMessage.findMany({
       where: {
@@ -980,12 +984,13 @@ export class TeamChatBridge {
           ? `${target.name} could not complete the delegated request. Open Rakazo for details.`
           : teamChatResponseText(blocks, target.name, true);
       if (content) {
-        await this.deps.send({
+        const delivered = await this.sendDelegatedReply(run.id, target.spaceId, {
           conversationId: origin.externalConversation.conversationId,
           replyThreadId: origin.replyThreadId,
           content,
           idempotencyKey: `team-chat-run:${run.id}`,
         });
+        if (!delivered) continue;
       }
       await this.markTeamChatMirrored(run.id);
     }
@@ -1025,6 +1030,105 @@ export class TeamChatBridge {
       where: { id: runId, teamChatMirroredAt: null },
       data: { teamChatMirroredAt: new Date() },
     });
+  }
+
+  private async sendDelegatedReply(
+    runId: string,
+    spaceId: string,
+    request: TeamChatSendRequest & { idempotencyKey: string },
+  ): Promise<boolean> {
+    const effect = await this.deps.prisma.$transaction(async (tx) => {
+      if (!(await lockMaintenanceAdmission(tx)).admitted) return null;
+      const row = await tx.externalEffect.upsert({
+        where: { idempotencyKey: request.idempotencyKey },
+        create: {
+          runId, spaceId, kind: "team_chat_delivery",
+          idempotencyKey: request.idempotencyKey,
+          status: "intended",
+          request: { ...request },
+        },
+        update: {},
+      });
+      if (row.status === "completed") return { id: row.id, completed: true };
+      if (!(await claimMaintenanceEffect(tx, row.id, "intended"))) return null;
+      return { id: row.id, completed: false };
+    });
+    if (!effect) return false;
+    if (effect.completed) return true;
+    try {
+      const sent = await this.deps.send(request);
+      await this.deps.prisma.externalEffect.updateMany({
+        where: { id: effect.id, status: "executing" },
+        data: { status: "completed", result: { handle: sent.handle } },
+      });
+      return true;
+    } catch (error) {
+      await this.deps.prisma.externalEffect.updateMany({
+        where: { id: effect.id, status: "executing" },
+        data: { status: "uncertain" },
+      });
+      throw error;
+    }
+  }
+
+  private async withAmbientCancellation(
+    id: string,
+    conversationId: string,
+    judgedAt: Date,
+    decide: (signal: AbortSignal) => Promise<TeamChatEngagementDecision | null>,
+    settle: (
+      tx: Prisma.TransactionClient,
+      decision: TeamChatEngagementDecision | null,
+      cancelled: boolean,
+    ) => Promise<void>,
+  ): Promise<void> {
+    const controller = new AbortController();
+    const check = async () => {
+      const row = await this.deps.prisma.externalMessage.findUnique({
+        where: { id }, select: { lastError: true },
+      });
+      if (row?.lastError === "maintenance-force-stop") {
+        controller.abort(new Error("Team chat judgment force-stopped"));
+      }
+    };
+    let polling: Promise<void> | undefined;
+    const timer = setInterval(() => {
+      if (polling) return;
+      polling = check().catch((error) => {
+        getLogger().error("team chat judgment cancellation check failed", error);
+        controller.abort(error);
+      }).finally(() => { polling = undefined; });
+    }, DEFAULT_RECONCILE_INTERVAL_MS);
+    timer.unref?.();
+    let decision: TeamChatEngagementDecision | null = null;
+    try {
+      await check();
+      controller.signal.throwIfAborted();
+      decision = await decide(controller.signal);
+    } catch (error) {
+      if (!controller.signal.aborted) throw error;
+    } finally {
+      clearInterval(timer);
+      await polling;
+      // Force-stop writes only a marker. Acknowledge it only after the actual
+      // model stream and its abort machinery have drained, never on lease expiry.
+      await this.deps.prisma.$transaction(async (tx) => {
+        // Keep completion and consumption atomic with another instance's claim.
+        await tx.$queryRaw`SELECT id FROM external_conversations WHERE id = ${conversationId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM external_messages WHERE id = ${id} FOR UPDATE`;
+        const current = await tx.externalMessage.findUnique({
+          where: { id }, select: { lastError: true },
+        });
+        const cancelled = current?.lastError === "maintenance-force-stop";
+        const changed = await tx.externalMessage.updateMany({
+          where: { id, status: "judging", judgedAt },
+          data: { status: cancelled ? "cancelled" : "observed", nextAttemptAt: null },
+        });
+        if (changed.count === 1) {
+          await settle(tx, controller.signal.aborted ? null : decision, cancelled);
+        }
+      });
+    }
   }
 
   private async evaluateAmbient(now: Date): Promise<void> {
@@ -1075,7 +1179,7 @@ export class TeamChatBridge {
       );
       const automatedSenderPolicies = parsedPolicies.success ? parsedPolicies.data : {};
       if (!ambientEnabled) {
-        await this.markAmbientIgnored(messages, now);
+        await this.markAmbientIgnored(this.deps.prisma, messages, now);
         continue;
       }
 
@@ -1084,7 +1188,7 @@ export class TeamChatBridge {
           message.senderIsBot &&
           (automatedSenderPolicies[message.senderId]?.mode ?? "ignore") === "ignore",
       );
-      if (ignored.length > 0) await this.markAmbientIgnored(ignored, now);
+      if (ignored.length > 0) await this.markAmbientIgnored(this.deps.prisma, ignored, now);
       const candidates = messages.filter((message) => !ignored.includes(message));
       if (candidates.length === 0) continue;
 
@@ -1104,7 +1208,28 @@ export class TeamChatBridge {
           (message) =>
             message.senderIsBot && automatedSenderPolicies[message.senderId]?.mode === "action",
         );
-      const decision = actionable
+      const claimed = await this.deps.prisma.$transaction(async (tx) => {
+        if (!(await lockMaintenanceAdmission(tx)).admitted) return false;
+        // Older observed members of this batch must not start a second judge.
+        // Serialize on the existing conversation identity, including across APIs.
+        await tx.$queryRaw`SELECT id FROM external_conversations WHERE id = ${conversation.id} FOR UPDATE`;
+        const result = await tx.externalMessage.updateMany({
+          where: {
+            id: latest.id,
+            status: "observed",
+            externalConversation: { messages: { none: { status: "judging" } } },
+          },
+          data: {
+            status: "judging",
+            judgedAt: now,
+            nextAttemptAt: new Date(now.getTime() + QUEUE_RESERVATION_MS),
+            batchContext: JSON.stringify({ messageIds: evaluated.map(({ id }) => id) }),
+          },
+        });
+        return result.count === 1;
+      });
+      if (!claimed) continue;
+      await this.withAmbientCancellation(latest.id, conversation.id, now, async (signal) => actionable
         ? {
             act: true,
             reason: `${actionable.senderName} is configured as actionable.`,
@@ -1113,6 +1238,7 @@ export class TeamChatBridge {
         : this.deps.judge
           ? await this.deps.judge.decide({
               bot: policy,
+              signal,
               channelId: latest.externalConversation.conversationId,
               channelName: latest.externalConversation.displayName ?? undefined,
               rules,
@@ -1123,55 +1249,61 @@ export class TeamChatBridge {
                 content: message.content,
               })),
             })
-          : { act: false, reason: "Ambient engagement judge is unavailable." };
-      const trigger =
-        judgedMessages.find((message) => message.providerEventId === decision.askedByEventId) ??
-        latest;
-      if (!decision.act) {
-        await this.markAmbientIgnored(evaluated, now);
-        continue;
-      }
-      const promoted = await this.promoteAmbientTrigger(trigger.id, {
-        judgedAt: now,
-        engagementReason: decision.reason ?? null,
-        batchContext: JSON.stringify({
-          messageIds: judgedMessages.map(({ id }) => id),
-          prompt: teamChatAmbientPrompt({
-            provider: this.deps.providerId,
-            channelId: latest.externalConversation.conversationId,
-            channelName: latest.externalConversation.displayName,
-            rules,
-            reason: decision.reason,
-            messages: judgedMessages.map((message) => ({
-              senderId: message.senderId,
-              senderName: message.senderName,
-              content: message.content,
-            })),
-          }),
-        }),
-      });
-      if (promoted)
-        await this.markAmbientIgnored(
-          evaluated.filter(({ id }) => id !== trigger.id),
-          now,
-        );
+          : { act: false, reason: "Ambient engagement judge is unavailable." },
+        async (tx, decision, cancelled) => {
+          if (cancelled) {
+            await tx.externalMessage.updateMany({
+              where: { id: { in: evaluated.map(({ id }) => id) }, status: "observed" },
+              data: { status: "cancelled", nextAttemptAt: null },
+            });
+            return;
+          }
+          if (!decision) return;
+          const trigger =
+            judgedMessages.find((message) => message.providerEventId === decision.askedByEventId) ??
+            latest;
+          if (!decision.act) {
+            await this.markAmbientIgnored(tx, evaluated, now);
+            return;
+          }
+          const promoted = await tx.externalMessage.updateMany({
+            where: { id: trigger.id, status: "observed" },
+            data: {
+              status: "received",
+              judgedAt: now,
+              engagementReason: decision.reason ?? null,
+              batchContext: JSON.stringify({
+                messageIds: judgedMessages.map(({ id }) => id),
+                prompt: teamChatAmbientPrompt({
+                  provider: this.deps.providerId,
+                  channelId: latest.externalConversation.conversationId,
+                  channelName: latest.externalConversation.displayName,
+                  rules,
+                  reason: decision.reason,
+                  messages: judgedMessages.map((message) => ({
+                    senderId: message.senderId,
+                    senderName: message.senderName,
+                    content: message.content,
+                  })),
+                }),
+              }),
+            },
+          });
+          if (promoted.count === 1) {
+            await this.markAmbientIgnored(tx, evaluated.filter(({ id }) => id !== trigger.id), now);
+          }
+        },
+      );
     }
   }
 
-  private async promoteAmbientTrigger(
-    id: string,
-    data: { judgedAt: Date; engagementReason: string | null; batchContext: string },
-  ): Promise<boolean> {
-    const result = await this.deps.prisma.externalMessage.updateMany({
-      where: { id, status: "observed" },
-      data: { status: "received", ...data },
-    });
-    return result.count === 1;
-  }
-
-  private async markAmbientIgnored(messages: Array<{ id: string }>, judgedAt: Date): Promise<void> {
+  private async markAmbientIgnored(
+    prisma: Pick<Prisma.TransactionClient, "externalMessage">,
+    messages: Array<{ id: string }>,
+    judgedAt: Date,
+  ): Promise<void> {
     if (messages.length === 0) return;
-    await this.deps.prisma.externalMessage.updateMany({
+    await prisma.externalMessage.updateMany({
       where: { id: { in: messages.map(({ id }) => id) }, status: "observed" },
       data: { status: "ignored", judgedAt },
     });
@@ -1485,12 +1617,15 @@ export class TeamChatBridge {
   private async reserveDelivery(id: string): Promise<boolean> {
     const now = new Date();
     const leaseUntil = new Date(now.getTime() + DELIVERY_RESERVATION_MS);
-    const claimed = await this.deps.prisma.externalMessage.updateMany({
-      where: { id, status: "running", providerReplyHandle: null },
-      data: {
-        status: "delivering",
-        nextAttemptAt: leaseUntil,
-      },
+    const claimed = await this.deps.prisma.$transaction(async (tx) => {
+      if (!(await lockMaintenanceAdmission(tx)).admitted) return { count: 0 };
+      return tx.externalMessage.updateMany({
+        where: { id, status: "running", providerReplyHandle: null },
+        data: {
+          status: "delivering",
+          nextAttemptAt: leaseUntil,
+        },
+      });
     });
     if (claimed.count === 1) return true;
 
@@ -1514,11 +1649,9 @@ export class TeamChatBridge {
         OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
       },
       data: {
-        status: "delivered",
-        providerReplyHandle: "unconfirmed",
-        deliveredAt: now,
+        status: "uncertain",
         nextAttemptAt: null,
-        lastError: "Delivery confirmation lost; skipped retry to avoid duplicates",
+        lastError: "Delivery confirmation lost; reconciliation required before retry",
       },
     });
     return false;
@@ -1545,8 +1678,8 @@ export class TeamChatBridge {
       select: { status: true, providerReplyHandle: true },
     });
     if (!current) return;
-    // A concurrent reserveDelivery may have finalized with "unconfirmed". Do not
-    // clear that lost-confirmation metadata via markDelivered.
+    // An uncertain delivery is evidence, not an invitation to send again.
+    if (current.status === "uncertain") return;
     if (current.providerReplyHandle) {
       if (current.status !== "delivered") {
         await this.markDelivered(message.id, current.providerReplyHandle);
@@ -1560,7 +1693,8 @@ export class TeamChatBridge {
     // retried from received. Once linked, preserve running so the shared run
     // reconciler can recover a failed continuation enqueue without creating a
     // second message/run from this stale snapshot.
-    const status = current.status === "queueing" ? "received" : current.status;
+    const status = current.status === "queueing" ? "received"
+      : current.status === "delivering" ? "uncertain" : current.status;
     // Conditional write: if reserveDelivery finalized between the read and this
     // update, leave the delivered/unconfirmed row alone.
     await this.deps.prisma.externalMessage.updateMany({

@@ -466,15 +466,26 @@ describe("createPendingSteeringRun", () => {
       data: expect.objectContaining({ trigger: "webhook", routineId: "routine-1" }),
     });
 
-    // Two routines of that name, or a batch naming two routines: no routine, as before.
-    for (const tx of [
-      await held([wake("a", 4, "Fleet events")], [{ id: "routine-1" }, { id: "routine-2" }]),
-      await held([wake("a", 4, "Fleet events"), wake("b", 5, "Inbox")], [{ id: "routine-1" }]),
-    ]) {
-      expect(tx.run.create).toHaveBeenCalledWith({
-        data: expect.not.objectContaining({ routineId: expect.anything() }),
-      });
-    }
+    const ambiguous = await held([wake("a", 4, "Fleet events")], [{ id: "routine-1" }, { id: "routine-2" }]);
+    expect(ambiguous.run.create).toHaveBeenCalledWith({
+      data: expect.not.objectContaining({ routineId: expect.anything() }),
+    });
+
+    // Every delivery has its own authority and idempotency identity. Keep the
+    // later request queued, rather than executing it under the last one's source.
+    const ordered = await held(
+      [wake("a", 4, "Fleet events"), wake("b", 5, "Inbox")],
+      [{ id: "routine-1" }],
+    );
+    expect(ordered.run.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        trigger: "webhook", sourceMessageId: "message-a", routineId: "routine-1",
+      }),
+    });
+    expect(ordered.steeringMessage.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["steer-a"] }, runId: null },
+      data: { runId: "run-held", claimedAt: null },
+    });
   });
 });
 
@@ -3392,9 +3403,28 @@ describe("sendUserMessage", () => {
 });
 
 describe("claimSteering", () => {
+  it("leaves durable steering untouched while maintenance is active", async () => {
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ active: true, revision: 1 }]),
+      run: { findFirst: vi.fn() },
+      steeringMessage: { findMany: vi.fn(), updateMany: vi.fn() },
+    };
+    const prisma = {
+      $transaction: async (operation: (client: typeof tx) => unknown) => operation(tx),
+    } as unknown as PrismaClient;
+    await expect(claimSteering(prisma, {
+      threadId: "thread-1", botId: "bot-1", runId: "run-1",
+      leaseOwner: "worker-1", leaseFence: 1, seenIds: [],
+    })).resolves.toEqual([]);
+    expect(tx.run.findFirst).not.toHaveBeenCalled();
+    expect(tx.steeringMessage.findMany).not.toHaveBeenCalled();
+    expect(tx.steeringMessage.updateMany).not.toHaveBeenCalled();
+    expect(tx.$queryRaw.mock.calls[0]?.[0].join("")).toContain("maintenance_state");
+  });
+
   it("claims pending messages for the fenced run in message order", async () => {
     const tx = {
-      $queryRaw: vi.fn(),
+      $queryRaw: vi.fn().mockResolvedValue([{ active: false, revision: 0 }]),
       run: {
         findFirst: vi.fn().mockResolvedValue({ id: "run-1", spaceId: "space-1" }),
         findUnique: vi.fn().mockResolvedValue({ status: "running", startedAt: null }),
@@ -3485,7 +3515,7 @@ describe("claimSteering", () => {
 
   it("does not claim steering into a tool-free creation intro", async () => {
     const tx = {
-      $queryRaw: vi.fn(),
+      $queryRaw: vi.fn().mockResolvedValue([{ active: false, revision: 0 }]),
       run: { findFirst: vi.fn().mockResolvedValue({ id: "intro-run", trigger: "created" }) },
       steeringMessage: {
         findMany: vi.fn(),
@@ -3512,7 +3542,7 @@ describe("claimSteering", () => {
 
   it("leaves pending user messages alone while a routine turn is running", async () => {
     const tx = {
-      $queryRaw: vi.fn(),
+      $queryRaw: vi.fn().mockResolvedValue([{ active: false, revision: 0 }]),
       run: { findFirst: vi.fn().mockResolvedValue({ id: "run-routine", trigger: "routine" }) },
       steeringMessage: {
         findMany: vi.fn().mockResolvedValue([]),
@@ -3545,7 +3575,7 @@ describe("claimSteering", () => {
     "keeps held webhook deliveries out of a %s turn",
     async (trigger) => {
       const tx = {
-        $queryRaw: vi.fn(),
+        $queryRaw: vi.fn().mockResolvedValue([{ active: false, revision: 0 }]),
         run: {
           findFirst: vi.fn(async () => ({
             id: "run-1",
@@ -3581,7 +3611,7 @@ describe("claimSteering", () => {
 
   it("leaves channel and in-app pending rows for a direct-message run", async () => {
     const tx = {
-      $queryRaw: vi.fn(),
+      $queryRaw: vi.fn().mockResolvedValue([{ active: false, revision: 0 }]),
       run: {
         findFirst: vi.fn().mockResolvedValue({
           id: "run-dm",

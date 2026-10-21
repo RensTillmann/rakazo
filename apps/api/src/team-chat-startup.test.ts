@@ -1,7 +1,7 @@
 import type { MessagingInboundMessage } from "@rakazo/adapter-kit";
 import type { PrismaClient } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
-import { TeamChatBridge } from "./team-chat-bridge.js";
+import { createTestBridge } from "./team-chat-test-fixture.js";
 import {
   PendingTeamChatInbound,
   prefersTeamChatSurface,
@@ -113,7 +113,7 @@ describe("TeamChatBridge start cancellation", () => {
           releaseFind = resolve;
         }),
     );
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         bot: { findFirst: blockedFindFirst },
         externalMessage: { findMany: vi.fn(), updateMany: vi.fn() },
@@ -154,7 +154,7 @@ describe("TeamChatBridge start cancellation", () => {
         }
         return [];
       });
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma: {
           bot: {
             findFirst: vi.fn(async () => ({

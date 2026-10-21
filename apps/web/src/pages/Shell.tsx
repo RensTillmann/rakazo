@@ -54,6 +54,7 @@ import {
   groupVoiceChats,
   inferAttachmentMimeType,
   isActive,
+  isExecutingRunStatus,
   isPeerReceiptBlocks,
   isRunTerminalEvent,
   isToolActivityBlock,
@@ -178,6 +179,7 @@ import {
   type FleetFeedbackContext,
   fleetFeedbackContext,
 } from "../components/FleetFeedback";
+import { FleetPauseControls } from "../components/FleetPauseControls";
 import { InboundDeliveryCard } from "../components/InboundDeliveryCard";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { RosterAttentionBadge } from "../components/RosterAttentionBadge";
@@ -2226,9 +2228,7 @@ function SpaceShell() {
   }, []);
   const currentRuns = activeThreadRuns(activeSnapshot);
   const answerableAskIds = useMemo(() => answerableAskMessageIds(activeSnapshot), [activeSnapshot]);
-  const workingRuns = currentRuns.filter((run) =>
-    ["running", "queued", "leased"].includes(run.status),
-  );
+  const workingRuns = currentRuns.filter((run) => isExecutingRunStatus(run.status));
   const transcriptRunning = workingRuns.length > 0;
   const composerRunning = currentRuns.some((run) => isActive(run.status));
   const runError = threadRunError(activeSnapshot, dismissedRunErrorIds);
@@ -4402,6 +4402,8 @@ function SpaceShell() {
               </button>
             ) : null}
           </div>
+          <div className="col-span-2 row-start-4 flex flex-wrap items-center gap-2 md:col-span-3 md:row-start-3">
+            {userId ? <FleetPauseControls key={`${userId}:${currentSpaceId ?? "primary"}`} spaceId={currentSpaceId} /> : null}
           <button
             type="button"
             onClick={() => {
@@ -4412,10 +4414,11 @@ function SpaceShell() {
               });
               setFeedbackOpen(true);
             }}
-            className="app-no-drag col-span-2 row-start-4 justify-self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground md:col-span-3 md:row-start-3"
+            className="app-no-drag rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <Trans>Feedback to Elena</Trans>
           </button>
+          </div>
           <UsageTopBar
             compact
             botId={inGroup ? null : (active?.id ?? null)}

@@ -14,6 +14,7 @@ export * from "./history.js";
 export * from "./ids.js";
 export * from "./integration-settings.js";
 export * from "./local-settings.js";
+export * from "./maintenance.js";
 export * from "./markdown-text.js";
 export * from "./mcp.js";
 export * from "./model-backups.js";

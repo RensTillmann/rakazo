@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   AdapterContext,
   ConnectorCall,
@@ -128,7 +129,12 @@ export class McpConnector implements ConnectorProvider {
     // requests that carry a tool whose name starts with "mcp_" (single underscore) with a
     // misleading "You're out of extra usage" 400, on every model. Direct MCP tools are
     // `mcp__server__tool` (double underscore) and are accepted; keep the wrappers off "mcp_".
-    return lazyCatalogTools(catalogToolPrefix("mcp"), "mcp", "MCP", catalogEntries(tools));
+    // Worker resume validation must remain discoverable even when ordinary tools use
+    // the lazy catalog. It is an authenticated, read-only control protocol.
+    return [
+      ...lazyCatalogTools(catalogToolPrefix("mcp"), "mcp", "MCP", catalogEntries(tools)),
+      ...tools.filter((tool) => tool.route?.toolName === "maintenance_validate" && tool.readOnly === true),
+    ];
   }
 
   async resolveCall(
@@ -303,7 +309,16 @@ export class McpConnector implements ConnectorProvider {
       material = this.sessions.get(sessionKey)?.material;
       const result = await session.callTool(call.route.toolName, call.args, {
         signal: context.signal,
+        invocationId: createHash("sha256").update(JSON.stringify([context.runId ?? null, call.executionId])).digest("hex"),
       });
+      const revision = result._meta?.["rakazo/maintenance-revision"];
+      if (assignment.server.transport === "streamable_http" &&
+        assignment.server.endpoint === "http://fleet-service:8790/mcp" &&
+        result.isError === true && result._meta?.["rakazo/maintenance-held"] === true &&
+        typeof revision === "number" && Number.isSafeInteger(revision) && revision > 0) {
+        yield { type: "maintenance-held", revision };
+        return;
+      }
       const secrets = material ? oauthMaterialSecrets(material) : [];
       yield { type: "result", data: redactConnectorPayload(result, secrets) };
     } catch (error) {

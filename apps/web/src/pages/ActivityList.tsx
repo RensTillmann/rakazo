@@ -172,6 +172,7 @@ const STATUS_FILTERS: RunStatus[] = [
   "leased",
   "waiting_input",
   "waiting_takeover",
+  "maintenance_paused",
   "completed",
   "failed",
   "cancelled",
@@ -402,6 +403,8 @@ export function statusLabel(status: RunActivityRow["status"]): string {
       return t`Needs input`;
     case "waiting_takeover":
       return t`Needs takeover`;
+    case "maintenance_paused":
+      return t`Paused`;
     case "completed":
       return t`Done`;
     case "failed":

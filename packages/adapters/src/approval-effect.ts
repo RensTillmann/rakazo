@@ -88,13 +88,19 @@ export type BoundApprovalRoute = {
   resourceRevision?: string | number;
 };
 
+function persistedApprovalRoute(route: BoundApprovalRoute): BoundApprovalRoute {
+  const { connectorId, resourceId, toolName, resourceRevision } = route;
+  return { connectorId, resourceId, toolName,
+    ...(resourceRevision === undefined ? {} : { resourceRevision }) };
+}
+
 export function catalogApprovalRequest(
   toolName: string,
   args: Record<string, unknown>,
   marker: string,
   route?: BoundApprovalRoute,
 ): unknown[] {
-  return route ? [marker, toolName, args, route] : [marker, toolName, args];
+  return route ? [marker, toolName, args, persistedApprovalRoute(route)] : [marker, toolName, args];
 }
 
 export function catalogApprovalDetails(
@@ -142,7 +148,7 @@ export function boundDirectApprovalRequest(
   args: Record<string, unknown>,
   marker: string,
 ): unknown[] {
-  return [marker, DIRECT_APPROVAL_TAG, { route, args }];
+  return [marker, DIRECT_APPROVAL_TAG, { route: persistedApprovalRoute(route), args }];
 }
 
 export function boundDirectApprovalDetails(

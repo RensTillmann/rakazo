@@ -29,7 +29,7 @@ import type {
   ScreenSession,
   WorkspaceDirectoryRequest,
 } from "@rakazo/adapter-kit";
-import { boundedSandboxCommandTimeoutMs } from "@rakazo/core";
+import { abortableDelay, boundedSandboxCommandTimeoutMs } from "@rakazo/core";
 import {
   applyPlaceholderAction,
   boundedComputerActions,
@@ -95,22 +95,32 @@ export class DesktopSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     _computerId: string,
     runId: string,
-    _context: AdapterContext,
+    context: AdapterContext,
   ) {
-    const box = this.boxFor(computer);
-    if (!box) return;
-    this.cancelOwnedProcesses(box.home, runId);
+    const box = this.knownBox(computer);
+    if (!box) return false;
+    while (!this.cancelOwnedProcesses(box.home, runId)) {
+      if (context.signal.aborted) return false;
+      await abortableDelay(10, context.signal);
+    }
+    return true;
   }
 
   private cancelOwnedProcesses(home: string, runId?: string) {
+    let drained = true;
     for (const [tree, owner] of this.processTrees) {
       if (owner.home === home && (runId === undefined || owner.runId === runId)) {
         tree.kill();
-        tree.close();
-        this.processTrees.delete(tree);
+        if (tree.alive()) {
+          drained = false;
+        } else {
+          tree.close();
+          this.processTrees.delete(tree);
+        }
       }
     }
     this.sweepProcesses();
+    return drained;
   }
 
   constructor(
@@ -413,12 +423,18 @@ export class DesktopSandboxProvider implements SandboxProvider {
     }
   }
 
-  private boxFor(computer: ComputerRef): DesktopBox | undefined {
+  private knownBox(computer: ComputerRef): DesktopBox | undefined {
     const existing = this.boxes.get(computer.id);
     if (existing) return existing;
     for (const box of this.boxes.values()) {
       if (box.ref.botId === computer.botId || box.home === computer.providerRef) return box;
     }
+    return undefined;
+  }
+
+  private boxFor(computer: ComputerRef): DesktopBox | undefined {
+    const existing = this.knownBox(computer);
+    if (existing) return existing;
     if (!computer.providerRef) return undefined;
     const box: DesktopBox = {
       ref: computer,

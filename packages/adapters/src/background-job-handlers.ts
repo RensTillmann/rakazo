@@ -9,6 +9,7 @@ import type {
 } from "@rakazo/adapter-kit";
 import { messagingDeliverJob } from "@rakazo/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import { settleCallRequest } from "./call-request.js";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
@@ -63,6 +64,8 @@ export function createBackgroundJobHandlers(deps: {
           { prisma: deps.prisma, messaging: deps.messaging, events: deps.events, jobs: deps.jobs },
           payload.runId,
         );
+        const admission = await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx));
+        if (!admission.admitted) return;
         await deps.jobs.enqueue(messagingDeliverJob()).catch(async (error) => {
           getLogger().error("messaging.deliver enqueue error", error);
           await deliverMessaging();

@@ -6,6 +6,7 @@ export const ACTIVE_RUN_STATUSES = [
   "running",
   "waiting_input",
   "waiting_takeover",
+  "maintenance_paused",
 ] as const satisfies readonly RunStatus[];
 /**
  * Runs that hold a thread's queue: a new message steers or waits behind them. A run paused
@@ -17,7 +18,17 @@ export const QUEUE_HOLDING_RUN_STATUSES = [
   "leased",
   "running",
   "waiting_takeover",
+  "maintenance_paused",
 ] as const satisfies readonly RunStatus[];
+/**
+ * Runs a worker is executing right now. Queued, waiting and maintenance-paused runs are still
+ * active (unresolved) but not executing, so activity indicators must not animate them.
+ */
+export const EXECUTING_RUN_STATUSES = ["leased", "running"] as const satisfies readonly RunStatus[];
+
+export function isExecutingRunStatus(status: string | null | undefined): boolean {
+  return (EXECUTING_RUN_STATUSES as readonly string[]).includes(status ?? "");
+}
 const TERMINAL: RunStatus[] = ["completed", "failed", "cancelled"];
 /**
  * These turns carry their own prompt and must not take a user message as steering.
@@ -41,10 +52,11 @@ export function isBackgroundRunTrigger(trigger: string | null | undefined): bool
 
 const allowed: Record<RunStatus, RunStatus[]> = {
   queued: ["leased", "cancelled"],
-  leased: ["running", "queued", "cancelled"],
-  running: ["waiting_input", "waiting_takeover", "completed", "failed", "cancelled", "leased"],
+  leased: ["running", "queued", "maintenance_paused", "cancelled"],
+  running: ["waiting_input", "waiting_takeover", "maintenance_paused", "completed", "failed", "cancelled", "leased"],
   waiting_input: ["queued", "leased", "cancelled"],
   waiting_takeover: ["queued", "leased", "cancelled"],
+  maintenance_paused: ["queued", "cancelled"],
   completed: [],
   failed: ["queued"],
   cancelled: [],

@@ -147,12 +147,17 @@ function createDeps(
     },
     messagingOutbound: {
       createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
-        outboundRows.push(...data);
-        return { count: data.length };
+        const fresh = data.filter((item) =>
+          !outboundRows.some((row) => row.idempotencyKey === item.idempotencyKey));
+        outboundRows.push(...fresh);
+        return { count: fresh.length };
       }),
-      deleteMany: vi.fn(async ({ where }: { where: { idempotencyKey?: string } }) => {
+      deleteMany: vi.fn(async ({ where }: {
+        where: { idempotencyKey?: string; status?: { notIn: string[] } };
+      }) => {
         const before = outboundRows.length;
         for (let i = outboundRows.length - 1; i >= 0; i -= 1) {
+          if (where.status?.notIn.includes(String(outboundRows[i]!.status))) continue;
           if (outboundRows[i]!.idempotencyKey === where.idempotencyKey) outboundRows.splice(i, 1);
         }
         return { count: before - outboundRows.length };
@@ -272,6 +277,16 @@ describe("connectAgent", () => {
     const result = await connectAgent(approved, run, sender, { address: "+15552222222" });
     expect(result).toEqual({ ok: true, status: "approved" });
     expect(approved.prisma.agentConnection.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["executing", "uncertain"])("never replaces a %s invite with another send", async (status) => {
+    const deps = createDeps({
+      connection: { id: "ac-1", requesterBotId: "bot-1", targetBotId: "bot-2", status: "declined" },
+    });
+    const prior = { idempotencyKey: "connect:bot-1:bot-2", status, body: "original invite" };
+    deps.outboundRows.push(prior);
+    await connectAgent(deps, run, sender, { address: "+15552222222" });
+    expect(deps.outboundRows).toEqual([prior]);
   });
 
   it("does not reopen a connection when the locked row is already revoked", async () => {

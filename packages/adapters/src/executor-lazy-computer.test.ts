@@ -56,6 +56,8 @@ async function runRoutine(
     yield { type: "done" as const, text: "Inbox is clear." };
   });
   const prisma = {
+    $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
+    $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma)),
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),

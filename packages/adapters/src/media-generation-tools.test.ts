@@ -34,12 +34,16 @@ function setup() {
     block: { kind: "image", artifactId: "artifact", name: "generated.png" },
   });
   const publish = vi.fn();
+  const queryRaw = vi.fn(async () => [{ active: false, revision: 0 }]);
+  const transaction = async <T>(work: (tx: unknown) => Promise<T>): Promise<T> =>
+    work({ $queryRaw: queryRaw, externalEffect });
   const options = {
     name: "generate_image" as const,
     args: { prompt: "draw" } as Record<string, unknown>,
     executionId: "execution",
     provider,
     prisma: {
+      $transaction: transaction,
       externalEffect,
       artifact: { findFirst: vi.fn().mockResolvedValue(null) },
     } as unknown as PrismaClient,
@@ -48,7 +52,7 @@ function setup() {
     attach,
     publish,
   };
-  return { options, externalEffect, provider, attach, publish, row };
+  return { options, externalEffect, provider, attach, publish, row, queryRaw };
 }
 
 describe("bot media tools", () => {
@@ -95,6 +99,25 @@ describe("bot media tools", () => {
       expect.objectContaining({ id: "local-job" }),
     );
     expect(publish).toHaveBeenCalledTimes(1);
+  });
+  it("holds a new billed submission without consuming a slot while maintenance is active", async () => {
+    const { options, externalEffect, provider, queryRaw } = setup();
+    queryRaw.mockResolvedValue([{ active: true, revision: 1 }]);
+    const generate = vi.spyOn(provider, "generateImage");
+    await expect(generateMediaFromTool(options)).rejects.toThrow("Maintenance admission closed");
+    expect(externalEffect.create).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+  });
+  it("still reconciles an already-submitted video while maintenance is active", async () => {
+    const { options, externalEffect, provider, queryRaw, row } = setup();
+    queryRaw.mockResolvedValue([{ active: true, revision: 1 }]);
+    externalEffect.findFirst.mockResolvedValue(row);
+    const generate = vi.spyOn(provider, "generateVideo");
+    const poll = vi.spyOn(provider, "pollVideo");
+    await expect(generateMediaFromTool({ ...options, name: "generate_video", args: { jobId: row.id } }))
+      .resolves.toMatchObject({ status: "completed" });
+    expect(generate).not.toHaveBeenCalled();
+    expect(poll).toHaveBeenCalledOnce();
   });
   it("rejects invalid inputs before reserving or billing", async () => {
     const { options, externalEffect } = setup();

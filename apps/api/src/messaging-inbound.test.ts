@@ -232,9 +232,10 @@ function createDeps(
         }
         return { count };
       }),
-      deleteMany: vi.fn(async ({ where }: { where: { idempotencyKey?: string } }) => {
+      deleteMany: vi.fn(async ({ where }: { where: { idempotencyKey?: string; status?: { notIn: string[] } } }) => {
         let count = 0;
         for (let i = outboundRows.length - 1; i >= 0; i -= 1) {
+          if (where.status?.notIn.includes(String(outboundRows[i]!.status ?? "pending"))) continue;
           if (outboundRows[i]!.idempotencyKey === where.idempotencyKey) {
             outboundRows.splice(i, 1);
             count += 1;
@@ -698,6 +699,17 @@ describe("inbound receipt", () => {
 });
 
 describe("createMessagingInboundHandler owner commands", () => {
+  it.each(["executing", "uncertain"])("records approval without erasing a prior %s confirmation", async (status) => {
+    const invited = { id: "cm-1", channelId: "ch-1", identityId: "mi-1", status: "invited" };
+    const deps = createDeps({ invitedMember: invited });
+    const original = { idempotencyKey: "command:approve:cm-1", status, body: "Original confirmation" };
+    deps.outboundRows.push(original);
+    await createMessagingInboundHandler(deps)({ ...dmEvent, content: "YES" });
+    expect(invited.status).toBe("approved");
+    expect(deps.outboundRows).toEqual([original]);
+    expect(deps.sendUserMessage).not.toHaveBeenCalled();
+  });
+
   it("approves the most recent pending invite on YES and confirms by DM", async () => {
     const invited = {
       id: "cm-1",
@@ -1217,6 +1229,8 @@ describe("createMessagingInboundHandler approval-cycle notifications", () => {
     await handle(groupEvent);
     expect(member.status).toBe("invited");
     expect(inviteRows()).toHaveLength(1);
+    const firstInvite = inviteRows()[0]!;
+    firstInvite.status = "sent";
 
     // The owner approves, then leaves again.
     member.status = "approved";
@@ -1227,9 +1241,8 @@ describe("createMessagingInboundHandler approval-cycle notifications", () => {
     // suppress the new prompt.
     await handle(groupEvent);
     expect(member.status).toBe("invited");
-    expect(deps.prisma.messagingOutbound.deleteMany).toHaveBeenCalledWith({
-      where: { idempotencyKey: "invite:ch-1:mi-1" },
-    });
+    expect(inviteRows()[0]).not.toBe(firstInvite);
+    expect(inviteRows()[0]).toMatchObject({ kind: "dm", identityId: "mi-1" });
     expect(inviteRows()).toHaveLength(1);
   });
 
@@ -1248,14 +1261,15 @@ describe("createMessagingInboundHandler approval-cycle notifications", () => {
 
     await handle({ ...dmEvent, content: "LEAVE" });
     expect(leaveRows()).toHaveLength(1);
+    const firstConfirmation = leaveRows()[0]!;
+    firstConfirmation.status = "sent";
 
     // Rejoin and leave again: the second confirmation must not be swallowed
     // by the first cycle's idempotency key.
     member.status = "approved";
     await handle({ ...dmEvent, content: "LEAVE" });
-    expect(deps.prisma.messagingOutbound.deleteMany).toHaveBeenCalledWith({
-      where: { idempotencyKey: "command:leave:cm-1" },
-    });
+    expect(leaveRows()[0]).not.toBe(firstConfirmation);
+    expect(leaveRows()[0]).toMatchObject({ kind: "dm", identityId: "mi-1" });
     expect(leaveRows()).toHaveLength(1);
   });
 });

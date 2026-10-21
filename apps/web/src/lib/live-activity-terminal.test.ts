@@ -135,6 +135,14 @@ describe("renderActivityLines", () => {
     );
   });
 
+  it("shows a safe maintenance checkpoint and its explicit queued resume", () => {
+    const paused = event("run.checkpointed", { status: "maintenance_paused" }, 1);
+    expect(activityRunStatus([paused], "running")).toBe("paused");
+    expect(activityRunStatus([], "maintenance_paused")).toBe("paused");
+    expect(activityRunStatus([paused, event("run.checkpointed", { status: "queued" }, 2)], "running")).toBe("queued");
+    expect(activityRunStatus([paused, event("run.started", {}, 3)], "maintenance_paused")).toBe("running");
+  });
+
   it("counts cached input tokens in a model call's input", () => {
     const call = (payload: Record<string, unknown>) =>
       plain(

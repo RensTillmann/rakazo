@@ -134,13 +134,13 @@ export interface SandboxProvider {
     request: CommandRequest,
     context: AdapterContext,
   ): AsyncIterable<ProcessEvent>;
-  /** Cancel only this run’s native commands; other providers may use a sandbox-scoped fallback. */
+  /** Cancel only this run’s commands; true acknowledges confirmed drain, false retains uncertainty. */
   cancelRunWork?(
     computer: ComputerRef,
     computerId: string,
     runId: string,
     context: AdapterContext,
-  ): Promise<void>;
+  ): Promise<boolean>;
   inspectBackgroundWork?(
     computer: ComputerRef,
     markerId: string,

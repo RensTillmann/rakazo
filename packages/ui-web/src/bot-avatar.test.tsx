@@ -1,4 +1,4 @@
-import { ACTIVE_RUN_STATUSES } from "@rakazo/core";
+import { ACTIVE_RUN_STATUSES, EXECUTING_RUN_STATUSES } from "@rakazo/core";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AvatarStyleProvider } from "./avatar-style.js";
@@ -31,10 +31,24 @@ describe("BotAvatar", () => {
     }
   });
 
-  it.each([...ACTIVE_RUN_STATUSES])("marks active run status %s as working", (status) => {
+  it.each([...EXECUTING_RUN_STATUSES])("marks executing run status %s as working", (status) => {
     const html = renderToString(<BotAvatar color="#3B82F6" status={status} />);
     expect(html).toContain("<svg");
     expect(html).toContain('data-working="true"');
+  });
+
+  it.each(
+    ACTIVE_RUN_STATUSES.filter(
+      (status) => !(EXECUTING_RUN_STATUSES as readonly string[]).includes(status),
+    ),
+  )("does not animate unresolved but not executing status %s", (status) => {
+    for (const variant of ["robot", "organic"] as const) {
+      const html = renderToString(<BotAvatar color="#3B82F6" status={status} variant={variant} />);
+      expect(html).toContain('data-working="false"');
+      expect(html).not.toContain('data-working="true"');
+    }
+    const photo = renderToString(<BotAvatar color="data:image/png;base64,abc" status={status} />);
+    expect(photo).not.toContain("rakazo-bot-avatar-ring-working");
   });
 
   it("keeps working attribute false when idle", () => {

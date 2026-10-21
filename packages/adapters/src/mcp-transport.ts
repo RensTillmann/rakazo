@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
@@ -74,6 +75,8 @@ export interface McpClientOptions {
 
 const DEFAULT_HEADERS = ["accept", "content-type", "authorization", "user-agent"];
 const RESOURCE_HEADERS = new Set(["mcp-session-id", "mcp-protocol-version", "last-event-id"]);
+const invocationIdentity = new AsyncLocalStorage<string>();
+const INVOCATION_HEADER = "x-rakazo-invocation-id";
 const DEFAULT_MAX_URL_LENGTH = 2_048;
 
 function validateUrl(raw: string | URL, policy: McpUrlPolicy = {}): URL {
@@ -160,6 +163,13 @@ export function secureFetch(
     }
     if (!localHttp && url.origin === resourceUrl.origin) {
       for (const [name, value] of configured) headers.set(name, value);
+    }
+    // Native call identity belongs to this async request, never mutable session
+    // headers or model arguments. Configured headers cannot impersonate it.
+    headers.delete(INVOCATION_HEADER);
+    const invocationId = invocationIdentity.getStore();
+    if (invocationId && url.origin === resourceUrl.origin && source.method === "POST") {
+      headers.set(INVOCATION_HEADER, invocationId);
     }
     // Buffer the body: a re-wrapped Request body is a stream without a replayable
     // source, and undici fails the whole request when a server answers 401 early
@@ -364,12 +374,13 @@ export class McpSession {
   async callTool(
     name: string,
     args: Record<string, unknown> = {},
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; invocationId?: string },
   ): Promise<CallToolResult> {
     this.assertConnected();
-    return (await this.client.callTool({ name, arguments: args }, undefined, {
+    const invoke = async () => (await this.client.callTool({ name, arguments: args }, undefined, {
       signal: options?.signal,
     })) as CallToolResult;
+    return options?.invocationId ? invocationIdentity.run(options.invocationId, invoke) : invoke();
   }
 
   async close(): Promise<void> {

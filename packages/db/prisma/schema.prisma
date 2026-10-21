@@ -649,6 +649,9 @@ model Run {
   leaseFence           Int              @default(0)
   leaseExpiresAt       DateTime?
   checkpoint           String?
+  // Independent from approval/takeover checkpoint and unrelated routine holds.
+  maintenanceCheckpoint String?
+  maintenanceCancelRequestedAt DateTime?
   clientNonce          String?
   sourceMessageId      String?
   sourceMessage        Message?         @relation("RunSourceMessage", fields: [sourceMessageId], references: [id], onDelete: SetNull)
@@ -1516,3 +1519,41 @@ model TicketComment {
   @@index([ticketId, createdAt])
   @@map("ticket_comments")
 }
+
+// These rows are changed together by the maintenance store, never routine timers.
+model MaintenanceState {
+  id       String  @id @default("default")
+  active   Boolean @default(false)
+  revision Int     @default(0)
+
+  @@map("maintenance_state")
+}
+
+model MaintenanceAudit {
+  revision         Int      @id
+  requestId        String   @unique
+  operatorId       String
+  action           String
+  expectedRevision Int
+  active           Boolean
+  createdAt        DateTime @default(now())
+
+  @@map("maintenance_audit")
+}
+
+// Owner settlements of unfinished attempts/effects, with the evidence they rested on.
+model MaintenanceRecovery {
+  requestId  String   @id
+  operatorId String
+  targetKind String
+  targetId   String
+  basis      String
+  fromStatus String
+  toStatus   String
+  evidence   Json
+  createdAt  DateTime @default(now())
+
+  @@index([targetKind, targetId], map: "maintenance_recovery_target_idx")
+  @@map("maintenance_recovery")
+}
+

@@ -5,9 +5,11 @@ import {
   appendEventInTransaction,
   type CloudAgent,
   createThreadMessageInTransaction,
+  Prisma,
   type PrismaClient,
   type ThreadEvents,
 } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { cloudAgentLaunchSchema, cloudAgentReplySchema } from "./cloud-agent-tools.js";
@@ -136,7 +138,13 @@ export async function executeCloudAgentTool(
     }
     agent = await deps.prisma.cloudAgent.findUniqueOrThrow({ where: { id: agent.id } });
   }
-  if (agent.nextPollAt) await enqueueCloudAgent(deps, agent.id);
+  if (agent.nextPollAt) {
+    const admission = await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx));
+    if (admission.admitted || agent.cancelRequested ||
+        (agent.launchDispatched && (!agent.followup || agent.followupDispatching))) {
+      await enqueueCloudAgent(deps, agent.id);
+    }
+  }
   const { kind: _kind, agentId, ...snapshot } = cloudAgentBlock(agent);
   return {
     id: agentId,
@@ -161,11 +169,19 @@ export async function reconcileCloudAgents(
   deps: Pick<CloudAgentDeps, "prisma" | "jobs" | "cloudAgent">,
 ) {
   if (!deps.cloudAgent) return;
+  const admission = await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx));
   const due = await deps.prisma.cloudAgent.findMany({
     where: {
       providerKey: deps.cloudAgent.key,
       nextPollAt: { lte: new Date() },
       ...(deps.cloudAgent.spaceId ? { spaceId: deps.cloudAgent.spaceId } : {}),
+      ...(!admission.admitted ? {
+        OR: [
+          { cancelRequested: true },
+          { launchDispatched: true, followup: { equals: Prisma.DbNull } },
+          { followupDispatching: true },
+        ],
+      } : {}),
     },
     orderBy: [{ nextPollAt: "asc" }, { id: "asc" }],
     take: 100,

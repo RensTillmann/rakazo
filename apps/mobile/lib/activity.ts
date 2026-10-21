@@ -39,6 +39,8 @@ export function activityStatusLabel(status: RunActivityRow["status"]): string {
       return t("Needs input");
     case "waiting_takeover":
       return t("Needs takeover");
+    case "maintenance_paused":
+      return t("Paused");
     case "completed":
       return t("Done");
     case "failed":

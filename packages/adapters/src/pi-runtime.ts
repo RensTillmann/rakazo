@@ -61,6 +61,7 @@ import {
 import { PiRuntimeCredentialStore, toOAuthCredential } from "./pi-credentials.js";
 import { estimatePiImageTokens } from "./pi-image-context.js";
 import { registerLocalProvider } from "./pi-local-provider.js";
+import { MaintenanceBoundary, MaintenanceContinuationUnavailable, PiMaintenance } from "./pi-maintenance.js";
 import { applyPiModelCompatibility } from "./pi-model-compat.js";
 import { codexComputeResidency } from "./pi-oauth.js";
 import {
@@ -398,6 +399,7 @@ export class PiAgentRuntime implements AgentRuntime {
       ? AbortSignal.any([controller.signal, context.signal])
       : controller.signal;
     const queue = createQueue();
+    const maintenance = new PiMaintenance(request, signal);
 
     const work = withPiTelemetry(request, async (span) => {
       let trackedBudget: ToolCallBudget | undefined;
@@ -407,7 +409,7 @@ export class PiAgentRuntime implements AgentRuntime {
       const budgetLimits = runBudgetLimits(process.env, request.botId);
       const budgetWarnAt = runBudgetWarnAt();
       const budgetStartedAt = now();
-      const budgetCarried = runBudgetUsageByRun.get(request.runId);
+      const budgetCarried = maintenance.restored?.budget ?? runBudgetUsageByRun.get(request.runId);
       runBudgetUsageByRun.delete(request.runId);
       let budgetModelCalls = budgetCarried?.modelCalls ?? 0;
       const budgetUsage = () => ({
@@ -434,6 +436,7 @@ export class PiAgentRuntime implements AgentRuntime {
         const nestedAgents = new Set<Agent>();
         const completionModel = modelForCompletion(model, request.model.maxTokens);
         trackedBudget = toolCallBudgetFor(request.runId);
+        if (maintenance.restored) trackedBudget.count = maintenance.restored.budget.toolCalls;
         const initialModelTarget: RuntimeModelTarget = {
           config: request.model,
           models,
@@ -460,12 +463,14 @@ export class PiAgentRuntime implements AgentRuntime {
           signal,
           depth: 0,
           pausePending: false,
+          maintenance,
           pendingShells: [],
         };
         resumeHost = host;
         const tools = toAgentTools(toolDefs, host);
-        const seenSteeringIds: string[] = [];
-        const initialSteering = request.claimSteering ? await request.claimSteering([]) : [];
+        const seenSteeringIds = [...(maintenance.restored?.seenSteeringIds ?? [])];
+        const initialSteering = !maintenance.restored && request.claimSteering
+          ? await request.claimSteering([]) : [];
         seenSteeringIds.push(...initialSteering.map((item) => item.id));
         const history = toHistory(
           withoutSteeringMessages(request.history, initialSteering),
@@ -534,7 +539,7 @@ export class PiAgentRuntime implements AgentRuntime {
         let agent: Agent;
         let activeStreamTarget = host.activeModel;
         const fallbackState: FallbackStreamState = {
-          request,
+          request: request.beforeExecution ? { ...request, beforeExecution: () => maintenance.admit() } : request,
           getActive: () => activeStreamTarget,
           signal,
           isProviderFailure: (message) => providerFailures.has(message.content),
@@ -610,6 +615,14 @@ export class PiAgentRuntime implements AgentRuntime {
                 : request.model.maxImagesPerPrompt,
             ),
           finishTurn: async (turn, turnSignal) => {
+            if (maintenance.paused) {
+              await deliverFinishedShells(
+                (text) => agent.followUp({ role: "user", content: text, timestamp: Date.now() }),
+                host.pendingShells, turn, turnSignal,
+                host.pendingShells.length ? keepOverflow(host) : undefined,
+              );
+              return { action: "end" as const };
+            }
             if (budgetFinalTurn) {
               // The budget's one final turn: end here, even if the model asked for tools.
               budgetFinalMessage = turn.message;
@@ -628,12 +641,14 @@ export class PiAgentRuntime implements AgentRuntime {
               turnSignal,
               host.pendingShells.length ? keepOverflow(host) : undefined,
             );
+            if (!(await maintenance.admit())) return { action: "end" as const };
             return undefined;
           },
           // Every top-level model request passes here, so it is where the budget counts.
           // Once a limit is reached, the request becomes the final turn. Before that, the
           // first request at the warning fraction carries one "save your progress" note.
-          prepareRequest: ({ context: requestContext }) => {
+          prepareRequest: async ({ context: requestContext }) => {
+            await maintenance.prepare(agent);
             if (budgetFinalTurn) return undefined;
             const usage = budgetUsage();
             const reached = runBudgetReachedReason(budgetLimits, usage);
@@ -694,11 +709,11 @@ export class PiAgentRuntime implements AgentRuntime {
             return undefined;
           },
           initialState: {
-            systemPrompt,
+            systemPrompt: maintenance.restore("main")?.systemPrompt ?? systemPrompt,
             model: completionModel,
             thinkingLevel,
             tools,
-            messages: history,
+            messages: maintenance.restore("main")?.messages ?? history,
           },
         });
 
@@ -713,7 +728,7 @@ export class PiAgentRuntime implements AgentRuntime {
         }
         signal.addEventListener("abort", onAbort);
 
-        let streamed = "";
+        let streamed = maintenance.restored?.streamed ?? "";
         let currentMessageStreamed = "";
         let toolCalls = 0;
         let toolActivityShowing = false;
@@ -884,13 +899,28 @@ export class PiAgentRuntime implements AgentRuntime {
           ...initialSteering.flatMap((item) => item.images ?? []),
         ]);
         try {
-          await agent.prompt(initialPrompt, images?.length ? images : undefined);
+          if (maintenance.restored) {
+            await maintenance.replay(agent, tools);
+            if (!maintenance.paused && !maintenance.restore("main")?.complete) await agent.continue();
+          } else {
+            await agent.prompt(initialPrompt, images?.length ? images : undefined);
+          }
         } finally {
           try {
             await agent.waitForIdle();
           } finally {
             signal.removeEventListener("abort", onAbort);
           }
+        }
+        if (maintenance.paused) {
+          if (agent.state.errorMessage && agent.state.errorMessage !== "Maintenance admission closed") {
+            throw new Error(sanitizeProviderError(activeStreamTarget.model.provider, agent.state.errorMessage));
+          }
+          maintenance.capture(agent, "main",
+            agent.state.messages.at(-1)?.role === "assistant" && !agent.hasQueuedMessages());
+          queue.push({ type: "checkpoint", blob: maintenance.encode(streamed,
+            { ...budgetUsage(), warned: budgetWarned, toolCalls: host.toolCallBudget.count }, seenSteeringIds) });
+          return;
         }
 
         // The run budget's final turn ends the run as completed with its one line,
@@ -987,9 +1017,11 @@ export class PiAgentRuntime implements AgentRuntime {
         span?.setStatus({ status: "error" });
         const message = sanitizeError(error instanceof Error ? error.message : String(error));
         queue.fail(
-          error instanceof TransientModelError
-            ? new TransientModelError(message)
-            : new Error(message),
+          error instanceof MaintenanceContinuationUnavailable
+            ? error
+            : error instanceof TransientModelError
+              ? new TransientModelError(message)
+              : new Error(message),
         );
       } finally {
         queue.close();
@@ -1163,7 +1195,7 @@ function toAgentTools(toolDefs: readonly ConnectorTool[], host: ToolHost): Agent
     }
     return value;
   };
-  const ordered = toolDefs
+  const canonical = toolDefs
     .map((tool) => ({
       tool: {
         ...tool,
@@ -1181,8 +1213,12 @@ function toAgentTools(toolDefs: readonly ConnectorTool[], host: ToolHost): Agent
             : a.key > b.key
               ? 1
               : 0,
-    )
-    .map(({ tool }) => tool);
+    );
+  if ((!host.agentNamespace || host.agentNamespace === "main") &&
+    (host.request.beforeExecution || host.maintenance.restored)) {
+    host.maintenance.bindTools(JSON.stringify(canonical.map(({ key }) => key)));
+  }
+  const ordered = canonical.map(({ tool }) => tool);
   const names = normalizeAgentToolNames(ordered);
   return ordered.map((tool, index) => toAgentTool(tool, host, names[index]!));
 }
@@ -1520,6 +1556,10 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
             toolCallId || `${host.request.runId}:${tool.name}:${host.toolCallSeq.value++}`;
           // Backend idempotency includes the agent namespace; Pi wire IDs remain untouched.
           const executionId = JSON.stringify(["pi-tool", host.agentNamespace ?? "main", rawCallId]);
+          const namespace = host.agentNamespace ?? "main";
+          if (!(await host.maintenance.admit())) {
+            return host.maintenance.defer(namespace, rawCallId, exposedName, args);
+          }
           if (!beginToolCall(host)) {
             return {
               content: [{ type: "text", text: "Skipped: tool-call limit reached." }],
@@ -1687,6 +1727,10 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
             shown = boundAgentToolResult(result as AgentToolResult<unknown>, keepOverflow(host));
             return shown as AgentToolResult<unknown>;
           } catch (error) {
+            if (error instanceof MaintenanceBoundary) {
+              host.maintenance.paused = true;
+              return host.maintenance.defer(namespace, rawCallId, exposedName, args);
+            }
             failure = error;
             throw error;
           } finally {
@@ -1824,7 +1868,8 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   let nested!: Agent;
   const providerFailures = new WeakSet<AssistantMessage["content"]>();
   const retryState: FallbackStreamState = {
-    request: { ...host.request, model: requestModel, fallbackModels: [] },
+    request: { ...host.request, model: requestModel, fallbackModels: [],
+      ...(host.request.beforeExecution ? { beforeExecution: () => host.maintenance.admit() } : {}) },
     getActive: () => nestedHost.activeModel,
     signal: host.signal,
     attempted: new Set(),
@@ -1872,6 +1917,14 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   };
   nested = new Agent({
     finishTurn: async (turn, turnSignal) => {
+      if (host.maintenance.paused) {
+        await deliverFinishedShells(
+          (text) => nested.followUp({ role: "user", content: text, timestamp: Date.now() }),
+          nestedHost.pendingShells, turn, turnSignal,
+          nestedHost.pendingShells.length ? keepOverflow(nestedHost) : undefined,
+        );
+        return { action: "end" as const };
+      }
       await deliverFinishedShells(
         (text) => {
           nested.followUp({
@@ -1885,7 +1938,9 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         turnSignal,
         nestedHost.pendingShells.length ? keepOverflow(nestedHost) : undefined,
       );
+      if (!(await host.maintenance.admit())) return { action: "end" as const };
     },
+    prepareRequest: async () => host.maintenance.prepare(nested, agentId),
     sessionId: conversationSessionId(host.request.threadId, host.request.botId, agentId),
     streamFn: (_m, ctx, options) =>
       fallbackAwareModelStream(retryState, ctx, withAutomatedLabels(options)),
@@ -1899,7 +1954,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         requestModel.maxImagesPerPrompt,
       ),
     initialState: {
-      systemPrompt: [
+      systemPrompt: host.maintenance.restore(agentId)?.systemPrompt ?? [
         `You are a Rakazo subagent named "${name}".`,
         "You run inside the parent bot's turn — you are not a separate bot chat.",
         "Complete the task and return a concise result. Do not spawn bots or further subagents.",
@@ -1912,12 +1967,12 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
       model: subagentModel,
       thinkingLevel: thinkingLevelFor(subagentModel, requestModel.thinkingLevel),
       tools: toAgentTools(childDefs, nestedHost),
-      messages: [],
+      messages: host.maintenance.restore(agentId)?.messages ?? [],
     },
   });
   host.nestedAgents.add(nested);
 
-  let streamed = "";
+  let streamed = host.maintenance.restore(agentId)?.streamed ?? "";
   let lastPush = 0;
   nested.subscribe((event) => {
     if (event.type === "tool_execution_start") {
@@ -1971,9 +2026,16 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     const onAbort = () => nested.abort();
     host.signal.addEventListener("abort", onAbort);
     try {
-      await nested.prompt(
-        `Task from the parent bot (not from the user):\n${task || "Complete the delegated task."}`,
-      );
+      if (host.maintenance.restore(agentId)) {
+        await host.maintenance.replay(nested, nested.state.tools, agentId);
+        if (!host.maintenance.paused && !host.maintenance.restore(agentId)?.complete) {
+          await nested.continue();
+        }
+      } else {
+        await nested.prompt(
+          `Task from the parent bot (not from the user):\n${task || "Complete the delegated task."}`,
+        );
+      }
     } finally {
       try {
         await nested.waitForIdle();
@@ -1983,6 +2045,11 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         // only on the child. Copy it up before the parent releases the budget.
         if (nestedHost.pausePending) host.pausePending = true;
       }
+    }
+    if (host.maintenance.paused) {
+      host.maintenance.capture(nested, agentId,
+        nested.state.messages.at(-1)?.role === "assistant" && !nested.hasQueuedMessages(), streamed);
+      throw new MaintenanceBoundary();
     }
     // Shared-budget abort leaves errorMessage on the nested agent; surface it as a
     // completed stop rather than a failed subagent chip.
@@ -2023,6 +2090,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     // The parent bot reads this as a tool result; say plainly that it is the helper talking.
     return `Result from your helper "${name}" (not a message from the user):\n${clipped}`;
   } catch (error) {
+    if (error instanceof MaintenanceBoundary) throw error;
     const message = sanitizeError(error instanceof Error ? error.message : String(error));
     host.queue.push({
       type: "subagent",
@@ -2787,6 +2855,7 @@ interface ToolHost {
   depth: number;
   agentNamespace?: string;
   pausePending: boolean;
+  maintenance: PiMaintenance;
   /** Shell commands that returned output and are still running. */
   pendingShells: Array<Promise<FinishedShellCommand>>;
 }
@@ -3108,6 +3177,9 @@ function fallbackAwareModelStream(
       let restart = false;
       let stream: AssistantMessageEventStream;
       try {
+        if (state.request.beforeExecution && !(await state.request.beforeExecution())) {
+          throw new MaintenanceBoundary();
+        }
         const apiKey = target.credentials?.accessToken ?? target.apiKey;
         const thinkingLevel = target.model.reasoning
           ? thinkingLevelFor(
@@ -3118,10 +3190,13 @@ function fallbackAwareModelStream(
             )
           : "off";
         const reasoning = thinkingLevel === "off" ? undefined : thinkingLevel;
+        // SDK-internal retries cannot consult the durable admission fence. The
+        // existing outer retry/fallback loop owns retries for managed runs.
+        const admittedOptions = state.request.beforeExecution ? { ...options, maxRetries: 0 } : options;
         stream = state.stream(
           target,
           requestContext(),
-          state.request.fallbackModels?.length ? { ...options, apiKey, reasoning } : options,
+          state.request.fallbackModels?.length ? { ...admittedOptions, apiKey, reasoning } : admittedOptions,
         );
       } catch (error) {
         finishWithThrownError(target, error);

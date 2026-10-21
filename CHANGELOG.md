@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Queued bots no longer display the transcript's actively-working indicator, including requests retained during a global Fleet pause.
+- Bot avatars (sidebar, chat header, rooms and the mobile inbox) no longer play the working animation while a bot is queued, waiting for your answer or takeover, or paused for maintenance. Only a claimed or running turn animates; those runs still show their Waiting in line, Needs your answer or Paused status.
+- Fleet control now lists every unfinished operation behind Pausing or Needs attention (run, attempt, effect, Fleet effect), with its bot, run, start time and evidence. When the run's own records decide the outcome, **Record as …** applies it; otherwise the missing evidence is named and the owner can record a checked outcome with a note. A terminal run or an expired lease alone never settles anything, a real outcome that lands first is kept, and every settlement is audited. Nothing is resumed, retried or undone.
 - A Railway computer whose sandbox had been destroyed could not start again: it failed with "Railway live screen requires PRIVATE networking" instead of creating a new sandbox, because Railway no longer reports networking for a destroyed sandbox. It now starts a new sandbox and restores the portable home.
 - The Amazon Bedrock model picker was missing newer models available on Bedrock: Claude Sonnet 5.5, GPT-6 Luna, GPT-6 Sol and GPT-6.1 Sol, Grok 4.7, Kimi K3, GLM-5.3, and the India (`in.`) Claude inference profiles. They are now listed with their regional and global inference profiles until the bundled provider library ships them.
 - Fish Audio speech can use a model other than s2.1-pro. Each Fish connection can set Speech model in Voice settings; `FISH_TTS_MODEL` is the default only when that field is empty (unset still uses s2.1-pro). A failed speak, transcribe, or voice-list request logs the upstream Fish status and message, including when the error body cannot be read, and the message returned to the client does not include the API key.
@@ -31,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Deployment owners can gracefully pause the whole Fleet, resume it explicitly, or separately confirm force stop from the web header. Pause survives restart, retains incoming work and exact continuations, and reports active or uncertain effects rather than pretending they were undone. No bot is exempt. See [global graceful Fleet pause](docs/maintenance-admission.md) for coordinated rollout and recovery.
 - Self-hosted deployments can run multiple Telegram bots, for example one per space, using `TELEGRAM_BOT_TOKEN_<NAME>` and `TELEGRAM_WEBHOOK_SECRET_TOKEN_<NAME>` pairs.
 - Railway computers can start in a chosen region. Set `RAILWAY_SANDBOX_REGION` to keep them near the API instead of Railway's default region, so each command, click, and screenshot avoids a cross-region round trip. Unset, nothing changes.
 - A ```mermaid block in a bot's message is drawn as a diagram, on the web, in the desktop app and on mobile, in the app's light or dark palette. Source Mermaid cannot draw stays a code block, and a block the bot is still writing reads as code until it is complete. On the web, Mermaid loads only when a message contains a diagram, and a diagram's source can be copied. The mobile app draws diagrams with Mermaid served by your own server (`/api/v1/assets/mermaid.js`), so an older server keeps showing code blocks.

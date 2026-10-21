@@ -130,7 +130,7 @@ export class HostComputerSandbox implements SandboxProvider {
     runId: string,
     context: AdapterContext,
   ) {
-    await this.one({ method: "cancelRunWork", botId: computer.botId, targetRunId: runId }, context);
+    return this.one<boolean>({ method: "cancelRunWork", botId: computer.botId, targetRunId: runId }, context);
   }
   listFiles(computer: ComputerRef, path: string, context: AdapterContext) {
     return this.one<ComputerFileEntry[]>(

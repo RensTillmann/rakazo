@@ -234,49 +234,92 @@ describe("native host computer transport", () => {
   });
 
   it("cancels only commands belonging to the requested run", async () => {
+    const controller = new AbortController();
+    let pid = 0;
     let ready!: () => void;
     const started = new Promise<void>((resolve) => {
       ready = resolve;
     });
+    // The child timer only keeps the real native process alive; stdout signals readiness.
     const running = (async () => {
       for await (const event of client.execute(
         computer,
-        { argv: [process.execPath, "-e", "console.log('ready'); setInterval(() => {}, 1000)"] },
-        { ...context, runId: "target-run" },
+        { argv: [process.execPath, "-e", "console.log(process.pid); setInterval(() => {}, 1000)"] },
+        { ...context, runId: "target-run", signal: controller.signal },
       )) {
-        if (event.type === "stdout") ready();
+        if (event.type === "stdout") {
+          pid = Number(event.data.trim());
+          ready();
+        }
       }
     })();
-    const rejected = expect(running).rejects.toThrow();
-    await started;
-    await client.cancelRunWork(computer, "computer-id", "another-run", context);
-    expect(await client.isRunning(computer, context)).toBe(true);
-    await client.cancelRunWork(computer, "computer-id", "target-run", context);
-    await rejected;
-    expect(await client.isRunning(computer, context)).toBe(true);
+    const settled = Promise.allSettled([running]);
+    try {
+      await Promise.race([started, running]);
+      expect(processExists(pid)).toBe(true);
+      expect(await client.cancelRunWork(computer, "computer-id", "another-run", context)).toBe(
+        true,
+      );
+      expect(processExists(pid)).toBe(true);
+      expect(await client.cancelRunWork(computer, "computer-id", "target-run", context)).toBe(
+        true,
+      );
+      expect(await settled).toEqual([{ status: "rejected", reason: expect.any(Error) }]);
+      expect(processExists(pid)).toBe(false);
+      expect(await client.isRunning(computer, context)).toBe(true);
+    } finally {
+      controller.abort();
+      await settled;
+    }
+  });
+
+  it("does not confirm cancellation for an unknown computer", async () => {
+    expect(
+      await client.cancelRunWork(
+        { ...computer, botId: "unknown-bot" },
+        "computer-id",
+        "target-run",
+        context,
+      ),
+    ).toBe(false);
   });
 
   it("keeps cancellation available when every execution slot is occupied", async () => {
+    const controller = new AbortController();
+    const pids: number[] = [];
     let ready!: () => void;
-    let started = 0;
     const allStarted = new Promise<void>((resolve) => {
       ready = resolve;
     });
+    // Fake timers cannot keep these child processes alive; readiness is signaled by stdout.
     const runs = Array.from({ length: 16 }, () =>
       (async () => {
         for await (const event of client.execute(
           computer,
-          { argv: [process.execPath, "-e", "console.log('ready'); setInterval(() => {}, 1000)"] },
-          { ...context, runId: "saturated-run" },
+          { argv: [process.execPath, "-e", "console.log(process.pid); setInterval(() => {}, 1000)"] },
+          { ...context, runId: "saturated-run", signal: controller.signal },
         )) {
-          if (event.type === "stdout" && ++started === 16) ready();
+          if (event.type === "stdout") {
+            pids.push(Number(event.data.trim()));
+            if (pids.length === 16) ready();
+          }
         }
       })(),
     );
     const settled = Promise.allSettled(runs);
-    await allStarted;
-    await client.cancelRunWork(computer, "computer-id", "saturated-run", context);
-    expect((await settled).every((result) => result.status === "rejected")).toBe(true);
+    try {
+      await Promise.race([allStarted, Promise.all(runs)]);
+      expect(pids).toHaveLength(16);
+      expect(pids.every(processExists)).toBe(true);
+      expect(await client.cancelRunWork(computer, "computer-id", "saturated-run", context)).toBe(
+        true,
+      );
+      expect((await settled).every((result) => result.status === "rejected")).toBe(true);
+      expect(pids.some(processExists)).toBe(false);
+    } finally {
+      controller.abort();
+      await settled;
+    }
   });
 
   it("round trips portable files and never treats an opaque reference as a host path", async () => {

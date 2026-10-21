@@ -135,9 +135,11 @@ export async function connectAgent(
           throw new ConnectCreateRaceError();
         }
       }
-      // Fresh approval cycle: clear the old invite row or skipDuplicates would
-      // silently swallow the new request.
-      await tx.messagingOutbound.deleteMany({ where: { idempotencyKey: inviteKey } });
+      // A new approval cycle may replace a settled invite, never an in-flight
+      // or ambiguous one: the original provider operation could still arrive.
+      await tx.messagingOutbound.deleteMany({
+        where: { idempotencyKey: inviteKey, status: { notIn: ["executing", "uncertain"] } },
+      });
       await tx.messagingOutbound.createMany({
         data: [
           {

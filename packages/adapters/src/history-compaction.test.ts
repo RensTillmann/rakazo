@@ -20,6 +20,7 @@ import {
   nextCompactionBatchRange,
   RECALLED_MEMORY_HEADER,
   recordHistoryCompactAttemptsExhausted,
+  reconcileBackgroundEffects,
   SUMMARIZE_TIMEOUT_BASE_CHARS,
   SUMMARIZE_TIMEOUT_MAX_MS,
   SUMMARIZE_TIMEOUT_MIN_MS,
@@ -242,6 +243,7 @@ type HarnessMessage = {
 function compactionHarness(
   options: {
     deploymentModelKey?: string;
+    botId?: string | null;
     deploymentModelConfigured?: boolean;
     settings?: { defaultModelProvider: string | null; defaultModelId: string | null } | null;
     messages?: HarnessMessage[];
@@ -250,6 +252,7 @@ function compactionHarness(
     historyCompactionSummary?: string | null;
     historyCompactionGeneration?: number;
     wasCleared?: boolean;
+    maintenance?: { active: boolean };
     resolveModel?: (scope: {
       userId: string;
       spaceId: string;
@@ -270,7 +273,7 @@ function compactionHarness(
     }));
   const thread = {
     id: "thread-1",
-    botId: "bot-1",
+    botId: options.botId === undefined ? "bot-1" : options.botId,
     spaceId: "workspace-1",
     userId: "user-1",
     nextEventSeq: 0,
@@ -287,8 +290,56 @@ function compactionHarness(
             defaultMemoryScope: "isolated",
           }
       : options.memoryConfig;
+  const effects: Array<Record<string, unknown>> = [];
   const prisma = {
+    $queryRaw: vi.fn(async () => [{ active: options.maintenance?.active ?? false, revision: 0 }]),
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
+    run: {
+      findFirst: vi.fn(async () => ({ id: "source-run" })),
+      findUnique: vi.fn(async () => ({ maintenanceCancelRequestedAt: null as Date | null })),
+    },
+    bot: { findFirst: vi.fn(async () => ({ id: "bot-1" })) },
+    spaceMember: { findUnique: vi.fn(async () => ({ id: "member-1" })) },
+    externalEffect: {
+      upsert: vi.fn(async ({ where, create }: {
+        where: { idempotencyKey: string }; create: Record<string, unknown>;
+      }) => {
+        const existing = effects.find((effect) => effect.idempotencyKey === where.idempotencyKey);
+        if (existing) return { ...existing };
+        const effect = { id: `effect-${effects.length}`, updatedAt: new Date(), ...create };
+        effects.push(effect);
+        return { ...effect };
+      }),
+      findMany: vi.fn(async ({ where }: {
+        where: { kind: string | { in: string[] }; status: string };
+      }) => effects.filter((effect) =>
+        (typeof where.kind === "string" ? effect.kind === where.kind : where.kind.in.includes(String(effect.kind))) &&
+        effect.status === where.status).map((effect) => ({ ...effect }))),
+      updateMany: vi.fn(async ({ where, data }: {
+        where: {
+          id?: string; status?: string | { in: string[] };
+          kind?: { in: string[] }; updatedAt?: { lte: Date };
+        };
+        data: Record<string, unknown>;
+      }) => {
+        const selected = effects.filter((effect) =>
+          (!where.id || effect.id === where.id) &&
+          (!where.status || (typeof where.status === "string"
+            ? effect.status === where.status : where.status.in.includes(String(effect.status)))) &&
+          (!where.kind || where.kind.in.includes(String(effect.kind))) &&
+          (!where.updatedAt || (effect.updatedAt instanceof Date && effect.updatedAt <= where.updatedAt.lte)));
+        for (const effect of selected) Object.assign(effect, data);
+        return { count: selected.length };
+      }),
+      deleteMany: vi.fn(async ({ where }: { where: { id: string; status: string } }) => {
+        const index = effects.findIndex((effect) => effect.id === where.id && effect.status === where.status);
+        if (index < 0) return { count: 0 };
+        effects.splice(index, 1);
+        return { count: 1 };
+      }),
+    },
     thread: {
+      findUnique: vi.fn(async () => thread),
       findUniqueOrThrow: vi.fn(async () => thread),
       updateMany: vi.fn(
         async (args: {
@@ -336,6 +387,7 @@ function compactionHarness(
     },
   };
   const runtime = {
+    abort: vi.fn(async (_runId: string) => undefined),
     describe: () => ({
       id: "test-runtime",
       contractVersion: "1",
@@ -393,6 +445,7 @@ function compactionHarness(
   };
   return {
     thread,
+    effects,
     messages,
     prisma,
     runtime,
@@ -403,6 +456,106 @@ function compactionHarness(
     deps,
   };
 }
+
+describe("history compaction maintenance admission", () => {
+  it("retains held compaction without spending or retry jobs and resumes its original intent", async () => {
+    const maintenance = { active: true };
+    const h = compactionHarness({ deploymentModelKey: "fake-key", maintenance });
+    await compactHistory(h.deps, "thread-1");
+    expect(h.runtime.run).not.toHaveBeenCalled();
+    expect(h.saveMemory).not.toHaveBeenCalled();
+    expect(h.jobs.enqueue).not.toHaveBeenCalled();
+    expect(h.effects).toEqual([expect.objectContaining({
+      kind: "history_compaction", status: "intended",
+    })]);
+    await reconcileBackgroundEffects(h.deps, false);
+    expect(h.jobs.enqueue).not.toHaveBeenCalled();
+    maintenance.active = false;
+    await reconcileBackgroundEffects(h.deps, true);
+    expect(h.jobs.enqueue).toHaveBeenCalledWith({
+      ...historyCompactJob("thread-1"), keepExisting: true,
+    });
+    await compactHistory(h.deps, "thread-1");
+    expect(h.runtime.run).toHaveBeenCalledOnce();
+    expect(h.thread.historyCompactedUpToSeq).toBe(49);
+    expect(h.effects.filter((effect) => effect.kind === "history_compaction")).toHaveLength(1);
+  });
+
+  it("saves local progress while pausing, then delivers the held memory without repeating the model", async () => {
+    const maintenance = { active: false };
+    const h = compactionHarness({ deploymentModelKey: "fake-key", maintenance });
+    h.runtime.run.mockImplementationOnce(async function* () {
+      maintenance.active = true;
+      yield { type: "done", text: "Durable summary" };
+    });
+    await compactHistory(h.deps, "thread-1");
+    expect(h.thread.historyCompactionSummary).toBe("Durable summary");
+    expect(h.saveMemory).not.toHaveBeenCalled();
+    expect(h.effects).toContainEqual(expect.objectContaining({
+      kind: "history_compaction_memory", status: "intended",
+    }));
+    maintenance.active = false;
+    await compactHistory(h.deps, "thread-1");
+    expect(h.runtime.run).toHaveBeenCalledOnce();
+    expect(h.saveMemory).toHaveBeenCalledOnce();
+  });
+
+  it("marks a crashed model call uncertain and never starts it again after recovery", async () => {
+    const maintenance = { active: true };
+    const h = compactionHarness({ deploymentModelKey: "fake-key", maintenance });
+    await compactHistory(h.deps, "thread-1");
+    Object.assign(h.effects[0]!, {
+      status: "executing", updatedAt: new Date(Date.now() - 11 * 60_000),
+    });
+    maintenance.active = false;
+    await reconcileBackgroundEffects(h.deps, true);
+    await compactHistory(h.deps, "thread-1");
+    expect(h.effects[0]?.status).toBe("uncertain");
+    expect(h.runtime.run).not.toHaveBeenCalled();
+    expect(h.jobs.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("consumes durable force cancellation without reporting an interrupted model as completed", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = compactionHarness({ deploymentModelKey: "fake-key" });
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => { entered = resolve; });
+      h.runtime.run.mockImplementationOnce(async function* (_request, context) {
+        entered();
+        const signal = context?.signal;
+        if (!signal) throw new Error("Expected model cancellation signal");
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+        yield { type: "done", text: "unreachable" };
+      });
+      const running = compactHistory(h.deps, "thread-1");
+      const outcome = expect(running).rejects.toThrow("cancellation requested");
+      await started;
+      h.prisma.run.findUnique.mockResolvedValue({ maintenanceCancelRequestedAt: new Date() });
+      await vi.advanceTimersByTimeAsync(2_000);
+      await outcome;
+      expect(h.runtime.abort).toHaveBeenCalledWith("compact:thread-1:-1");
+      expect(h.thread.historyCompactedUpToSeq).toBeNull();
+      expect(h.effects[0]?.status).toBe("uncertain");
+      expect(h.saveMemory).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not let an empty batch reservation block later messages", async () => {
+    const h = compactionHarness({ deploymentModelKey: "fake-key", messages: [] });
+    await compactHistory(h.deps, "thread-1");
+    expect(h.effects).toEqual([]);
+    h.messages.push({ seq: 0, role: "user", blocks: [{ kind: "text", text: "new message" }] });
+    h.thread.nextMessageSeq = 1;
+    await compactHistory(h.deps, "thread-1");
+    expect(h.runtime.run).toHaveBeenCalledOnce();
+    expect(h.thread.historyCompactedUpToSeq).toBe(0);
+  });
+});
 
 describe("summarizeTimeoutMs", () => {
   it("keeps the short timeout for a small prompt", () => {
@@ -1042,7 +1195,7 @@ describe("compactHistory", () => {
     expect(harness.jobs.enqueue).not.toHaveBeenCalled();
   });
 
-  it("retries without advancing when the summarizer returns no text", async () => {
+  it("retries a confirmed empty summary without advancing history or duplicating the save", async () => {
     const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
     harness.runtime.run.mockImplementation(async function* () {
       yield { type: "done" };
@@ -1054,9 +1207,38 @@ describe("compactHistory", () => {
 
     expect(harness.saveMemory).not.toHaveBeenCalled();
     expect(harness.prisma.thread.updateMany).not.toHaveBeenCalled();
+    expect(harness.effects[0]?.status).toBe("intended");
+    harness.runtime.run.mockImplementation(async function* () {
+      yield { type: "done", text: "Confirmed retry summary." };
+    });
+    await compactHistory(harness.deps, "thread-1");
+    await compactHistory(harness.deps, "thread-1");
+    expect(harness.thread.historyCompactionSummary).toBe("Confirmed retry summary.");
+    expect(harness.runtime.run).toHaveBeenCalledTimes(2);
+    expect(harness.saveMemory).toHaveBeenCalledOnce();
   });
 
-  it("retries without persisting when the runtime reports a failure as text", async () => {
+  it("does not attribute a group thread's compaction to an arbitrary bot run", async () => {
+    const harness = compactionHarness({ deploymentModelKey: "openrouter-key", botId: null });
+    await compactHistory(harness.deps, "thread-1");
+    expect(harness.runtime.run).not.toHaveBeenCalled();
+    expect(harness.effects).toEqual([]);
+    expect(harness.prisma.run.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("retains an unterminated empty model response as uncertain instead of retrying it", async () => {
+    const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
+    harness.runtime.run.mockImplementation(async function* () {
+      yield { type: "text", text: "" };
+    });
+    await expect(compactHistory(harness.deps, "thread-1")).rejects.toThrow("did not settle");
+    await compactHistory(harness.deps, "thread-1");
+    expect(harness.runtime.run).toHaveBeenCalledOnce();
+    expect(harness.effects[0]?.status).toBe("uncertain");
+    expect(harness.saveMemory).not.toHaveBeenCalled();
+  });
+
+  it("rejects a runtime-reported failure without persisting a summary", async () => {
     const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
     harness.runtime.run.mockImplementation(async function* () {
       yield { type: "text", text: "I hit a problem: model unavailable" };
@@ -1069,7 +1251,7 @@ describe("compactHistory", () => {
     expect(harness.prisma.thread.updateMany).not.toHaveBeenCalled();
   });
 
-  it("propagates a summarizer failure so the job retries, and does not advance the cursor", async () => {
+  it("propagates an ambiguous summarizer failure without advancing or silently replaying it", async () => {
     const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
     harness.runtime.run.mockImplementation(async function* () {
       yield { type: "text", text: "partial" };
@@ -1093,9 +1275,10 @@ describe("compactHistory", () => {
   });
 
   it("uses the short summarizer timeout for a small transcript", async () => {
+    const timedOut = new AbortController();
     const timeout = vi
       .spyOn(AbortSignal, "timeout")
-      .mockImplementation(() => new AbortController().signal);
+      .mockImplementation(() => timedOut.signal);
     const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
 
     try {
@@ -1103,7 +1286,9 @@ describe("compactHistory", () => {
       const [request, context] = harness.runtime.run.mock.calls[0]!;
       expect(request.prompt.length).toBeLessThanOrEqual(SUMMARIZE_TIMEOUT_BASE_CHARS);
       expect(timeout).toHaveBeenCalledWith(SUMMARIZE_TIMEOUT_MIN_MS);
-      expect(context?.signal).toBe(timeout.mock.results[0]?.value);
+      expect(context?.signal?.aborted).toBe(false);
+      timedOut.abort();
+      expect(context?.signal?.aborted).toBe(true);
     } finally {
       timeout.mockRestore();
     }
@@ -1226,5 +1411,113 @@ describe("compactHistory", () => {
     await compactHistory(harness.deps, "thread-1");
 
     expect(harness.jobs.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("fences retry attempts and resumes the exact saved compaction checkpoint and batch", async () => {
+    const maintenance = { active: false };
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key", maintenance, nextMessageSeq: 10,
+      messages: Array.from({ length: 10 }, (_, seq) => ({
+        seq, role: "user", blocks: [{ kind: "text", text: `original-${seq}` }],
+      })),
+    });
+    let instructions: string | undefined;
+    let providerAttempts = 0;
+    harness.runtime.run.mockImplementationOnce(async function* (request) {
+      instructions = request.instructions;
+      expect(await request.beforeExecution?.()).toBe(true);
+      providerAttempts++;
+      maintenance.active = true;
+      expect(await request.beforeExecution?.()).toBe(false);
+      yield { type: "checkpoint", blob: "opaque-compaction-checkpoint" };
+    });
+    await compactHistory(harness.deps, "thread-1");
+    expect(harness.effects[0]).toMatchObject({
+      status: "intended",
+      result: { checkpoint: "opaque-compaction-checkpoint", generation: 0, fromSeqExclusive: -1, throughSeq: 9 },
+    });
+    expect(harness.thread.historyCompactedUpToSeq).toBeNull();
+    expect(harness.saveMemory).not.toHaveBeenCalled();
+    expect(harness.jobs.enqueue).not.toHaveBeenCalled();
+    await compactHistory(harness.deps, "thread-1");
+    expect(harness.runtime.run).toHaveBeenCalledOnce();
+
+    harness.messages.push({ seq: 10, role: "user", blocks: [{ kind: "text", text: "later-arrival" }] });
+    maintenance.active = false;
+    harness.runtime.run.mockImplementationOnce(async function* (request) {
+      expect(request.runId).toBe("compact:thread-1:-1");
+      expect(request.resumeFromCheckpoint).toBe("opaque-compaction-checkpoint");
+      expect(request.instructions).toBe(instructions);
+      expect(request.prompt).not.toContain("later-arrival");
+      expect(await request.beforeExecution?.()).toBe(true);
+      providerAttempts++;
+      yield { type: "done", text: "Recovered exact summary." };
+    });
+    await compactHistory(harness.deps, "thread-1");
+    expect(providerAttempts).toBe(2);
+    expect(harness.effects[0]?.status).toBe("completed");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(9);
+    expect(harness.thread.historyCompactionSummary).toBe("Recovered exact summary.");
+    expect(harness.saveMemory).toHaveBeenCalledOnce();
+  });
+
+  it("does not invent a continuation or summary when a held runtime supplies no checkpoint", async () => {
+    const maintenance = { active: false };
+    const harness = compactionHarness({ deploymentModelKey: "openrouter-key", maintenance });
+    harness.runtime.run.mockImplementationOnce(async function* (request) {
+      maintenance.active = true;
+      expect(await request.beforeExecution?.()).toBe(false);
+      yield { type: "text", text: "Incomplete response" };
+    });
+    await expect(compactHistory(harness.deps, "thread-1")).rejects.toThrow("without a checkpoint");
+    expect(harness.effects[0]?.status).toBe("uncertain");
+    expect(harness.thread.historyCompactedUpToSeq).toBeNull();
+    expect(harness.saveMemory).not.toHaveBeenCalled();
+    maintenance.active = false;
+    await compactHistory(harness.deps, "thread-1");
+    expect(harness.runtime.run).toHaveBeenCalledOnce();
+  });
+
+  it("cancels a saved compaction continuation after its history generation is cleared", async () => {
+    const maintenance = { active: false };
+    const harness = compactionHarness({ deploymentModelKey: "openrouter-key", maintenance });
+    harness.runtime.run.mockImplementationOnce(async function* (request) {
+      maintenance.active = true;
+      expect(await request.beforeExecution?.()).toBe(false);
+      yield { type: "checkpoint", blob: "old-generation-checkpoint" };
+    });
+    await compactHistory(harness.deps, "thread-1");
+    harness.thread.historyCompactionGeneration++;
+    maintenance.active = false;
+    await reconcileBackgroundEffects(harness.deps, true);
+    expect(harness.effects[0]?.status).toBe("cancelled");
+    expect(harness.jobs.enqueue).not.toHaveBeenCalled();
+    expect(harness.runtime.run).toHaveBeenCalledOnce();
+  });
+
+  it("retains an aborted checkpoint as uncertain rather than replaying an unknown model attempt", async () => {
+    const maintenance = { active: false };
+    const harness = compactionHarness({ deploymentModelKey: "openrouter-key", maintenance });
+    const timedOut = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => timedOut.signal);
+    harness.runtime.run.mockImplementationOnce(async function* (request) {
+      expect(await request.beforeExecution?.()).toBe(true);
+      maintenance.active = true;
+      expect(await request.beforeExecution?.()).toBe(false);
+      timedOut.abort(new Error("provider outcome unknown"));
+      yield { type: "checkpoint", blob: "aborted-attempt-checkpoint" };
+    });
+    try {
+      await compactHistory(harness.deps, "thread-1");
+      expect(harness.effects[0]).toMatchObject({
+        status: "uncertain", result: { checkpoint: "aborted-attempt-checkpoint" },
+      });
+      maintenance.active = false;
+      await compactHistory(harness.deps, "thread-1");
+      expect(harness.runtime.run).toHaveBeenCalledOnce();
+      expect(harness.saveMemory).not.toHaveBeenCalled();
+    } finally {
+      timeout.mockRestore();
+    }
   });
 });

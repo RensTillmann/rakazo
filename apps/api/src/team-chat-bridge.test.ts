@@ -11,11 +11,11 @@ import { describe, expect, it, vi } from "vitest";
 import { materializeCurrentTurnFiles } from "../../../packages/adapters/src/thread-artifacts.js";
 import type { MessagingReceipts } from "./messaging-receipts.js";
 import {
-  TeamChatBridge,
   teamChatAmbientPrompt,
   teamChatPrompt,
   teamChatResponseText,
 } from "./team-chat-bridge.js";
+import { createTestBridge } from "./team-chat-test-fixture.js";
 import { inboundDeliveryClientNonce, messagingWakeIdempotencyKey } from "./webhook-inbound.js";
 
 describe("team chat bridge", () => {
@@ -73,7 +73,7 @@ describe("team chat bridge", () => {
         updateMany,
       },
     } as unknown as PrismaClient;
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma,
       events: {
         sendUserMessage: vi.fn(async () => ({
@@ -219,7 +219,7 @@ describe("team chat bridge", () => {
         storageStarted = resolve;
       });
       const judge = { decide: vi.fn(async () => ({ act: true })) };
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma,
         events: {
           sendUserMessage: vi.fn(async () => ({
@@ -320,7 +320,7 @@ describe("team chat bridge", () => {
         return { id: "artifact-1", name: input.attachment.name, mimeType: "image/png", size: 3 };
       },
     );
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma,
       events: { sendUserMessage },
       jobs: { enqueue: vi.fn() },
@@ -441,7 +441,7 @@ describe("team chat bridge", () => {
         mimeType: "image/png",
         size: 3,
       }));
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma,
         events: { sendUserMessage },
         jobs: { enqueue: vi.fn() },
@@ -692,7 +692,7 @@ describe("team chat bridge", () => {
       const findMany = vi.fn().mockResolvedValueOnce([message]).mockResolvedValueOnce([]);
       const findArtifacts = vi.fn().mockResolvedValue(stored ? [artifact] : []);
       const sendUserMessage = vi.fn().mockResolvedValue({ messageId: "transcript-1" });
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma: {
           externalMessage: { findMany, update: vi.fn() },
           artifact: { findMany: findArtifacts },
@@ -742,6 +742,7 @@ describe("team chat bridge", () => {
   it.each([false, true])("selects only judged batch files (legacy context: %s)", async (legacy) => {
     const messageIds = Array.from({ length: 20 }, (_, index) => `external-${index + 1}`);
     const conversation = {
+      id: "conversation-1",
       spaceId: "space-1",
       userId: "owner-1",
       botId: "bot-1",
@@ -769,7 +770,7 @@ describe("team chat bridge", () => {
       senderId: "ignored-bot",
       senderIsBot: true,
     });
-    const updateMany = vi.fn(async (_input: { data?: { batchContext?: string } }) => ({
+    const updateMany = vi.fn(async (_input: { data?: { status?: string; batchContext?: string } }) => ({
       count: 1,
     }));
     const file = {
@@ -795,7 +796,7 @@ describe("team chat bridge", () => {
       seq: 1,
       taskId: null,
     }));
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         bot: {
           findFirst: vi.fn(async () => ({
@@ -828,8 +829,8 @@ describe("team chat bridge", () => {
     };
     internals.target = { id: "bot-1" };
     await internals.evaluateAmbient(new Date(60_000));
-    const batchContext = updateMany.mock.calls.find(([input]) => input.data?.batchContext)?.[0].data
-      ?.batchContext;
+    const batchContext = updateMany.mock.calls.find(([input]) => input.data?.status === "received")?.[0]
+      .data?.batchContext;
     expect(JSON.parse(batchContext ?? "{}").messageIds).toEqual(messageIds);
     await internals.queue({
       id: "external-20",
@@ -880,7 +881,7 @@ describe("team chat bridge", () => {
         : [],
     );
     const findUnique = vi.fn(async () => null);
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: {
           updateMany,
@@ -950,7 +951,7 @@ describe("team chat bridge", () => {
         : [],
     );
     const findUnique = vi.fn(async () => ({ id: "msg-routine-wake" }));
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: {
           updateMany,
@@ -1041,7 +1042,7 @@ describe("team chat bridge", () => {
       async ({ where }: { where: { threadId_clientNonce: { clientNonce: string } } }) =>
         where.threadId_clientNonce.clientNonce === aligned ? { id: "msg-emulator-wake" } : null,
     );
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: { updateMany, findMany },
         message: { findUnique },
@@ -1087,7 +1088,7 @@ describe("team chat bridge", () => {
 
   it("reclaims a received row when routine resolve races lease expiry", async () => {
     const updateMany = vi.fn(async () => ({ count: 1 }));
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: { externalMessage: { updateMany } } as unknown as PrismaClient,
       events: { sendUserMessage: vi.fn() },
       jobs: { enqueue: vi.fn() },
@@ -1120,7 +1121,7 @@ describe("team chat bridge", () => {
 
   it("extends deferred routing leases for thirty minutes", async () => {
     const updateMany = vi.fn(async () => ({ count: 1 }));
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: { externalMessage: { updateMany } } as unknown as PrismaClient,
       events: { sendUserMessage: vi.fn() },
       jobs: { enqueue: vi.fn() },
@@ -1177,7 +1178,7 @@ describe("team chat bridge", () => {
             ]
           : [],
       );
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma: {
           externalMessage: { updateMany, findMany },
           message: { findUnique: vi.fn(async () => null) },
@@ -1230,7 +1231,7 @@ describe("team chat bridge", () => {
         .fn()
         .mockResolvedValueOnce({ count: 1 })
         .mockResolvedValueOnce({ count: 0 });
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma: { externalMessage: { updateMany } } as unknown as PrismaClient,
         events: { sendUserMessage: vi.fn() },
         jobs: { enqueue: vi.fn() },
@@ -1322,7 +1323,7 @@ describe("team chat bridge", () => {
         }
         return [];
       });
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma: {
           externalMessage: { updateMany, findMany },
           message: { findUnique: vi.fn(async () => null) },
@@ -1469,7 +1470,7 @@ describe("team chat bridge", () => {
           return [];
         },
       );
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma: {
           externalMessage: {
             updateMany,
@@ -1540,7 +1541,7 @@ describe("team chat bridge", () => {
           ]
         : [],
     );
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: { updateMany, findMany },
         message: { findUnique: vi.fn(async () => null) },
@@ -1601,7 +1602,7 @@ describe("team chat bridge", () => {
           ]
         : [],
     );
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: { updateMany, findMany },
         message: { findUnique: vi.fn(async () => null) },
@@ -1656,7 +1657,7 @@ describe("team chat bridge", () => {
           ]
         : [],
     );
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: { updateMany, findMany },
         message: { findUnique: vi.fn(async () => null) },
@@ -1695,7 +1696,7 @@ describe("team chat bridge", () => {
   it("releases only expired routing ownership before startup reconciliation", async () => {
     const updateMany = vi.fn(async () => ({ count: 1 }));
     const findMany = vi.fn(async () => []);
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         bot: {
           findFirst: vi.fn(async () => ({
@@ -1742,7 +1743,7 @@ describe("team chat bridge", () => {
     const findMany = vi.fn(async () => {
       throw new Error("mirror failed");
     });
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         bot: {
           findFirst: vi.fn(async () => ({
@@ -1781,7 +1782,7 @@ describe("team chat bridge", () => {
     const updateMany = vi.fn(async () => ({ count: 1 }));
     const findUnique = vi.fn(async () => ({ id: "msg-routine-wake" }));
     const sendUserMessage = vi.fn();
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: { updateMany },
         message: { findUnique },
@@ -1844,7 +1845,7 @@ describe("team chat bridge", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: "msg-routine-wake" });
     const sendUserMessage = vi.fn();
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: { updateMany },
         message: { findUnique },
@@ -1936,7 +1937,7 @@ describe("team chat bridge", () => {
       .mockResolvedValueOnce(null) // post-claim
       .mockResolvedValueOnce({ id: "msg-routine-wake" }); // final barrier
     const sendUserMessage = vi.fn();
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: {
           updateMany,
@@ -2017,7 +2018,7 @@ describe("team chat bridge", () => {
       await sendGate;
       return { messageId: "message-1", runId: "run-1", seq: 1, taskId: "task-1" };
     });
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: {
           updateMany,
@@ -2129,7 +2130,7 @@ describe("team chat bridge", () => {
   it("blocks fallback queueing when routing ownership remains after lease loss", async () => {
     const updateMany = vi.fn(async () => ({ count: 1 }));
     const sendUserMessage = vi.fn();
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: {
           updateMany,
@@ -2196,7 +2197,7 @@ describe("team chat bridge", () => {
   it("does not queue a stale received snapshot after another path deferred it", async () => {
     const updateMany = vi.fn(async () => ({ count: 0 }));
     const sendUserMessage = vi.fn();
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma: {
         externalMessage: { updateMany },
         message: { findUnique: vi.fn(async () => null) },
@@ -2434,7 +2435,7 @@ describe("team chat bridge", () => {
       },
     } as unknown as PrismaClient;
 
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma,
       events: { sendUserMessage },
       storeAttachment: vi.fn(async () => artifact),
@@ -2617,7 +2618,7 @@ describe("team chat bridge", () => {
         run: { findMany: vi.fn(async () => []) },
       } as unknown as PrismaClient;
 
-      const bridge = new TeamChatBridge({
+      const bridge = createTestBridge({
         prisma,
         events: { sendUserMessage },
         jobs: { enqueue: vi.fn() },
@@ -2651,21 +2652,21 @@ describe("team chat bridge", () => {
       expect(record.threadMessageId).toBe("message-visible");
     },
   );
-  it("does not reopen deliveries finalized as unconfirmed", async () => {
+  it.each(["uncertain", "delivered"])("does not reopen a %s delivery", async (status) => {
     const update = vi.fn();
     const updateMany = vi.fn(async () => ({ count: 0 }));
     const prisma = {
       externalMessage: {
         findUnique: vi.fn(async () => ({
-          status: "delivered",
-          providerReplyHandle: "unconfirmed",
+          status,
+          providerReplyHandle: status === "delivered" ? "provider-confirmed" : null,
         })),
         update,
         updateMany,
       },
     } as unknown as PrismaClient;
 
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma,
       events: { sendUserMessage: vi.fn() },
       jobs: { enqueue: vi.fn() },
@@ -2688,7 +2689,7 @@ describe("team chat bridge", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it("only retries rows that are still delivering without a provider handle", async () => {
+  it("retains an unknown send as uncertain instead of scheduling another send", async () => {
     const updateMany = vi.fn(async () => ({ count: 0 }));
     const prisma = {
       externalMessage: {
@@ -2701,7 +2702,7 @@ describe("team chat bridge", () => {
       },
     } as unknown as PrismaClient;
 
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma,
       events: { sendUserMessage: vi.fn() },
       jobs: { enqueue: vi.fn() },
@@ -2728,7 +2729,7 @@ describe("team chat bridge", () => {
           status: "delivering",
         },
         data: expect.objectContaining({
-          status: "delivering",
+          status: "uncertain",
           attempts: 2,
           lastError: "send failed",
         }),
@@ -2748,7 +2749,7 @@ describe("team chat bridge", () => {
         updateMany,
       },
     } as unknown as PrismaClient;
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma,
       events: { sendUserMessage: vi.fn() },
       jobs: { enqueue: vi.fn() },
@@ -2821,7 +2822,7 @@ describe("team chat bridge receipt", () => {
       },
       run: { findMany: vi.fn(async () => []) },
     } as unknown as PrismaClient;
-    const bridge = new TeamChatBridge({
+    const bridge = createTestBridge({
       prisma,
       events: { sendUserMessage },
       jobs: { enqueue: vi.fn() },

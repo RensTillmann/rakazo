@@ -3,11 +3,16 @@ import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@rakazo/a
 import type { MessageBlock } from "@rakazo/contracts";
 import { stuckWorkStatusMessages } from "@rakazo/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import type { PoolClient } from "pg";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { reconcileCallRequests } from "./call-request.js";
 import { scheduleComputerControlExpiry } from "./computer-control.js";
+import { ExpoPushProvider } from "./expo-push.js";
+import { reconcileBackgroundEffects } from "./history-compaction.js";
+import { reconcileMessagingOutbound } from "./messaging-delivery.js";
+import { routineWatchCheckOutstanding } from "./routine-watch.js";
 import { reconcileStuckWork } from "./stuck-work.js";
 import { isLoopGuardStopText } from "./tool-loop.js";
 import { isUserProgressClientNonce } from "./user-progress.js";
@@ -108,6 +113,8 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileRoutineRetryNotices?: () => Promise<void>;
+    /** Cancellation settles while held; validated same-run resumes require open admission. */
+    reconcileMaintenanceRuns?: () => Promise<void>;
     /** Fleet: strips expired activity previews (RAKAZO_ACTIVITY_DETAILS_DAYS). */
     reconcileActivityDetails?: () => Promise<void>;
   },
@@ -128,9 +135,16 @@ export function createJobReconciler(
     reconciling = (async () => {
       if (deps.leadership && !(await deps.leadership.tryAcquire())) return;
 
+      const admission = await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx));
       const auxiliary = await Promise.allSettled(
         [
           () => reconcileCallRequests(deps),
+          () => reconcileMessagingOutbound(deps.prisma),
+          () => reconcileBackgroundEffects(deps, admission.admitted),
+          () => deps.notifications instanceof ExpoPushProvider
+            ? deps.notifications.reconcile(admission.admitted)
+            : undefined,
+          deps.reconcileMaintenanceRuns,
           deps.reconcileCloudAgents,
           deps.reconcileComputerUpdates,
           deps.reconcileRoutineRetryNotices,
@@ -144,7 +158,7 @@ export function createJobReconciler(
 
       const now = new Date();
       try {
-        stuckCursor = await reconcileStuckWork({
+        if (admission.admitted) stuckCursor = await reconcileStuckWork({
           prisma: deps.prisma,
           jobs: deps.jobs,
           events: deps.events,
@@ -219,7 +233,7 @@ export function createJobReconciler(
           },
           orderBy: [{ nextRunAt: "asc" }, { id: "asc" }],
           take: batchSize,
-          select: { id: true, nextRunAt: true },
+          select: { id: true, nextRunAt: true, watchState: true },
         }),
         deps.prisma.computer.findMany({
           where: {
@@ -263,7 +277,7 @@ export function createJobReconciler(
       ]);
 
       const events = deps.events;
-      if (events) {
+      if (events && admission.admitted) {
         const outcomes = await deps.prisma.run.findMany({
           where: {
             trigger: "bot_message",
@@ -338,12 +352,14 @@ export function createJobReconciler(
       // Default replace would zero that job's attempts and run it now. keepExisting
       // leaves the job while attempts remain, and still replaces one that is exhausted.
       await Promise.all([
-        ...runs.map((run) => deps.jobs.enqueue({ ...runContinueJob(run.id), keepExisting: true })),
-        ...routines.flatMap((routine) =>
-          routine.nextRunAt
+        ...(admission.admitted
+          ? runs.map((run) => deps.jobs.enqueue({ ...runContinueJob(run.id), keepExisting: true }))
+          : []),
+        ...(admission.admitted ? routines.flatMap((routine) =>
+          routine.nextRunAt && !routineWatchCheckOutstanding(routine.watchState)
             ? [deps.jobs.enqueue(routineWakeupJob(routine.id, routine.nextRunAt))]
             : [],
-        ),
+        ) : []),
         ...controls.flatMap((computer) =>
           computer.controlLeaseId
             ? [
@@ -356,18 +372,20 @@ export function createJobReconciler(
               ]
             : [],
         ),
-        ...(dueOutbound ? [deps.jobs.enqueue(messagingDeliverJob())] : []),
-        ...unmirroredMessagingRuns.map((run) => deps.jobs.enqueue(messagingDeliverJob(run.id))),
+        ...(admission.admitted && dueOutbound ? [deps.jobs.enqueue(messagingDeliverJob())] : []),
+        ...(admission.admitted
+          ? unmirroredMessagingRuns.map((run) => deps.jobs.enqueue(messagingDeliverJob(run.id)))
+          : []),
       ]);
 
       const lastRun = runs.at(-1);
       runCursor =
-        runs.length === batchSize && lastRun
+        admission.admitted && runs.length === batchSize && lastRun
           ? { at: lastRun.updatedAt, id: lastRun.id }
           : undefined;
       const lastRoutine = routines.at(-1);
       routineCursor =
-        routines.length === batchSize && lastRoutine?.nextRunAt
+        admission.admitted && routines.length === batchSize && lastRoutine?.nextRunAt
           ? { at: lastRoutine.nextRunAt, id: lastRoutine.id }
           : undefined;
       const lastControl = controls.at(-1);

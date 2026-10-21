@@ -211,6 +211,7 @@ export function reconcileRefreshedThread(
     // waiting_takeover clears and optimistic stop clears.
     const preserveLocalComputer =
       prev.run?.status === "waiting_takeover" ||
+      prev.run?.status === "maintenance_paused" ||
       !prev.run ||
       !isActive(prev.run.status as RunStatus);
     return {
@@ -222,25 +223,29 @@ export function reconcileRefreshedThread(
   let snapshot = mergeThreadSnapshot(prev, snap, preserveLoadedHistory);
   let computer = snap.computer ?? null;
 
+  const localPausedStatus =
+    prev?.run?.status === "waiting_takeover" || prev?.run?.status === "maintenance_paused"
+      ? prev.run.status : undefined;
   const localWaiting =
     sameThread &&
     prev?.cursor === snapshot.cursor &&
-    prev?.run?.status === "waiting_takeover" &&
-    snapshot.run?.id === prev.run.id &&
-    snapshot.run.status !== "waiting_takeover" &&
+    localPausedStatus !== undefined &&
+    snapshot.run != null && prev?.run != null &&
+    snapshot.run.id === prev.run.id &&
+    snapshot.run.status !== localPausedStatus &&
     isActive(snapshot.run.status as RunStatus);
 
-  if (localWaiting && snapshot.run) {
+  if (localWaiting && snapshot.run && localPausedStatus) {
     const runId = snapshot.run.id;
     snapshot = {
       ...snapshot,
-      run: { ...snapshot.run, status: "waiting_takeover" },
+      run: { ...snapshot.run, status: localPausedStatus },
       activeRuns: snapshot.activeRuns?.map((run) =>
-        run.id === runId ? { ...run, status: "waiting_takeover" } : run,
+        run.id === runId ? { ...run, status: localPausedStatus } : run,
       ),
     };
     if (computer?.busyBotName) computer = { ...computer, busyBotName: null };
-  } else if (snapshot.run?.status === "waiting_takeover" && computer?.busyBotName) {
+  } else if ((snapshot.run?.status === "waiting_takeover" || snapshot.run?.status === "maintenance_paused") && computer?.busyBotName) {
     computer = { ...computer, busyBotName: null };
   }
 
@@ -267,6 +272,8 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "thread.message.reaction" ||
     event.type === "run.started" ||
     event.type === "run.waiting_input" ||
+    (event.type === "run.checkpointed" &&
+      (event.payload.status === "maintenance_paused" || event.payload.status === "queued")) ||
     event.type === "computer.takeover.requested" ||
     event.type === "computer.takeover.released" ||
     isRunTerminalEvent(event)
@@ -327,8 +334,11 @@ export function reduceThreadSnapshot(
       activeRuns,
     };
   }
-  if (event.type === "run.waiting_input" || event.type === "computer.takeover.requested") {
-    const status = event.type === "run.waiting_input" ? "waiting_input" : "waiting_takeover";
+  const checkpointStatus = event.type === "run.checkpointed" &&
+    (event.payload.status === "maintenance_paused" || event.payload.status === "queued")
+      ? event.payload.status : undefined;
+  if (checkpointStatus || event.type === "run.waiting_input" || event.type === "computer.takeover.requested") {
+    const status = checkpointStatus ?? (event.type === "run.waiting_input" ? "waiting_input" : "waiting_takeover");
     const runId = event.runId;
     const knownInRun = Boolean(runId && prev.run?.id === runId);
     const knownInActive = Boolean(
@@ -347,7 +357,7 @@ export function reduceThreadSnapshot(
     // message.created cannot leave "working…" stuck next to waiting_input.
     const liveId = progressMessageId(event);
     const messages =
-      event.type === "run.waiting_input" && prev.messages.some((message) => message.id === liveId)
+      (event.type === "run.waiting_input" || checkpointStatus) && prev.messages.some((message) => message.id === liveId)
         ? prev.messages.filter((message) => message.id !== liveId)
         : prev.messages;
     if (
@@ -364,9 +374,9 @@ export function reduceThreadSnapshot(
         id: runId,
         botId: event.botId,
         threadId: event.threadId,
-        taskId: runId,
+        taskId: typeof event.payload.taskId === "string" ? event.payload.taskId : runId,
         status,
-        trigger: "bot_message",
+        trigger: (event.payload.trigger as RunTrigger | undefined) ?? "bot_message",
         routineId: null,
         modelProvider: null,
         modelId: null,
@@ -625,6 +635,9 @@ export function reduceComputerStatus(
   if (!prev) return prev;
   if (!isComputerStatusEvent(event)) return prev;
   if (event.botId !== prev.botId) return prev;
+  if (event.type === "run.checkpointed" && event.payload.status === "maintenance_paused") {
+    return prev.busyBotName ? { ...prev, busyBotName: null } : prev;
+  }
   if (event.type === "computer.takeover.requested") {
     const retainedControl = event.payload.retainedControl === true;
     const next = {
@@ -685,6 +698,7 @@ export function reduceComputerStatus(
 export function isComputerStatusEvent(event: ProductEvent): boolean {
   return (
     event.type === "computer.status" ||
+    (event.type === "run.checkpointed" && event.payload.status === "maintenance_paused") ||
     event.type === "computer.takeover.requested" ||
     event.type === "computer.takeover.granted" ||
     event.type === "computer.takeover.released"

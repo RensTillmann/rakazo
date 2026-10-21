@@ -5937,7 +5937,9 @@ export function createRouter(deps: RouterDeps) {
             const key = `command:connected:${connection.id}`;
             // A re-approved pair starts a fresh cycle; clear the stale row or
             // skipDuplicates would swallow the new confirmation.
-            await tx.messagingOutbound.deleteMany({ where: { idempotencyKey: key } });
+            await tx.messagingOutbound.deleteMany({
+              where: { idempotencyKey: key, status: { notIn: ["executing", "uncertain"] } },
+            });
             await tx.messagingOutbound.createMany({
               data: [
                 {
@@ -5982,15 +5984,12 @@ export function createRouter(deps: RouterDeps) {
               data: { status: "revoked" },
             });
             if (count === 0) throw new ORPCError("NOT_FOUND");
-            // Cancel undelivered invites, including rows the drain already
-            // claimed (status sent, no providerHandle yet). Connect-invite
-            // delivery holds this connection row FOR UPDATE through
-            // sendDirect, so revoke either waits until the DM is sent or
-            // deletes the claim before send starts.
+            // Only unsent work can be cancelled. An executing or uncertain
+            // delivery retains its evidence until provider reconciliation.
             await tx.messagingOutbound.deleteMany({
               where: {
                 idempotencyKey: `connect:${connection.requesterBotId}:${connection.targetBotId}`,
-                OR: [{ status: "pending" }, { status: "sent", providerHandle: null }],
+                status: "pending",
               },
             });
           });

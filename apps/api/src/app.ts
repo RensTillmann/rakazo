@@ -78,6 +78,8 @@ import type { Pool, PrismaClient } from "@rakazo/db";
 import {
   createBoardEvents,
   createDb,
+  createMaintenanceRecoveryStore,
+  createMaintenanceStore,
   createPool,
   createThreadEvents,
   IsolationError,
@@ -106,6 +108,7 @@ import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { healthRoutes } from "./health.js";
 import { mountLocalSettings } from "./local-settings.js";
+import { mountMaintenanceRoutes } from "./maintenance.js";
 import {
   createMessagingInboundHandler,
   teamChatSenderCanWakeMessageRoutines,
@@ -391,7 +394,7 @@ export async function createApp(
       : new PiAgentRuntime({
           sessionRoot: env.piSessionRecording ? piSessionsRoot(env.dataDir) : undefined,
         }));
-  const notifications = new ExpoPushProvider(env.dataDir, (sessionId) =>
+  const notifications = new ExpoPushProvider(env.dataDir, prisma, (sessionId) =>
     pushSessionExpiresAt(prisma, sessionId),
   );
   const auth = createAuth(prisma, {
@@ -465,10 +468,12 @@ export async function createApp(
   // One cache serves models.list, selection validation, and run-time model
   // resolution alike, so a list call warms the run path in this process.
   const codexCatalog = new CodexCatalogCache();
+  const maintenance = created.pool ? createMaintenanceStore(created.pool) : undefined;
   const executor = createRunExecutor({
     maxUploadSizeBytes: env.maxUploadSizeBytes,
     contextStrategy,
     prisma,
+    maintenance,
     runtime,
     codexCatalog,
     sandbox,
@@ -540,6 +545,7 @@ export async function createApp(
         jobs,
         events,
         notifications,
+        reconcileMaintenanceRuns: () => executor.reconcileMaintenanceRuns(),
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
       })
@@ -669,6 +675,12 @@ export async function createApp(
     return actor && { actor, sessionId: session.session.id, sessionUserAgent };
   };
   const sessionActor = async (request: Request) => (await requestSession(request))?.actor ?? null;
+  mountMaintenanceRoutes(app, {
+    store: maintenance ?? null,
+    recovery: created.pool ? createMaintenanceRecoveryStore(created.pool) : null,
+    authenticate: sessionActor,
+    trustedOrigin: (origin) => isTrustedOrigin(origin, env),
+  });
   app.use("/rpc/*", async (c, next) => {
     const session = await requestSession(c.req.raw);
     const actor = session?.actor ?? null;

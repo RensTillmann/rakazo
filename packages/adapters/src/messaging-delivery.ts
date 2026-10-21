@@ -4,11 +4,12 @@ import type {
   MessagingOutboundStatus,
   MessagingSurface,
 } from "@rakazo/adapter-kit";
-import { messagingDeliverJob, runContinueJob } from "@rakazo/adapter-kit";
+import { runContinueJob } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { botMessageHopExhausted, nextBotMessageHop } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 import { appendEventInTransaction, createThreadMessageInTransaction } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 
 /**
@@ -18,8 +19,8 @@ import { getLogger } from "@rakazo/logging";
  */
 export const MESSAGING_DM_OUTBOUND_CAP = 140;
 
-/** Provider-send attempts before a mirrored row is declared lost. */
-export const MESSAGING_OUTBOUND_MAX_ATTEMPTS = 5;
+/** A crashed sender has no provider idempotency/reconciliation contract. */
+const MESSAGING_EXECUTION_TIMEOUT_MS = 120_000;
 
 export interface MessagingDeliveryDeps {
   prisma: PrismaClient;
@@ -272,14 +273,13 @@ function connectInvitePair(
  * (and delete the claim) between the pending check and the send.
  * Only used for rare approval DMs, not for ordinary mirrored traffic.
  *
- * At-most-once: any failure after the provider call (or an ambiguous
- * transport error) keeps the outer claim as `sent` so drain does not
- * restore pending and duplicate the YES/NO DM. A lost invite is fine;
- * reconnect starts a fresh cycle.
+ * A committed executing claim precedes I/O. Ambiguous responses stay uncertain,
+ * never sent or pending. This connection lock is separate from the maintenance
+ * admission transaction, which must finish before any provider call.
  */
 async function sendConnectInvite(
   deps: MessagingDeliveryDeps,
-  row: { id: string; body: string },
+  row: { id: string; body: string; identityId: string | null },
   threadId: string,
   pair: { requesterBotId: string; targetBotId: string },
   context: AdapterContext,
@@ -307,10 +307,16 @@ async function sendConnectInvite(
         if (!outbound) return "skipped";
         try {
           const sent = await deps.messaging.sendToThread({ threadId, body: row.body }, context);
-          await tx.messagingOutbound.updateMany({
-            where: { id: row.id },
-            data: { providerHandle: sent.handle },
+          const confirmed = await tx.messagingOutbound.updateMany({
+            where: { id: row.id, status: { in: ["executing", "uncertain"] } },
+            data: { status: "sent", providerHandle: sent.handle },
           });
+          if (confirmed.count && row.identityId) {
+            await tx.messagingIdentity.update({
+              where: { id: row.identityId },
+              data: { outboundSinceInbound: { increment: 1 } },
+            });
+          }
           return "delivered";
         } catch {
           // Provider error or lost response is ambiguous without an
@@ -321,9 +327,20 @@ async function sendConnectInvite(
       { maxWait: 5_000, timeout: 20_000 },
     );
   } catch {
-    // Lock/timeout after a possible accept: keep the outer claim as sent.
+    // Lock/timeout after a possible accept: the outcome is unknown.
     return "held";
   }
+}
+
+/** Never replay an abandoned provider call; preserve it for operator reconciliation. */
+export async function reconcileMessagingOutbound(prisma: PrismaClient): Promise<void> {
+  await prisma.messagingOutbound.updateMany({
+    where: {
+      status: "executing",
+      updatedAt: { lte: new Date(Date.now() - MESSAGING_EXECUTION_TIMEOUT_MS) },
+    },
+    data: { status: "uncertain" },
+  });
 }
 
 async function drain(deps: MessagingDeliveryDeps, context: AdapterContext): Promise<void> {
@@ -333,109 +350,85 @@ async function drain(deps: MessagingDeliveryDeps, context: AdapterContext): Prom
       status: "pending",
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   for (const row of pending) {
-    // Claim before sending: concurrent drains (job keys are per runId) and
-    // crash retries must never deliver the same message twice.
-    const claim = await deps.prisma.messagingOutbound.updateMany({
-      where: { id: row.id, status: "pending" },
-      data: { status: "sent", nextAttemptAt: null },
-    });
-    if (claim.count === 0) continue;
-    try {
-      if (row.kind === "group" || row.kind === "intro") {
-        if (!row.threadId) {
-          await deps.prisma.messagingOutbound.update({
-            where: { id: row.id },
-            data: { status: "failed" },
-          });
-          continue;
-        }
-        const sent = await deps.messaging.sendToThread(
-          { threadId: row.threadId, body: row.body },
-          context,
-        );
-        await deps.prisma.messagingOutbound.update({
-          where: { id: row.id },
-          data: { providerHandle: sent.handle },
-        });
-        continue;
-      }
-      const identity = row.identityId
-        ? await deps.prisma.messagingIdentity.findUnique({ where: { id: row.identityId } })
+    const claimed = await deps.prisma.$transaction(async (tx) => {
+      if (!(await lockMaintenanceAdmission(tx)).admitted) return null;
+      const direct = row.kind !== "group" && row.kind !== "intro";
+      // Serialize each conversation's claim, not its network call. Earlier pending
+      // backoff, executing, and uncertain rows all retain their place in the queue.
+      const destination = direct ? `identity:${row.identityId}` : `thread:${row.threadId}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${destination}, 0))::text`;
+      const identity = direct && row.identityId
+        ? await tx.messagingIdentity.findUnique({ where: { id: row.identityId } })
         : null;
-      if (!identity) {
-        await deps.prisma.messagingOutbound.update({
-          where: { id: row.id },
+      if ((direct && !identity) || (!direct && !row.threadId)) {
+        await tx.messagingOutbound.updateMany({
+          where: { id: row.id, status: "pending" },
           data: { status: "failed" },
         });
-        continue;
+        return null;
       }
-      // Sendblue's consecutive-outbound vendor cap; other providers have no
-      // equivalent limit, so do not hold Slack/WhatsApp/Telegram DMs.
-      if (
-        identity.provider === "sendblue" &&
-        identity.outboundSinceInbound >= MESSAGING_DM_OUTBOUND_CAP
-      ) {
-        // Cap holds are not failures: release the claim back to pending.
-        await deps.prisma.messagingOutbound.update({
-          where: { id: row.id },
-          data: { status: "pending" },
-        });
-        continue;
-      }
-      const threadId = await resolveDirectThread(deps, identity, context);
+      if (identity?.provider === "sendblue" &&
+          identity.outboundSinceInbound >= MESSAGING_DM_OUTBOUND_CAP) return null;
+      const earlier = await tx.messagingOutbound.findFirst({
+        where: {
+          id: { not: row.id },
+          ...(direct ? { identityId: row.identityId } : { threadId: row.threadId }),
+          status: { in: ["pending", "executing", "uncertain"] },
+          OR: [
+            { createdAt: { lt: row.createdAt } },
+            { createdAt: row.createdAt, id: { lt: row.id } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (earlier) return null;
+      const claim = await tx.messagingOutbound.updateMany({
+        where: { id: row.id, status: "pending" },
+        data: { status: "executing", nextAttemptAt: null, attempts: { increment: 1 } },
+      });
+      return claim.count ? { identity } : null;
+    });
+    if (!claimed) continue;
+    try {
+      const threadId = claimed.identity
+        ? await resolveDirectThread(deps, claimed.identity, context)
+        : row.threadId!;
       const invitePair = connectInvitePair(row.idempotencyKey);
       if (invitePair) {
-        const result = await sendConnectInvite(
-          deps,
-          { id: row.id, body: row.body },
-          threadId,
-          invitePair,
-          context,
-        );
-        if (result === "delivered") {
-          await deps.prisma.messagingIdentity.update({
-            where: { id: identity.id },
-            data: { outboundSinceInbound: { increment: 1 } },
+        const result = await sendConnectInvite(deps, row, threadId, invitePair, context);
+        if (result === "held") {
+          await deps.prisma.messagingOutbound.updateMany({
+            where: { id: row.id, status: "executing" },
+            data: { status: "uncertain" },
           });
         }
-        continue;
+        if (result !== "delivered") continue;
+      } else {
+        const sent = await deps.messaging.sendToThread({ threadId, body: row.body }, context);
+        await deps.prisma.$transaction(async (tx) => {
+          const confirmed = await tx.messagingOutbound.updateMany({
+            where: { id: row.id, status: { in: ["executing", "uncertain"] } },
+            data: { status: "sent", providerHandle: sent.handle },
+          });
+          if (confirmed.count && claimed.identity) {
+            await tx.messagingIdentity.update({
+              where: { id: claimed.identity.id },
+              data: { outboundSinceInbound: { increment: 1 } },
+            });
+          }
+        });
       }
-      const sent = await deps.messaging.sendToThread({ threadId, body: row.body }, context);
-      await deps.prisma.messagingOutbound.updateMany({
-        where: { id: row.id },
-        data: { providerHandle: sent.handle },
-      });
-      await deps.prisma.messagingIdentity.update({
-        where: { id: identity.id },
-        data: { outboundSinceInbound: { increment: 1 } },
-      });
     } catch {
-      // Transient provider errors go back to pending with a backed-off
-      // retry; only an exhausted budget is terminal.
-      const attempts = (row.attempts ?? 0) + 1;
-      const exhausted = attempts >= MESSAGING_OUTBOUND_MAX_ATTEMPTS;
-      const retryAt = exhausted
-        ? null
-        : new Date(Date.now() + messagingOutboundRetryDelayMs(attempts));
+      // A timeout, lost response, or failed persistence after acceptance cannot
+      // prove non-delivery. No provider-neutral idempotent send exists here.
+      getLogger().warn("messaging delivery outcome requires reconciliation");
       await deps.prisma.messagingOutbound.updateMany({
-        where: { id: row.id },
-        data: {
-          attempts,
-          status: exhausted ? "failed" : "pending",
-          nextAttemptAt: retryAt,
-        },
+        where: { id: row.id, status: "executing" },
+        data: { status: "uncertain" },
       });
-      if (!exhausted && retryAt) {
-        // Propagate an enqueue failure: the messaging.deliver job then fails
-        // and the queue's own retry re-runs the drain. Swallowing it would
-        // strand the row in pending — no reconciler reclaims outbox rows.
-        // Re-entry is safe: the row is pending again and nextAttemptAt keeps
-        // other drains from racing the backoff window.
-        await deps.jobs.enqueue(messagingDeliverJob(undefined, retryAt));
-      }
     }
   }
 }
@@ -463,10 +456,6 @@ async function resolveDirectThread(
   return threadId;
 }
 
-/** Exponential backoff per attempt, capped at one minute. */
-function messagingOutboundRetryDelayMs(attempts: number): number {
-  return Math.min(2 ** attempts * 1000, 60_000);
-}
 
 /** Outbound status webhooks update outbox rows by provider handle. */
 export async function applyMessagingOutboundStatus(

@@ -16,6 +16,8 @@ export function rosterWorkStatusLabel(status: string): string | null {
       return t`Starting…`;
     case "running":
       return t`Working…`;
+    case "maintenance_paused":
+      return t`Paused`;
     default:
       return null;
   }

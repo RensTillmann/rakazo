@@ -1245,8 +1245,11 @@ export function applyMobileThreadEvent(
       activeRuns: [],
     };
   }
-  if (event.type === "run.waiting_input" || event.type === "computer.takeover.requested") {
-    const status = event.type === "run.waiting_input" ? "waiting_input" : "waiting_takeover";
+  const checkpointStatus = event.type === "run.checkpointed" &&
+    (event.payload?.status === "maintenance_paused" || event.payload?.status === "queued")
+      ? event.payload.status : undefined;
+  if (checkpointStatus || event.type === "run.waiting_input" || event.type === "computer.takeover.requested") {
+    const status = checkpointStatus ?? (event.type === "run.waiting_input" ? "waiting_input" : "waiting_takeover");
     const progressId = progressMessageId(event);
     // Waiting pauses drop live progress server-side; clear a leftover bubble so
     // the waiting footer is not hidden behind a stale "Working…" row.
@@ -1266,7 +1269,7 @@ export function applyMobileThreadEvent(
         prev.activeRuns?.some((candidate) => candidate.id === runId && candidate.status !== status),
     );
     const computer =
-      event.type === "computer.takeover.requested" && prev.computer?.busyBotName
+      (event.type === "computer.takeover.requested" || checkpointStatus === "maintenance_paused") && prev.computer?.busyBotName
         ? { ...prev.computer, busyBotName: null }
         : prev.computer;
     const computerChanged = computer !== prev.computer;

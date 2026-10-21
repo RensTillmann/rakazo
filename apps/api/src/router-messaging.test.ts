@@ -217,7 +217,7 @@ function messagingDeps(
       }: {
         where: {
           idempotencyKey?: string;
-          status?: string;
+          status?: string | { notIn: string[] };
           OR?: Array<{ status?: string; providerHandle?: null }>;
         };
       }) => {
@@ -225,7 +225,8 @@ function messagingDeps(
         for (let i = outboundRows.length - 1; i >= 0; i -= 1) {
           const row = outboundRows[i]!;
           if (where.idempotencyKey && row.idempotencyKey !== where.idempotencyKey) continue;
-          if (where.status && row.status !== where.status) continue;
+          if (typeof where.status === "string" && (row.status ?? "pending") !== where.status) continue;
+          if (typeof where.status === "object" && where.status.notIn.includes(String(row.status ?? "pending"))) continue;
           if (where.OR) {
             const matches = where.OR.some((clause) => {
               if (clause.status && row.status !== clause.status) return false;
@@ -635,7 +636,7 @@ describe("messaging.connections", () => {
     expect(prisma.messagingOutbound.deleteMany).toHaveBeenCalledWith({
       where: {
         idempotencyKey: "connect:bot-1:bot-9",
-        OR: [{ status: "pending" }, { status: "sent", providerHandle: null }],
+        status: "pending",
       },
     });
     expect(outboundRows).toEqual([
@@ -647,7 +648,7 @@ describe("messaging.connections", () => {
     await expect(response.json()).resolves.toEqual({ json: { ok: true } });
   });
 
-  it("cancels a claimed-but-undelivered connect invite on revoke", async () => {
+  it.each(["executing", "uncertain"])("retains a %s connect invite as evidence on revoke", async (status) => {
     const { handler, actor, outboundRows } = messagingDeps({
       connection: {
         id: "ac-claimed",
@@ -659,7 +660,7 @@ describe("messaging.connections", () => {
     outboundRows.push({
       idempotencyKey: "connect:bot-1:bot-9",
       kind: "dm",
-      status: "sent",
+      status,
       providerHandle: null,
       body: "claimed by drain",
     });
@@ -675,6 +676,11 @@ describe("messaging.connections", () => {
     });
 
     expect(outboundRows).toEqual([
+      expect.objectContaining({
+        idempotencyKey: "connect:bot-1:bot-9",
+        status,
+        providerHandle: null,
+      }),
       expect.objectContaining({
         idempotencyKey: "connect:bot-1:bot-9-delivered",
         providerHandle: "h-delivered",

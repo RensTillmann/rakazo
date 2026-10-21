@@ -16,7 +16,7 @@ import {
 import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
 import { appendEventInTransaction, expireStuckRun, withTransactionRetry } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
-import { ExpoPushProvider } from "./expo-push.js";
+import { ExpoPushProvider, ExpoPushUncertainError, type ExpoPushDelivery } from "./expo-push.js";
 
 type StuckCursor = { at: Date; id: string };
 
@@ -108,7 +108,7 @@ export async function reconcileStuckWork(deps: {
 
   for (const run of due) {
     const alreadyNotified = notices.some(
-      (notice) => notice.runId === run.id && noticeIsDelivered(notice.payload, run.updatedAt),
+      (notice) => notice.runId === run.id && noticeStopsRetry(notice.payload, run.updatedAt),
     );
     const action = stuckWorkAction({
       ageMs: stuckWorkAgeMs(run.updatedAt, deps.now),
@@ -172,11 +172,12 @@ function stuckNoticePayload(payload: unknown): StuckNoticePayload | null {
   return record;
 }
 
-/** A stamp counts as delivered once the push was accepted. Pending claims do not. */
-function noticeIsDelivered(payload: unknown, updatedAt: Date): boolean {
+/** Legacy/delivered stamps and unknown submissions must not be submitted again. */
+function noticeStopsRetry(payload: unknown, updatedAt: Date): boolean {
   const record = stuckNoticePayload(payload);
   if (!record || record.updatedAt !== updatedAt.toISOString()) return false;
-  return record.state !== "pending";
+  return record.state === undefined || record.state === "delivered" ||
+    record.state === "uncertain" || record.state === "cancelled";
 }
 
 function pendingClaimFresh(payload: unknown, updatedAt: Date, now: Date): boolean {
@@ -190,13 +191,6 @@ function pendingClaimFresh(payload: unknown, updatedAt: Date, now: Date): boolea
   return age >= 0 && age < STUCK_NOTICE_CLAIM_TTL_MS;
 }
 
-function deliveredNotice(run: StuckCandidate): Prisma.InputJsonValue {
-  return {
-    notice: STUCK_WORK_NOTICE,
-    updatedAt: run.updatedAt.toISOString(),
-    state: "delivered",
-  };
-}
 
 async function remindStuckRun(
   deps: {
@@ -222,12 +216,13 @@ async function remindStuckRun(
     botId: run.botId,
     threadId: run.threadId,
   });
-  if (delivery === "delivered") {
+  if (delivery === "delivered" || delivery === "uncertain" || delivery === "cancelled") {
     await withTransactionRetry(() =>
-      deps.prisma.$transaction((tx) => markStuckNoticeDelivered(tx, claimId, run)),
+      deps.prisma.$transaction((tx) => markStuckNoticeSettled(tx, claimId, run, delivery)),
     );
     return;
   }
+  if (delivery === "executing") return;
   await withTransactionRetry(() => deps.prisma.$transaction((tx) => clearStuckNotice(tx, claimId)));
 }
 
@@ -264,7 +259,7 @@ async function claimStuckReminder(
     },
     select: { payload: true },
   });
-  if (existing.some((notice) => noticeIsDelivered(notice.payload, current.updatedAt))) return null;
+  if (existing.some((notice) => noticeStopsRetry(notice.payload, current.updatedAt))) return null;
   if (existing.some((notice) => pendingClaimFresh(notice.payload, current.updatedAt, now))) {
     return null;
   }
@@ -295,15 +290,16 @@ async function claimStuckReminder(
   return claimed.id;
 }
 
-async function markStuckNoticeDelivered(
+async function markStuckNoticeSettled(
   tx: Prisma.TransactionClient,
   eventId: string,
   run: StuckCandidate,
+  state: "delivered" | "uncertain" | "cancelled",
 ) {
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;
   await tx.event.update({
     where: { id: eventId },
-    data: { payload: deliveredNotice(run) },
+    data: { payload: { notice: STUCK_WORK_NOTICE, updatedAt: run.updatedAt.toISOString(), state } },
   });
 }
 
@@ -352,7 +348,7 @@ async function expireOne(
   });
 }
 
-type StuckNoticeDelivery = "delivered" | "undeliverable" | "failed";
+type StuckNoticeDelivery = ExpoPushDelivery | "failed";
 
 async function sendStuckNotice(
   notifications: NotificationProvider,
@@ -360,11 +356,12 @@ async function sendStuckNotice(
   message: NotificationMessage,
 ): Promise<StuckNoticeDelivery> {
   const context = {
-    operationId: "notify",
+    operationId: `stuck:${run.id}:${run.updatedAt.toISOString()}:${message.kind}`,
     traceId: run.botId,
     spaceId: run.spaceId,
     userId: run.userId,
     botId: run.botId,
+    runId: run.id,
     signal: new AbortController().signal,
   };
   const notice = run.thread.groupId ? { ...message, groupId: run.thread.groupId } : message;
@@ -376,6 +373,7 @@ async function sendStuckNotice(
     return "delivered";
   } catch (error) {
     getLogger().error("stuck work notification", error);
+    if (error instanceof ExpoPushUncertainError) return "uncertain";
     return "failed";
   }
 }

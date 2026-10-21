@@ -8,6 +8,7 @@ import { CloudAgentRequestRejected, runContinueJob } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { cloudAgentHttpsUrl } from "@rakazo/core";
 import { appendEventInTransaction, type CloudAgent, Prisma } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
 import { getLogger } from "@rakazo/logging";
 import { cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { type CloudAgentDeps, cloudAgentBlock, enqueueCloudAgent } from "./cloud-agent-service.js";
@@ -25,13 +26,19 @@ export async function pollCloudAgent(
   });
   if (!stored?.nextPollAt || !cloudAgentsEnabled(connection, stored.spaceId)) return;
   const token = randomUUID();
-  const claimed = await deps.prisma.cloudAgent.updateMany({
-    where: {
-      id: stored.id,
-      version: stored.version,
-      OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: new Date() } }],
-    },
-    data: { leaseToken: token, leaseExpiresAt: new Date(Date.now() + 90_000) },
+  const claimed = await deps.prisma.$transaction(async (tx) => {
+    const admission = await lockMaintenanceAdmission(tx);
+    const starting = (!stored.remoteId && !stored.launchDispatched) ||
+      (stored.followup && !stored.followupDispatching);
+    if (!admission.admitted && starting && !stored.cancelRequested) return { count: 0 };
+    return tx.cloudAgent.updateMany({
+      where: {
+        id: stored.id,
+        version: stored.version,
+        OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: new Date() } }],
+      },
+      data: { leaseToken: token, leaseExpiresAt: new Date(Date.now() + 90_000) },
+    });
   });
   if (!claimed.count) return;
   const agent = { ...stored, leaseToken: token };
@@ -70,9 +77,15 @@ export async function pollCloudAgent(
     }
     if (!agent.remoteId) {
       // Write dispatch intent before I/O; a crash replays the same idempotent create.
-      const marked = await deps.prisma.cloudAgent.updateMany({
-        where: fence(agent),
-        data: { launchDispatched: true },
+      const marked = await deps.prisma.$transaction(async (tx) => {
+        const admission = await lockMaintenanceAdmission(tx);
+        // Replaying a committed launch is reconciliation with the same provider
+        // idempotency key, not permission to start another remote agent.
+        if (!admission.admitted && !agent.launchDispatched) return { count: 0 };
+        return tx.cloudAgent.updateMany({
+          where: fence(agent),
+          data: { launchDispatched: true },
+        });
       });
       if (!marked.count) return;
       const request = cloudAgentLaunchSchema.parse(agent.launchRequest);
@@ -143,9 +156,12 @@ export async function pollCloudAgent(
           followupDispatching: false,
         });
       } else {
-        const marked = await deps.prisma.cloudAgent.updateMany({
-          where: fence(agent),
-          data: { followupDispatching: true },
+        const marked = await deps.prisma.$transaction(async (tx) => {
+          if (!(await lockMaintenanceAdmission(tx)).admitted) return { count: 0 };
+          return tx.cloudAgent.updateMany({
+            where: fence(agent),
+            data: { followupDispatching: true },
+          });
         });
         if (!marked.count) return;
         try {
@@ -227,6 +243,7 @@ async function finishPoll(
   abandoned = false,
 ) {
   const committed = await deps.prisma.$transaction(async (tx) => {
+    const admission = await lockMaintenanceAdmission(tx);
     // Same lock order as clearing chat: thread first, then message/run changes.
     const thread = await tx.thread.updateMany({
       where: {
@@ -324,12 +341,12 @@ async function finishPoll(
         wakeRunId = run.id;
       }
     }
-    return { seq, wakeRunId, nextPollAt };
+    return { seq, wakeRunId, nextPollAt, admitted: admission.admitted };
   });
   if (!committed) return;
   if (committed.seq !== undefined)
     await deps.events.notify(agent.threadId, committed.seq).catch(() => undefined);
-  if (committed.wakeRunId) {
+  if (committed.wakeRunId && committed.admitted) {
     // The existing run reconciler recovers a queued wake after an enqueue failure.
     await deps.jobs.enqueue(runContinueJob(committed.wakeRunId)).catch(() => {
       getLogger().warn("cloud agent wake deferred to reconciliation");

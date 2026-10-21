@@ -45,6 +45,8 @@ async function failRun(scenario: Scenario) {
     throw scenario.error;
   });
   const prisma = {
+    $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
+    $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma)),
     user: { findUnique: vi.fn(async () => null) },
     run: {
       findUnique: vi.fn(async () => run),
@@ -291,6 +293,7 @@ function retryHarness(scenario: RetryScenario = {}) {
     error: overloaded().message,
   };
   const tx = {
+    $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
     routine: {
       updateMany: vi.fn(async () => ({
         count: scenario.pausedBeforeCreate || scenario.archivedBeforeCreate ? 0 : 1,
@@ -321,7 +324,7 @@ function retryHarness(scenario: RetryScenario = {}) {
       findFirst: vi.fn(async ({ select }: { select: { id?: boolean } }) =>
         select.id
           ? scenario.laterRun ||
-            (scenario.laterRunBeforeCreate && prisma.$transaction.mock.calls.length > 0)
+            (scenario.laterRunBeforeCreate && prisma.$transaction.mock.calls.length > 1)
             ? { id: "run-later" }
             : null
           : { bot: { notifyOnFinish: true }, thread: { groupId: null } },
@@ -384,7 +387,6 @@ describe("running a routine retry", () => {
 
       expect(send).toHaveBeenCalledTimes(failure === "delivery" ? 2 : 1);
       expect(enqueue).not.toHaveBeenCalled();
-      expect(prisma.$transaction).not.toHaveBeenCalled();
     },
   );
 
@@ -396,11 +398,12 @@ describe("running a routine retry", () => {
   ] satisfies Array<[string, RetryScenario]>)(
     "notifies when the retry is abandoned because it is %s",
     async (_label, scenario) => {
-      const { executor, send, prisma } = retryHarness(scenario);
+      const { executor, send, enqueue, tx } = retryHarness(scenario);
 
       await executor.retryRoutineRun("run-1");
 
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+      expect(tx.run.create).not.toHaveBeenCalled();
       expect(send).toHaveBeenCalledExactlyOnceWith(
         {
           kind: "failure",
@@ -565,11 +568,11 @@ describe("running a routine retry", () => {
   ] satisfies Array<[string, RetryScenario]>)(
     "skips the retry when %s",
     async (_label, scenario) => {
-      const { executor, prisma, enqueue } = retryHarness(scenario);
+      const { executor, tx, enqueue } = retryHarness(scenario);
 
       await executor.retryRoutineRun("run-1");
 
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(tx.run.create).not.toHaveBeenCalled();
       expect(enqueue).not.toHaveBeenCalled();
     },
   );
@@ -603,10 +606,9 @@ describe("running a routine retry", () => {
   });
 
   it("removes the queued retry when it cannot be handed to the job queue", async () => {
-    const { executor, prisma, tx } = retryHarness({ enqueueFails: true });
+    const { executor, tx } = retryHarness({ enqueueFails: true });
 
     await expect(executor.retryRoutineRun("run-1")).rejects.toThrow("queue down");
-    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(tx.run.deleteMany).toHaveBeenCalledWith({
       where: { id: "run-2", status: "queued" },
     });
@@ -616,14 +618,13 @@ describe("running a routine retry", () => {
   });
 
   it("preserves the task when reconciliation started the retry before enqueue failed", async () => {
-    const { executor, prisma, tx } = retryHarness({
+    const { executor, tx } = retryHarness({
       enqueueFails: true,
       retryStartedBeforeCleanup: true,
     });
 
     await expect(executor.retryRoutineRun("run-1")).rejects.toThrow("queue down");
 
-    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(tx.run.deleteMany).toHaveBeenCalledWith({
       where: { id: "run-2", status: "queued" },
     });

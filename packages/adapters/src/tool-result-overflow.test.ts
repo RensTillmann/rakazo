@@ -95,6 +95,18 @@ describe("ToolResultOverflowStore", () => {
     expect(store.read("run", ref, 0, 100)).toContain("Only 6 of 18 original characters retained");
     expect(store.read("run", ref, 0, 100)).not.toContain("FINAL");
   });
+  it("restores bounded evidence and original reference allocation after a process restart", () => {
+    const first = new ToolResultOverflowStore(100, 200);
+    const ref = first.keep("run", "exact retained middle and final");
+    const snapshot = JSON.parse(JSON.stringify(first.snapshot("run")));
+    const restarted = new ToolResultOverflowStore(100, 200);
+    restarted.restore("run", snapshot);
+    expect(restarted.read("run", ref, 0, 100)).toBe("exact retained middle and final");
+    expect(restarted.keep("run", "next original result")).toBe("r2");
+    expect(restarted.read("other-run", ref, 0, 100)).toContain("No kept");
+    expect(() => restarted.restore("run", { seq: 1, results: [["r2", { text: "wrong", originalChars: 5 }]] }))
+      .toThrow("Invalid continuation");
+  });
 });
 
 describe("read_tool_result", () => {

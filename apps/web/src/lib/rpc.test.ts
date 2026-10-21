@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearSpaceSelection,
   createSpaceRpc,
+  readFleetMaintenance,
   rpc,
   rpcForSpace,
   selectedSpaceId,
   selectSpace,
+  sendFleetMaintenance,
 } from "./rpc.js";
 
 afterEach(() => {
@@ -145,5 +147,59 @@ describe("space-bound clients", () => {
   it("reuses one client per space", () => {
     expect(rpcForSpace("space-a")).toBe(rpcForSpace("space-a"));
     expect(rpcForSpace("space-a")).not.toBe(rpcForSpace("space-b"));
+  });
+});
+
+describe("maintenance HTTP protocol", () => {
+  const snapshot = {
+    state: { active: true, revision: 4 },
+    status: {
+      phase: "paused",
+      activeRuns: 0,
+      activeEffects: 0,
+      pendingRuns: 2,
+      issues: [],
+    },
+  };
+
+  it("reads effective quiescence while preserving pending work", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(snapshot)));
+    expect(await readFleetMaintenance(null)).toEqual(snapshot);
+  });
+
+  it.each([
+    { state: snapshot.state },
+    { ...snapshot, state: { active: false, revision: 4 } },
+    { ...snapshot, state: { active: true, revision: -1 } },
+    { ...snapshot, status: { ...snapshot.status, activeRuns: 1 } },
+    { ...snapshot, status: { ...snapshot.status, activeEffects: 1 } },
+    { ...snapshot, status: { ...snapshot.status, pendingRuns: -1 } },
+    { ...snapshot, status: { ...snapshot.status, pendingRuns: 0.5 } },
+    { ...snapshot, status: { ...snapshot.status, phase: "running" } },
+    { ...snapshot, status: { ...snapshot.status, issues: [42] } },
+  ])("rejects unavailable or contradictory status %j", async (body) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(body)));
+    await expect(readFleetMaintenance(null)).rejects.toThrow("Fleet status unavailable");
+  });
+
+  it("requires a valid command acknowledgement instead of treating any HTTP 200 as success", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({})));
+    await expect(sendFleetMaintenance(null, {
+      requestId: "pause",
+      action: "enter",
+      expectedRevision: 4,
+    })).rejects.toThrow();
+  });
+
+  it("accepts a durable replay acknowledgement", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      state: snapshot.state,
+      replayed: true,
+    })));
+    await expect(sendFleetMaintenance(null, {
+      requestId: "pause",
+      action: "enter",
+      expectedRevision: 3,
+    })).resolves.toBeUndefined();
   });
 });

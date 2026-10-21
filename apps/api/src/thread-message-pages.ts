@@ -189,9 +189,11 @@ export async function isBackgroundRun(
  */
 export function shouldForwardPeerThreadEvent(event: {
   type: string;
-  payload: { blocks?: unknown };
+  payload: { blocks?: unknown; status?: unknown };
 }): boolean {
   if (
+    (event.type === "run.checkpointed" &&
+      (event.payload.status === "maintenance_paused" || event.payload.status === "queued")) ||
     event.type === "run.completed" ||
     event.type === "run.failed" ||
     event.type === "run.cancelled" ||
@@ -225,9 +227,11 @@ export function shouldForwardPeerThreadEvent(event: {
  */
 export function shouldForwardBackgroundThreadEvent(event: {
   type: string;
-  payload: { blocks?: unknown };
+  payload: { blocks?: unknown; status?: unknown };
 }): boolean {
   if (
+    (event.type === "run.checkpointed" &&
+      (event.payload.status === "maintenance_paused" || event.payload.status === "queued")) ||
     event.type === "run.completed" ||
     event.type === "run.failed" ||
     event.type === "run.cancelled" ||

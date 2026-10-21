@@ -265,6 +265,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development workflow and test m
 - [Mobile releases](./docs/mobile-release.md)
 - [Performance testing](./docs/performance.md)
 - [Fleet management](./docs/fleet-management.md)
+- [Global graceful Fleet pause](./docs/maintenance-admission.md)
 
 ## Contributing
 

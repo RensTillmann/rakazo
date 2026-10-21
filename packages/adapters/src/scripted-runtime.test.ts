@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent } from "@rakazo/adapter-kit";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { inferScript, ScriptedAgentRuntime } from "./scripted-runtime.js";
 
@@ -311,5 +311,35 @@ describe("inferScript save_shared_memory", () => {
         complete: true,
       },
     ]);
+  });
+});
+
+describe("scripted maintenance continuation", () => {
+  it("retains the exact unexecuted event when the consumer fence closes after the producer gate", async () => {
+    const input = {
+      botId: "bot", runId: "scripted-held", threadId: "thread", prompt: "Original input",
+      instructions: "", history: [], tools: [], model: { provider: "scripted", id: "scripted" },
+      beforeExecution: async () => true,
+      script: [{ assistant: "Already shown", toolCalls: [{ name: "write_file", args: { path: "exact.txt", content: "exact bytes" } }], complete: true }],
+    } as AgentRunRequest;
+    const paused: AgentRuntimeEvent[] = [];
+    for await (const event of new ScriptedAgentRuntime().run(input)) {
+      paused.push(event);
+      if (event.type === "tool") event.deferForMaintenance?.();
+    }
+    const original = paused.find((event) => event.type === "tool");
+    const checkpoint = paused.find((event) => event.type === "checkpoint");
+    if (checkpoint?.type !== "checkpoint" || original?.type !== "tool") throw new Error("Missing continuation");
+    const resumed: AgentRuntimeEvent[] = [];
+    for await (const event of new ScriptedAgentRuntime().run({
+      ...input, prompt: "New history must not reconstruct this script", script: [{ assistant: "Wrong", complete: true }],
+      resumeFromCheckpoint: checkpoint.blob,
+    })) resumed.push(event);
+    expect(resumed.filter((event) => event.type === "text")).toEqual([]);
+    expect(resumed.find((event) => event.type === "tool")).toMatchObject({
+      name: original.name, args: original.args, executionId: original.executionId,
+    });
+    expect(resumed.some((event) => event.type === "checkpoint")).toBe(false);
+    expect(resumed.at(-1)).toEqual({ type: "done", text: "Already shown" });
   });
 });

@@ -645,7 +645,22 @@ describeWithDatabase("API authorization and resource isolation", () => {
   it("does not deliver a push token after its session expires without a request", async () => {
     const email = `push-expired-${stamp}@rakazo.test`;
     const phone = await signup(app, email, "Push Expired");
-    const userId = (await rpc<Actor>(app, phone, "me")).userId;
+    const actor = await rpc<Actor>(app, phone, "me");
+    const userId = actor.userId;
+    const bot = await rpc<Bot>(app, phone, "bots/create", botInput("Expired Push"));
+    const thread = await handles.prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const task = await handles.prisma.task.create({
+      data: {
+        spaceId: actor.spaceId, userId, botId: bot.id, threadId: thread.id,
+        prompt: "Notify after completion", status: "completed",
+      },
+    });
+    const run = await handles.prisma.run.create({
+      data: {
+        spaceId: actor.spaceId, userId, botId: bot.id, threadId: thread.id,
+        taskId: task.id, status: "completed", trigger: "user",
+      },
+    });
     const token = "ExponentPushToken[expired-session]";
     await rpc(app, phone, "notifications/registerPush", { token });
     await handles.prisma.session.updateMany({
@@ -655,17 +670,18 @@ describeWithDatabase("API authorization and resource isolation", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     try {
-      const push = new ExpoPushProvider(dataDir, (sessionId) =>
+      const push = new ExpoPushProvider(dataDir, handles.prisma, (sessionId) =>
         pushSessionExpiresAt(handles.prisma, sessionId),
       );
       await expect(
         push.deliver(
-          { kind: "completion", title: "done", body: "secret", botId: "b", threadId: "t" },
+          { kind: "completion", title: "done", body: "secret", botId: bot.id, threadId: thread.id },
           {
             operationId: "n",
             traceId: "n",
-            spaceId: "w",
+            spaceId: actor.spaceId,
             userId,
+            runId: run.id,
             signal: new AbortController().signal,
           },
         ),

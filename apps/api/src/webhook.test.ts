@@ -214,6 +214,21 @@ describe("GitHub webhook signatures", () => {
 });
 
 describe("inbound webhook HTTP route", () => {
+  it("retains structured authenticated delivery data for resume authority checks", async () => {
+    const deps = createDeps();
+    const payload = { source: "fleet-gate", event: "case.ready", items: [{ n: 42 }] };
+    const response = await mount(deps).request("/api/v1/bots/bot-1/webhook", {
+      method: "POST",
+      headers: { authorization: `Bearer ${SECRET}`, "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    expect(response.status).toBe(200);
+    expect(deps.sendUserMessage).toHaveBeenCalledWith(expect.objectContaining({
+      inboundDelivery: { source: "webhook", payload },
+      trigger: "webhook",
+    }));
+  });
+
   it("rejects missing authorization", async () => {
     const deps = createDeps();
     const app = mount(deps);

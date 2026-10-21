@@ -13,6 +13,7 @@ import {
   MessageBlock as MessageBlockSchema,
 } from "@rakazo/contracts";
 import {
+  ACTIVE_RUN_STATUSES,
   askAnswerWithEditedDraft,
   batchedConnectorActions,
   blocksToAgentHistoryText,
@@ -37,6 +38,7 @@ import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
 import { findOpenDuplicateQuestion, pendingAskBlock } from "./decisions.js";
+import { lockMaintenanceAdmission } from "./maintenance.js";
 import {
   assertRunCanWriteHistory,
   assertRunIsCancelled,
@@ -296,6 +298,8 @@ export interface SendUserMessageInput {
   };
   /** The routine an inbound delivery runs, when it runs exactly one; its run behaves as a routine run. */
   routineId?: string;
+  /** Authenticated transport data for authority checks; never parse authority from prompt text. */
+  inboundDelivery?: { source: "webhook"; payload: Record<string, unknown> };
 }
 
 export interface SendUserMessageResult {
@@ -365,7 +369,7 @@ export async function clearThread(
         spaceId: input.spaceId,
         threadId: input.threadId,
         ...(input.groupId ? {} : { botId: input.botId }),
-        status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+        status: { in: [...ACTIVE_RUN_STATUSES] },
       },
       select: { id: true, taskId: true },
     });
@@ -572,6 +576,7 @@ export async function sendUserMessage(
           callId: callIdFromClientNonce(message.clientNonce),
           // Marks a webhook, GitHub or messaging wake as automatic on the live event too.
           inbound: inboundSourceFromClientNonce(message.clientNonce),
+          ...(input.inboundDelivery ? { inboundDelivery: input.inboundDelivery } : {}),
         },
       });
       return { message, task, run, busy, event };
@@ -599,6 +604,8 @@ export async function claimSteering(
   input: ClaimSteeringInput,
 ): Promise<ClaimedSteeringMessage[]> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // Serialize consumption, not receipt: paused inputs remain durable and ordered.
+    if (!(await lockMaintenanceAdmission(tx)).admitted) return [];
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
     const run = await tx.run.findFirst({
       where: {
@@ -798,6 +805,7 @@ async function commitAnswerRunInput(
   // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
   // concurrent clear cannot deadlock against this transaction.
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM runs WHERE id = ${input.runId} FOR UPDATE`;
   const run = await tx.run.findFirst({
     where: {
       id: input.runId,
@@ -877,6 +885,20 @@ async function commitAnswerRunInput(
 
   if (approvalAsk) {
     if (!pendingAsk.actions?.some((action) => action.id === approvalAnswer)) return null;
+    const currentCard = await tx.message.findFirst({
+      where: {
+        threadId: input.threadId,
+        runId: input.runId,
+        role: "bot",
+        blocks: { array_contains: [{ kind: "ask" }] },
+      },
+      orderBy: { seq: "desc" },
+      select: { id: true },
+    });
+    if (currentCard?.id !== input.messageId) return null;
+    // Hold the exact effect binding through the decision write. A stale card cannot
+    // overwrite a concurrent denial, completion, or changed approval.
+    await tx.$queryRaw`SELECT id FROM external_effects WHERE id = ${pendingAsk.approvalEffectId} FOR UPDATE`;
     approvalEffect = await tx.externalEffect.findFirst({
       where: {
         id: pendingAsk.approvalEffectId,
@@ -1912,7 +1934,9 @@ export async function createPendingSteeringRun(
   // One origin per continuation so a group channel and the owner's private chat are not answered
   // together. The app and the owner's direct line are one private conversation.
   const origin = steeringOrigin(pending[0]!);
-  const batch = pending.filter((item) => steeringOrigin(item) === origin);
+  // Webhook authority belongs to one delivery, never a merged prompt whose last
+  // source hides earlier inputs. Preserve their original order across pause/resume.
+  const batch = origin === "webhook" ? [pending[0]!] : pending.filter((item) => steeringOrigin(item) === origin);
   const source = batch.at(-1)!;
   const modelPin = continuationModelPin(batch);
   const routineId =

@@ -428,9 +428,17 @@ msgstr "active"
 msgid "Active"
 msgstr "Active"
 
+#: src/components/FleetPauseControls.tsx
+msgid "Active effects:"
+msgstr "Active effects:"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Active model"
 msgstr "Active model"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Active runs:"
+msgstr "Active runs:"
 
 #: src/components/computer/TerminalApp.tsx
 #: src/pages/Shell.tsx
@@ -641,6 +649,10 @@ msgstr "Allowed once"
 #: src/pages/Auth.tsx
 msgid "Already have an account?"
 msgstr "Already have an account?"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Already recorded."
+msgstr "Already recorded."
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
@@ -1086,6 +1098,8 @@ msgstr "Can't read images"
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/FlagMessageDialog.tsx
+#: src/components/FleetPauseControls.tsx
+#: src/components/FleetRecoveryList.tsx
 #: src/components/markdown-link-prompt.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/Artifacts.tsx
@@ -1193,6 +1207,10 @@ msgstr "Check your email"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Checking computer setup…"
 msgstr "Checking computer setup…"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Checking Fleet status…"
+msgstr "Checking Fleet status…"
 
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
@@ -1436,6 +1454,10 @@ msgstr "Configured: {headerConfiguredLabel}"
 #: src/pages/McpServersOverlay.tsx
 msgid "Confirm delete"
 msgstr "Confirm delete"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Confirm force stop"
+msgstr "Confirm force stop"
 
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Auth.tsx
@@ -2573,6 +2595,14 @@ msgstr "Every month"
 msgid "Every week"
 msgstr "Every week"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Evidence found"
+msgstr "Evidence found"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Evidence:"
+msgstr "Evidence:"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor token"
@@ -2731,9 +2761,21 @@ msgstr "Finished."
 msgid "Finishing MCP connection…"
 msgstr "Finishing MCP connection…"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Finishing on its own"
+msgstr "Finishing on its own"
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
 msgstr "Flag unexpected actions"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet changed. Review the refreshed status before choosing again."
+msgstr "Fleet changed. Review the refreshed status before choosing again."
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet control"
+msgstr "Fleet control"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Fleet management"
@@ -2742,6 +2784,30 @@ msgstr "Fleet management"
 #: src/lib/answered-by-label.ts
 msgid "fleet service"
 msgstr "fleet service"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet status unavailable"
+msgstr "Fleet status unavailable"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet: {phase}"
+msgstr "Fleet: {phase}"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet: Outcome unknown"
+msgstr "Fleet: Outcome unknown"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet: Status unavailable"
+msgstr "Fleet: Status unavailable"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Force stop interrupts active work instead of waiting for a safe checkpoint. Progress may be incomplete. Already-started effects cannot be undone and their outcome may remain unknown. Fleet will be paused until you resume it."
+msgstr "Force stop interrupts active work instead of waiting for a safe checkpoint. Progress may be incomplete. Already-started effects cannot be undone and their outcome may remain unknown. Fleet will be paused until you resume it."
+
+#: src/components/FleetPauseControls.tsx
+msgid "Force stop…"
+msgstr "Force stop…"
 
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
@@ -2904,6 +2970,10 @@ msgstr "How often"
 msgid "How to check"
 msgstr "How to check"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "I checked it…"
+msgstr "I checked it…"
+
 #: src/pages/Shell.tsx
 msgid "I’m done"
 msgstr "I’m done"
@@ -3029,6 +3099,19 @@ msgstr "Isolated preview — no access to your account"
 msgid "Issue"
 msgstr "Issue"
 
+#. placeholder {0}: result.status
+#: src/components/FleetRecoveryList.tsx
+msgid "It changed meanwhile (now {0}); nothing was overwritten."
+msgstr "It changed meanwhile (now {0}); nothing was overwritten."
+
+#: src/components/FleetRecoveryList.tsx
+msgid "It did not take effect"
+msgstr "It did not take effect"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "It took effect"
+msgstr "It took effect"
+
 #: src/pages/Shell.tsx
 msgid "Its bots and groups are kept and leave the section."
 msgstr "Its bots and groups are kept and leave the section."
@@ -3082,6 +3165,10 @@ msgstr "Last check {0}: changed"
 #: src/pages/RoutineEditor.tsx
 msgid "Last check {0}: no changes"
 msgstr "Last check {0}: no changes"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Last known: {phase}"
+msgstr "Last known: {phase}"
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
@@ -3196,6 +3283,10 @@ msgstr "Loading rules…"
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
 msgstr "Loading tools…"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Loading unfinished operations…"
+msgstr "Loading unfinished operations…"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Loading voice providers…"
@@ -3452,6 +3543,10 @@ msgstr "minutes"
 msgid "Missed call"
 msgstr "Missed call"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Missing:"
+msgstr "Missing:"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
@@ -3572,6 +3667,10 @@ msgstr "Name this group"
 #: src/pages/RoutineEditor.tsx
 msgid "Name this routine"
 msgstr "Name this routine"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Needs attention"
+msgstr "Needs attention"
 
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
@@ -3795,6 +3894,10 @@ msgstr "Not in the plugin catalog"
 msgid "Not now"
 msgstr "Not now"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Not recorded."
+msgstr "Not recorded."
+
 #: src/pages/Shell.tsx
 msgid "Not sent — @{unsentTo} doesn't see this reply"
 msgstr "Not sent — @{unsentTo} doesn't see this reply"
@@ -3989,6 +4092,18 @@ msgstr "Original message unavailable"
 msgid "Other model…"
 msgstr "Other model…"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Outcome unknown"
+msgstr "Outcome unknown"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Outcome unknown. Refresh status or retry the same request."
+msgstr "Outcome unknown. Refresh status or retry the same request."
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Outcome unknown. The list below shows the current state."
+msgstr "Outcome unknown. The list below shows the current state."
+
 #: src/pages/Board.tsx
 msgid "Owner"
 msgstr "Owner"
@@ -4043,9 +4158,24 @@ msgstr "Paste your API key"
 msgid "Paste your API key, then test again."
 msgstr "Paste your API key, then test again."
 
+#: src/components/FleetPauseControls.tsx
+msgid "Pause Fleet"
+msgstr "Pause Fleet"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Pause new Fleet work while active runs reach a safe checkpoint. Resume is always manual."
+msgstr "Pause new Fleet work while active runs reach a safe checkpoint. Resume is always manual."
+
+#: src/components/FleetPauseControls.tsx
+#: src/lib/roster-status.ts
+#: src/pages/ActivityList.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Paused"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Pausing"
+msgstr "Pausing"
 
 #: src/components/call/VoiceChatCard.tsx
 msgid "Phone call"
@@ -4167,6 +4297,10 @@ msgstr "Questions and takeovers always notify you"
 msgid "Queued"
 msgstr "Queued"
 
+#: src/components/FleetPauseControls.tsx
+msgid "Queued/held runs:"
+msgstr "Queued/held runs:"
+
 #: src/pages/Shell.tsx
 msgid "Quote"
 msgstr "Quote"
@@ -4212,6 +4346,24 @@ msgstr "Reconnect OAuth"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Reconnecting"
+
+#. placeholder {0}: item.proposed.status
+#: src/components/FleetRecoveryList.tsx
+msgid "Record as {0}"
+msgstr "Record as {0}"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Record my check"
+msgstr "Record my check"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Record what you verified at the destination. This does not resume or retry anything."
+msgstr "Record what you verified at the destination. This does not resume or retry anything."
+
+#. placeholder {0}: result.status
+#: src/components/FleetRecoveryList.tsx
+msgid "Recorded. It is now {0}."
+msgstr "Recorded. It is now {0}."
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -4279,6 +4431,10 @@ msgstr "Refresh"
 #: src/components/ReplyReview.tsx
 msgid "Refresh customer context"
 msgstr "Refresh customer context"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Refresh status"
+msgstr "Refresh status"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refresh view"
@@ -4430,6 +4586,10 @@ msgstr "Reply draft"
 msgid "Replying to {0}"
 msgstr "Replying to {0}"
 
+#: src/components/FleetPauseControls.tsx
+msgid "Request rejected. Refresh status before choosing again."
+msgstr "Request rejected. Refresh status before choosing again."
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr "Research & writing"
@@ -4505,6 +4665,10 @@ msgstr "Restored"
 msgid "Restoring your workspace"
 msgstr "Restoring your workspace"
 
+#: src/components/FleetPauseControls.tsx
+msgid "Resume Fleet"
+msgstr "Resume Fleet"
+
 #: src/pages/GroupPanel.tsx
 msgid "Resume room"
 msgstr "Resume room"
@@ -4521,6 +4685,10 @@ msgstr "Retry"
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "Retry now"
 msgstr "Retry now"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Retry request"
+msgstr "Retry request"
 
 #: src/pages/Shell.tsx
 msgid "Retry screen"
@@ -4585,6 +4753,10 @@ msgstr "Routines"
 msgid "Routines that run while you're away"
 msgstr "Routines that run while you're away"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "run"
+msgstr "run"
+
 #: src/components/LiveActivityModal.tsx
 msgid "Run"
 msgstr "Run"
@@ -4605,6 +4777,7 @@ msgstr "Run time must be in the future."
 msgid "running"
 msgstr "running"
 
+#: src/components/FleetPauseControls.tsx
 #: src/pages/ActivityList.tsx
 msgid "Running"
 msgstr "Running"
@@ -5101,6 +5274,10 @@ msgstr "Start {trialDays}-day free trial"
 msgid "Start recording"
 msgstr "Start recording"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "started"
+msgstr "started"
+
 #: src/pages/ActivityList.tsx
 msgid "Starting"
 msgstr "Starting"
@@ -5130,6 +5307,10 @@ msgstr "Status needs attention"
 #: src/components/UsageBars.tsx
 msgid "Status refresh unavailable"
 msgstr "Status refresh unavailable"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Status unavailable. Last known state is stale; new actions are disabled."
+msgstr "Status unavailable. Last known state is stale; new actions are disabled."
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Steps"
@@ -5555,6 +5736,14 @@ msgstr "Unavailable"
 msgid "Undo"
 msgstr "Undo"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Unfinished operations"
+msgstr "Unfinished operations"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Unfinished operations unavailable."
+msgstr "Unfinished operations unavailable."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr "Uninstall"
@@ -5797,6 +5986,10 @@ msgstr "Weekdays"
 #: src/pages/shell/dialogs.tsx
 msgid "What about its memories?"
 msgstr "What about its memories?"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "What did you check?"
+msgstr "What did you check?"
 
 #: src/pages/shell/message-cards.tsx
 msgid "What do you want me on first?"

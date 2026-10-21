@@ -127,8 +127,14 @@ export function activityRunStatus(events: readonly ProductEvent[], loaded: strin
     if (type === "run.completed") return "finished";
     if (type === "run.failed") return "failed";
     if (type === "run.cancelled") return "stopped";
+    if (type === "run.started") return "running";
+    if (type === "run.checkpointed") {
+      const status = events[index]?.payload.status;
+      if (status === "maintenance_paused") return "paused";
+      if (status === "queued") return "queued";
+    }
   }
-  return loaded;
+  return loaded === "maintenance_paused" ? "paused" : loaded;
 }
 
 /** "41,802 in (40,100 cached) / 155 out": provider input excludes cache reads and writes, so add them back. */

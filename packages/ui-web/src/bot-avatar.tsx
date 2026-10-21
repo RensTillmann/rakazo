@@ -1,10 +1,10 @@
 import type { GrokColorDef } from "@rakazo/core";
 import {
-  ACTIVE_RUN_STATUSES,
   avatarIdentitySeed,
   DEFAULT_GROK_BOT_COLOR,
   GROK_BOT_COLORS,
   GROK_COLOR_LIST,
+  isExecutingRunStatus,
   organicAvatarPath,
   resolvePersonaColorDef,
   SHIPPED_BOT_AVATAR_CENTER,
@@ -104,7 +104,7 @@ export const BotAvatar = memo(function BotAvatar({
   variant,
 }: BotAvatarProps) {
   const id = useId().replace(/[^a-zA-Z0-9-_]/g, "");
-  const isWorking = ACTIVE_RUN_STATUSES.some((s) => s === status);
+  const isWorking = isExecutingRunStatus(status);
   const preferredVariant = useAvatarStyle();
 
   const parsed = useMemo(() => parseBotAvatar(color, identity), [color, identity]);

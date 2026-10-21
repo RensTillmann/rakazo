@@ -8,8 +8,10 @@ import { MediaGenerationError } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { messageBlockForArtifact } from "@rakazo/core";
 import type { ExternalEffect, PrismaClient } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db";
 import { z } from "zod";
 import { mediaPromptSchema, validateGeneratedMedia } from "./media-generation-provider.js";
+import { MaintenanceBoundary } from "./pi-maintenance.js";
 
 const JOB_KIND = "media_generation_job";
 const savedJob = z.object({
@@ -106,7 +108,10 @@ export async function generateMediaFromTool(options: {
         // A unique slot makes the per-run cap durable even across concurrent calls/restarts.
         for (let slot = 0; slot < 2; slot++) {
           try {
-            reservation = await prisma.externalEffect.create({
+            reservation = await prisma.$transaction(async (tx) => {
+              const admission = await lockMaintenanceAdmission(tx);
+              if (!admission.admitted) throw new MaintenanceBoundary(admission.revision);
+              return tx.externalEffect.create({
               data: {
                 spaceId: run.spaceId,
                 runId: run.id,
@@ -120,6 +125,7 @@ export async function generateMediaFromTool(options: {
                 },
                 result: { provider: provider.id },
               },
+              });
             });
             break;
           } catch (error) {
@@ -215,6 +221,7 @@ export async function generateMediaFromTool(options: {
     await options.publish(attached.block, reservation.id, attached.artifactId);
     return { status: "completed", artifactId: attached.artifactId };
   } catch (error) {
+    if (error instanceof MaintenanceBoundary) throw error;
     context.signal.throwIfAborted();
     return {
       error:

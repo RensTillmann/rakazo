@@ -131,6 +131,52 @@ describe("MCP transport seam", () => {
     }
   });
 
+  it("keeps concurrent invocation identities isolated and retries the original provider receipt", async () => {
+    const receipts = new Map<string, string>();
+    let release!: () => void;
+    const bothEntered = new Promise<void>((resolve) => { release = resolve; });
+    let calls = 0;
+    const session = new McpSession();
+    try {
+      await session.connectRemote({
+        url: "https://mcp.example.test/mcp",
+        headerPolicy: { headers: { "X-Rakazo-Invocation-Id": "configured-spoof" } },
+        network: { ...TEST_NETWORK, fetch: async (input, init) => {
+          const request = new Request(input, init);
+          if (request.method !== "POST") return new Response(null, { status: 405 });
+          const message = await request.json();
+          if (message.method === "initialize") {
+            expect(request.headers.has("x-rakazo-invocation-id")).toBe(false);
+            return Response.json({ jsonrpc: "2.0", id: message.id, result: {
+              protocolVersion: "2025-11-25", capabilities: { tools: {} },
+              serverInfo: { name: "receipt-server", version: "1" },
+            } });
+          }
+          if (message.method !== "tools/call") return new Response(null, { status: 202 });
+          const id = request.headers.get("x-rakazo-invocation-id");
+          if (!id || id === "configured-spoof") throw new Error("Trusted invocation identity missing");
+          calls += 1;
+          if (calls === 2) release();
+          await bothEntered;
+          if (!receipts.has(id)) receipts.set(id, `receipt-${receipts.size + 1}`);
+          return Response.json({ jsonrpc: "2.0", id: message.id,
+            result: { content: [{ type: "text", text: receipts.get(id) }] } });
+        } },
+      });
+      const [first, second] = await Promise.all([
+        session.callTool("write", { value: "identical" }, { invocationId: "first-call" }),
+        session.callTool("write", { value: "identical" }, { invocationId: "second-call" }),
+      ]);
+      expect(first).not.toEqual(second);
+      expect(receipts.size).toBe(2);
+      expect(await session.callTool("write", { value: "identical" }, { invocationId: "first-call" })).toEqual(first);
+      expect(receipts.size).toBe(2);
+    } finally {
+      release();
+      await session.close();
+    }
+  });
+
   it.each([
     ["https://mcp.example.test/mcp", "http://localhost:8123"],
     ["https://mcp.example.test/mcp", "http://127.0.0.1:8123"],

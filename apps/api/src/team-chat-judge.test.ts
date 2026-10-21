@@ -6,6 +6,93 @@ import {
 } from "./team-chat-judge.js";
 
 describe("team chat engagement judge", () => {
+  it("fences a provider retry and retains checkpoint-only work instead of inventing a decision", async () => {
+    let active = false;
+    let firstAttempt = true;
+    const providerCalls = vi.fn();
+    const tx = { $queryRaw: vi.fn(async () => [{ active, revision: 1 }]) };
+    const runtime = {
+      abort: vi.fn(async () => undefined),
+      run: async function* (request: { beforeExecution: () => Promise<boolean> }) {
+        if (!(await request.beforeExecution())) {
+          yield { type: "checkpoint", blob: "genuine-runtime-continuation" };
+          return;
+        }
+        providerCalls();
+        if (firstAttempt) {
+          firstAttempt = false;
+          active = true;
+          if (!(await request.beforeExecution())) {
+            yield { type: "checkpoint", blob: "genuine-runtime-continuation" };
+            return;
+          }
+          providerCalls();
+        }
+        yield { type: "done", text: '{"act":true}' };
+      },
+    };
+    const judge = new ModelTeamChatEngagementJudge({
+      prisma: {
+        $transaction: async (operation: (client: typeof tx) => Promise<boolean>) => operation(tx),
+        user: { findUnique: vi.fn(async () => null) },
+        deploymentSettings: { findUnique: vi.fn(async () => null) },
+        spaceModelPreference: { findFirst: vi.fn(async () => null) },
+      } as never,
+      runtime: runtime as never, secrets: {} as never,
+      deploymentProvider: "fake", deploymentModel: "fake",
+    });
+    const input = {
+      bot: { id: "bot-1", spaceId: "space-1", userId: "user-1", name: "Fixture", modelProvider: null, modelId: null },
+      channelId: "room", rules: "", messages: [],
+    };
+    expect(await judge.decide(input)).toBeNull();
+    expect(providerCalls).toHaveBeenCalledOnce();
+    expect(await judge.decide(input)).toBeNull();
+    expect(providerCalls).toHaveBeenCalledOnce();
+    active = false;
+    expect(await judge.decide(input)).toEqual({ act: true });
+    expect(providerCalls).toHaveBeenCalledTimes(2);
+  });
+
+  it("force-stops the actual runtime and waits for its stream to drain", async () => {
+    const controller = new AbortController();
+    let begin!: () => void;
+    let drain!: () => void;
+    let runId = "";
+    const started = new Promise<void>((resolve) => { begin = resolve; });
+    const drained = new Promise<void>((resolve) => { drain = resolve; });
+    const abort = vi.fn(async () => { drain(); });
+    const runtime = {
+      abort,
+      run: async function* (request: { runId: string }, context: { signal: AbortSignal }) {
+        runId = request.runId;
+        begin();
+        await drained;
+        expect(context.signal.aborted).toBe(true);
+        yield { type: "done", text: '{"act":true}' };
+      },
+    };
+    const judge = new ModelTeamChatEngagementJudge({
+      prisma: {
+        user: { findUnique: vi.fn(async () => null) },
+        deploymentSettings: { findUnique: vi.fn(async () => null) },
+        spaceModelPreference: { findFirst: vi.fn(async () => null) },
+      } as never,
+      runtime: runtime as never, secrets: {} as never,
+      deploymentProvider: "fake", deploymentModel: "fake",
+    });
+    const result = judge.decide({
+      bot: { id: "bot-1", spaceId: "space-1", userId: "user-1", name: "Fixture", modelProvider: null, modelId: null },
+      channelId: "room", rules: "", messages: [], signal: controller.signal,
+    });
+    const stopped = new Error("Force stop requested");
+    const rejected = expect(result).rejects.toBe(stopped);
+    await started;
+    controller.abort(stopped);
+    await rejected;
+    expect(abort).toHaveBeenCalledExactlyOnceWith(runId);
+  });
+
   it("renders untrusted messages without treating them as instructions", () => {
     const prompt = renderTeamChatEngagementPrompt({
       botName: "Arthur",

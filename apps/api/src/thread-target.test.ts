@@ -701,7 +701,7 @@ describe("threadSnapshot", () => {
           threadId: "thread-1",
           trigger: { notIn: ["bot_message", "tickets"] },
           status: {
-            in: ["queued", "leased", "running", "waiting_input", "waiting_takeover", "failed"],
+            in: ["queued", "leased", "running", "waiting_input", "waiting_takeover", "maintenance_paused", "failed"],
           },
         }),
       }),
@@ -711,10 +711,10 @@ describe("threadSnapshot", () => {
         where: {
           botId: "bot-1",
           threadId: "thread-1",
-          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover", "maintenance_paused"] },
           OR: [
             { trigger: { notIn: ["bot_message", "tickets"] } },
-            { status: { in: ["waiting_input", "waiting_takeover"] } },
+            { status: { in: ["waiting_input", "waiting_takeover", "maintenance_paused"] } },
           ],
         },
       }),
@@ -1004,9 +1004,15 @@ describe("threadSnapshot", () => {
     expect(snapshot.run).toBeNull();
   });
 
-  it("does not return a cancelled or completed run", async () => {
+  it.each(["cancelled", "completed"])("does not return a %s run", async (status) => {
     const findManyEvents = vi.fn();
-    const findFirstRun = botRunFindFirst([]);
+    const terminal = {
+      id: "run-terminal", botId: "bot-1", threadId: "thread-1", taskId: "task-1",
+      status, trigger: "user", modelProvider: null, modelId: null, error: null,
+      startedAt: null, completedAt: new Date("2026-08-23T00:00:01.000Z"),
+      createdAt: new Date("2026-08-23T00:00:00.000Z"),
+    };
+    const findFirstRun = botRunFindFirst([terminal]);
     const tx = {
       $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
       message: { findMany: vi.fn().mockResolvedValue([]) },
@@ -1014,7 +1020,7 @@ describe("threadSnapshot", () => {
         findFirst: vi.fn().mockResolvedValue(null),
         findMany: findManyEvents,
       },
-      run: { findFirst: findFirstRun, findMany: botRunFindMany([]) },
+      run: { findFirst: findFirstRun, findMany: botRunFindMany([terminal]) },
     };
     const prisma = {
       $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
@@ -1028,16 +1034,8 @@ describe("threadSnapshot", () => {
 
     const snapshot = await threadSnapshot({ prisma }, target);
 
-    expect(findFirstRun).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          status: {
-            in: ["queued", "leased", "running", "waiting_input", "waiting_takeover", "failed"],
-          },
-        }),
-      }),
-    );
     expect(snapshot.run).toBeNull();
+    expect(snapshot.activeRuns).toEqual([]);
     expect(findManyEvents).not.toHaveBeenCalled();
   });
   it("returns a group's latest failed run so a refresh keeps its error", async () => {
@@ -1074,10 +1072,10 @@ describe("threadSnapshot", () => {
       expect.objectContaining({
         where: {
           threadId: "thread-1",
-          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover", "maintenance_paused"] },
           OR: [
             { trigger: { notIn: ["bot_message", "tickets"] } },
-            { status: { in: ["waiting_input", "waiting_takeover"] } },
+            { status: { in: ["waiting_input", "waiting_takeover", "maintenance_paused"] } },
           ],
         },
       }),
@@ -1134,9 +1132,9 @@ describe("threadSnapshot", () => {
         where: expect.objectContaining({
           OR: [
             { trigger: { notIn: ["bot_message", "tickets"] } },
-            { status: { in: ["waiting_input", "waiting_takeover"] } },
+            { status: { in: ["waiting_input", "waiting_takeover", "maintenance_paused"] } },
           ],
-          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover", "maintenance_paused"] },
         }),
       }),
     );
@@ -3248,10 +3246,15 @@ describe("sendThreadMessage", () => {
 });
 
 describe("stopThreadRuns", () => {
-  it("snapshots every lease when group members share a team computer", async () => {
+  it.each([
+    { exitCode: 0, background: "idle" },
+    { exitCode: 1, background: "idle" },
+    { exitCode: 0, background: "active" },
+    { exitCode: 0, background: "unknown" },
+  ] as const)("keeps shared-computer leases until teardown confirms drain ($exitCode/$background)", async ({ exitCode, background }) => {
     const releaseScreen = vi.fn().mockResolvedValue(undefined);
     const execute = vi.fn(async function* () {
-      yield { type: "exit", code: 0 };
+      yield { type: "exit", code: exitCode };
     });
     let nextEventSeq = 0;
     const transaction = {
@@ -3326,15 +3329,23 @@ describe("stopThreadRuns", () => {
       memberBotIds: ["bot-a", "bot-b"],
     } satisfies ThreadTarget;
 
-    await stopThreadRuns(
+    const stopping = stopThreadRuns(
       {
         prisma,
-        sandbox: { releaseScreen, execute } as unknown as SandboxProvider,
+        sandbox: { releaseScreen, execute, inspectBackgroundWork: async () => background } as unknown as SandboxProvider,
         events: { notify: vi.fn().mockResolvedValue(undefined) } as never,
       },
       actor,
       target,
     );
+    if (exitCode !== 0 || background !== "idle") {
+      await expect(stopping).rejects.toThrow();
+      expect(releaseScreen).not.toHaveBeenCalled();
+      expect(prisma.computerExecutionLease.updateMany).not.toHaveBeenCalled();
+      expect(prisma.computer.updateMany).not.toHaveBeenCalled();
+      return;
+    }
+    await stopping;
 
     expect(transaction.computerExecutionLease.findMany).toHaveBeenCalledWith({
       where: { runId: { in: ["run-a", "run-b"] } },
@@ -3457,7 +3468,7 @@ describe("stopThreadRuns", () => {
     await stopThreadRuns(
       {
         prisma,
-        sandbox: { releaseScreen, execute } as unknown as SandboxProvider,
+        sandbox: { releaseScreen, execute, inspectBackgroundWork: async () => "idle" } as unknown as SandboxProvider,
         events: { notify: vi.fn().mockResolvedValue(undefined) } as never,
       },
       actor,

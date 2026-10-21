@@ -2951,6 +2951,26 @@ describe("mobile thread event reduction", () => {
     expect(repeated?.run).toBe(waiting?.run);
   });
 
+  it("keeps a maintenance checkpoint resumable without showing stale live progress", () => {
+    const progress = mobileMessage("progress:run-1", [{ kind: "progress", text: "working…" }], 1);
+    const initial: MobileSnapshot = {
+      ...snapshot([progress]),
+      run: { id: "run-1", status: "running" },
+      activeRuns: [{ id: "run-1", status: "running" }],
+    };
+    const paused = applyMobileThreadEvent(initial, {
+      type: "run.checkpointed", runId: "run-1", seq: 10,
+      payload: { status: "maintenance_paused" },
+    });
+    expect(paused?.run).toEqual({ id: "run-1", status: "maintenance_paused" });
+    expect(paused?.activeRuns).toEqual([paused?.run]);
+    expect(paused?.messages).toEqual([]);
+    const resumed = applyMobileThreadEvent(paused, {
+      type: "run.checkpointed", runId: "run-1", seq: 11, payload: { status: "queued" },
+    });
+    expect(resumed?.run).toEqual({ id: "run-1", status: "queued" });
+  });
+
   it("applies computer takeover requests as waiting_takeover", () => {
     const progress = mobileMessage("progress:run-1", [{ kind: "progress", text: "working…" }], 1);
     const initial: MobileSnapshot = {

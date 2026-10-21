@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { readFileSync } from "node:fs";
+import { isExecutingRunStatus } from "@rakazo/core";
 import type { ComponentType, ReactElement } from "react";
 import * as React from "react";
 import { act, memo, useCallback, useEffect, useState } from "react";
@@ -35,7 +36,7 @@ function measure(before: boolean) {
     previewSnippet: (text: string) => text,
     formatThreadTime: () => "",
     botTag: () => "",
-    ACTIVE_RUN_STATUSES: ["running"],
+    isExecutingRunStatus,
     mobileBotAvatarPresentation: () => {
       renders++;
       return { kind: "color", color: "gray" };
@@ -189,7 +190,7 @@ it.each(["midnight", "focus", "foreground"])(
       previewSnippet: (text: string) => text,
       formatThreadTime,
       botTag: () => "",
-      ACTIVE_RUN_STATUSES: ["running"],
+      isExecutingRunStatus,
       mobileBotAvatarPresentation: () => ({ kind: "color", color: "gray" }),
       FALLBACK_COLOR: "gray",
       ConversationRow: ({ time }: { time: string }) => <span>{time}</span>,
@@ -304,7 +305,7 @@ it("renders saved bot rows without a title or notification setting", () => {
     previewSnippet: (text: string) => text,
     formatThreadTime,
     botTag,
-    ACTIVE_RUN_STATUSES: ["running"],
+    isExecutingRunStatus,
     mobileBotAvatarPresentation: () => ({ kind: "color", color: "gray" }),
     FALLBACK_COLOR: "gray",
     ConversationRow: ({

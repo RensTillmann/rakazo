@@ -8,6 +8,8 @@ import type {
 import { computerSleepJob } from "@rakazo/adapter-kit";
 import { ACTIVE_RUN_STATUSES } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db";
+import { getLogger } from "@rakazo/logging";
 import { expireComputerControl, hasActiveComputerControl } from "./computer-control.js";
 import { toComputerRef } from "./computer-lifecycle.js";
 import { checkpointComputerWorkspace } from "./computer-workspace.js";
@@ -20,7 +22,7 @@ export const DEFAULT_SANDBOX_IDLE_MS = 10 * 60 * 1000;
  * COMPUTER_MAX_ACTIVE_MS configures the limit; 0 disables it.
  */
 export const DEFAULT_COMPUTER_MAX_ACTIVE_MS = 2 * 60 * 60 * 1000;
-const EXECUTING_RUN_STATUSES = ["leased", "running"] as const;
+const EXECUTING_RUN_STATUSES = ["leased", "running", "maintenance_paused"] as const;
 const BACKGROUND_WORK_MARKER_PREFIX = "/tmp/rakazo-background-";
 const BACKGROUND_WORK_IDLE_SENTINEL = "rakazo-background-idle";
 
@@ -127,29 +129,36 @@ export function cancelComputerRunWorkArgv(computerId: string, runId: string): st
 }
 
 export async function cancelComputerRunWork(
-  sandbox: Pick<SandboxProvider, "execute" | "cancelRunWork">,
+  sandbox: Pick<SandboxProvider, "execute" | "cancelRunWork" | "inspectBackgroundWork">,
   computer: ComputerRef,
   computerId: string,
   runId: string,
   context: AdapterContext,
-): Promise<void> {
-  if (!computerId || !runId) return;
+): Promise<boolean> {
+  if (!computerId || !runId) return false;
   try {
     if (sandbox.cancelRunWork) {
-      await sandbox.cancelRunWork(computer, computerId, runId, context);
-      return;
+      return await sandbox.cancelRunWork(computer, computerId, runId, context);
     }
-    if (computer.kind === "desktop") return;
+    if (computer.kind === "desktop") return false;
 
-    for await (const _event of sandbox.execute(
+    let exited = false;
+    for await (const event of sandbox.execute(
       computer,
       { argv: cancelComputerRunWorkArgv(computerId, runId), timeoutMs: 15_000 },
       context,
     )) {
-      // Drain so providers can finish the exec session.
+      if (event.type === "exit") {
+        if (event.code !== 0) return false;
+        exited = true;
+      }
     }
-  } catch {
-    // Best effort after the run is already cancelled.
+    // Signal delivery is not drain proof. Inspect only this run's marker before
+    // acknowledging; other runs on the same computer must remain untouched.
+    return exited && !(await hasActiveBackgroundWork(sandbox, computer, context, `${computerId}-${runId}`));
+  } catch (error) {
+    getLogger().warn("Run work cancellation unconfirmed", { runId, error });
+    return false;
   }
 }
 
@@ -259,6 +268,11 @@ export async function sleepComputerIfIdle(
   if (!computer?.providerRef || computer.state !== "running") return;
   // Native computers have no provisioned runtime to suspend; Electron owns their lifetime.
   if (computer.kind === "desktop") return;
+  if (!(await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx))).admitted) {
+    scheduleComputerSleep(deps.jobs, computerId);
+    await deps.sandbox.keepAlive?.(toComputerRef(computer));
+    return;
+  }
 
   if (computer.controlBotId && computer.controlLeaseId && !hasActiveComputerControl(computer)) {
     await expireComputerControl(deps, computer.id, computer.controlLeaseId);
@@ -303,7 +317,9 @@ export async function sleepComputerIfIdle(
   }
 
   const checkpointedAt = new Date();
-  const recorded = await deps.prisma.computer.updateMany({
+  const recorded = await deps.prisma.$transaction(async (tx) => {
+    if (!(await lockMaintenanceAdmission(tx)).admitted) return { count: 0 };
+    return tx.computer.updateMany({
     where: {
       id: computerId,
       state: "running",
@@ -314,6 +330,7 @@ export async function sleepComputerIfIdle(
       executionLeases: { none: { expiresAt: { gt: checkpointedAt } } },
     },
     data: { state: "suspending", updatedAt: checkpointedAt },
+    });
   });
   if (recorded.count !== 1) {
     scheduleComputerSleep(deps.jobs, computerId);
@@ -403,6 +420,12 @@ export async function sleepComputerIfIdle(
     return;
   }
 
+  if (!(await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx))).admitted) {
+    await deps.prisma.computer.updateMany({ where: suspensionClaim, data: { state: "running" } });
+    scheduleComputerSleep(deps.jobs, computerId);
+    await deps.sandbox.keepAlive?.(ref);
+    return;
+  }
   try {
     await deps.sandbox.stop(ref, ctx);
   } catch (error) {
@@ -471,14 +494,16 @@ function findActiveRun(
     where: {
       bot: { computerId },
       status: { in: statuses as (typeof ACTIVE_RUN_STATUSES)[number][] },
-      ...(liveLeaseOnly ? { leaseExpiresAt: { gt: new Date(Date.now()) } } : {}),
+      ...(liveLeaseOnly ? { OR: [
+        { status: "maintenance_paused" }, { leaseExpiresAt: { gt: new Date(Date.now()) } },
+      ] } : {}),
     },
     select: { id: true },
   });
 }
 
 async function hasActiveBackgroundWork(
-  sandbox: SandboxProvider,
+  sandbox: Pick<SandboxProvider, "execute" | "inspectBackgroundWork">,
   computer: ReturnType<typeof toComputerRef>,
   context: AdapterContext,
   computerId: string,

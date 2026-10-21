@@ -398,7 +398,7 @@ export async function threadSnapshot(
                 status: { in: [...ACTIVE_RUN_STATUSES] },
                 OR: [
                   { trigger: { notIn: ["bot_message", ...BACKGROUND_RUN_TRIGGERS] } },
-                  { status: { in: ["waiting_input", "waiting_takeover"] } },
+                  { status: { in: ["waiting_input", "waiting_takeover", "maintenance_paused"] } },
                 ],
               },
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -496,7 +496,7 @@ export async function threadSnapshot(
             // the transcript; only their waiting_input / waiting_takeover states surface.
             OR: [
               { trigger: { notIn: ["bot_message", ...BACKGROUND_RUN_TRIGGERS] } },
-              { status: { in: ["waiting_input", "waiting_takeover"] } },
+              { status: { in: ["waiting_input", "waiting_takeover", "maintenance_paused"] } },
             ],
           },
           orderBy: { createdAt: "desc" },
@@ -1623,7 +1623,7 @@ async function teardownCancelledRunWork(
   }
   await Promise.all(
     teardownTargets.map(async ({ computer, botId, runId, lease }) => {
-      if (!computer.providerRef) return;
+      if (!computer.providerRef) throw new Error("Cancelled run computer is unavailable for teardown");
       const context = {
         operationId: "stop",
         traceId: "stop",
@@ -1636,8 +1636,10 @@ async function teardownCancelledRunWork(
         signal: new AbortController().signal,
       };
       const ref = toComputerRef(computer);
-      await cancelComputerRunWork(deps.sandbox, ref, computer.id, runId, context);
-      await deps.sandbox.releaseScreen?.(ref, context).catch(() => undefined);
+      if (!(await cancelComputerRunWork(deps.sandbox, ref, computer.id, runId, context))) {
+        throw new Error("Run work cancellation is not confirmed");
+      }
+      await deps.sandbox.releaseScreen?.(ref, context);
     }),
   );
   await expireComputerExecutionLeases(deps.prisma, { runId: { in: runIds } });

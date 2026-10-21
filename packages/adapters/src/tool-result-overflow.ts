@@ -1,7 +1,7 @@
 /**
  * Fleet: the full text of a tool result the runtime cut off, kept for the rest of the run
- * so the model can page through it with `read_tool_result`. In memory only: a process
- * restart loses it, and the tool then says the result is gone.
+ * so the model can page through it with `read_tool_result`. A graceful runtime checkpoint
+ * saves these bounded, already-sanitized pages with their original references.
  */
 
 export const READ_TOOL_RESULT_TOOL = "read_tool_result";
@@ -40,6 +40,11 @@ interface RunStore {
   chars: number;
   seq: number;
 }
+
+export type ToolResultOverflowSnapshot = {
+  seq: number;
+  results: Array<[string, StoredResult]>;
+};
 
 export class ToolResultOverflowStore {
   private readonly runs = new Map<string, RunStore>();
@@ -101,6 +106,33 @@ export class ToolResultOverflowStore {
     const slice = text.slice(start, end);
     if (end >= text.length) return incomplete ? `${slice}\n${incomplete}` : slice;
     return `${slice}\n${cutOffNote(end, text.length, ref, pageLength)}${incomplete ? `\n${incomplete}` : ""}`;
+  }
+
+  snapshot(runId: string): ToolResultOverflowSnapshot {
+    const run = this.runs.get(runId);
+    return { seq: run?.seq ?? 0, results: [...(run?.results ?? [])] };
+  }
+
+  restore(runId: string, snapshot: ToolResultOverflowSnapshot): void {
+    if (!Number.isSafeInteger(snapshot?.seq) || snapshot.seq < 0 ||
+      !Array.isArray(snapshot.results)) throw new Error("Invalid continuation tool evidence");
+    const results = new Map<string, StoredResult>();
+    let chars = 0;
+    for (const [ref, result] of snapshot.results) {
+      if (!/^r[1-9]\d*$/.test(ref) || Number(ref.slice(1)) > snapshot.seq ||
+        typeof result?.text !== "string" || !Number.isSafeInteger(result.originalChars) ||
+        result.originalChars < result.text.length || result.text.length > this.maxResultChars ||
+        results.has(ref)) throw new Error("Invalid continuation tool evidence");
+      results.set(ref, result);
+      chars += result.text.length;
+    }
+    if (chars > this.maxRunChars) throw new Error("Continuation tool evidence exceeds retention bound");
+    this.runs.set(runId, { seq: snapshot.seq, results, chars });
+    while (this.runs.size > this.maxRuns) {
+      const oldest = this.runs.keys().next().value;
+      if (oldest === undefined) break;
+      this.runs.delete(oldest);
+    }
   }
 
   clear(runId: string): void {

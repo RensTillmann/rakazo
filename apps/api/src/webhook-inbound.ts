@@ -27,6 +27,7 @@ export type WebhookEvents = {
       thinkingLevel: string | null;
     };
     routineId?: string;
+    inboundDelivery?: { source: "webhook"; payload: Record<string, unknown> };
   }): Promise<{ messageId: string; runId: string | null; seq: number }>;
 };
 
@@ -283,6 +284,8 @@ export async function deliverWebhookEvent(
     }>;
     source: InboundDeliverySource;
     idempotencyKey?: string;
+    /** Authenticated transport data, still untrusted until authority revalidation. */
+    payload?: Record<string, unknown>;
     /** Messaging wakes share the live chat thread; keep a separate webhook run. */
     allowParallelRun?: boolean;
   },
@@ -317,6 +320,9 @@ export async function deliverWebhookEvent(
     prompt: promptText,
     trigger: "webhook",
     clientNonce,
+    ...(input.source === "webhook" && input.payload
+      ? { inboundDelivery: { source: "webhook" as const, payload: input.payload } }
+      : {}),
     ...(input.allowParallelRun ? { allowParallelRun: true } : {}),
     ...(routineId ? { routineId } : {}),
     ...(pin.modelProvider && pin.modelId

@@ -112,9 +112,12 @@ import {
   stableJsonValue,
   toolEffectIdempotencyKey,
 } from "@rakazo/core/node/approval-effect-key";
-import type { McpServer, PrismaClient, ThreadEvents } from "@rakazo/db";
+import type { MaintenanceCancellationStore, McpServer, PrismaClient, Run, ThreadEvents } from "@rakazo/db";
 import {
   appendEventInTransaction,
+  claimMaintenanceEffect,
+  lockMaintenanceAdmission,
+  maintenanceAttention,
   createSpaceForMember,
   createThreadMessageInTransaction,
   duplicateAskRefusal,
@@ -175,8 +178,6 @@ import {
   catalogApprovalRequest,
   catalogExecuteToolName,
   catalogIdForRoute,
-  claimApprovedEffect,
-  claimIntendedEffect,
   completeExternalEffect,
   createApprovedEffectReplayQueue,
   isToolPauseResult,
@@ -348,6 +349,9 @@ import {
 } from "./model-vision.js";
 import { nativeShellCommandArgv } from "./native-shell.js";
 import type { CodexLiveCatalog } from "./pi-codex-catalog.js";
+import { createExecutorMaintenance, readExecutorContinuation,
+  type ExecutorContinuation, type FleetResumeAuthority } from "./executor-maintenance.js";
+import { MaintenanceBoundary, MaintenanceContinuationUnavailable } from "./pi-maintenance.js";
 import { codexLiveListsModel } from "./pi-codex-catalog.js";
 import { toOAuthCredential } from "./pi-credentials.js";
 import type { StoredModelSecret } from "./pi-oauth.js";
@@ -2899,6 +2903,7 @@ export interface ExecutorDeps {
   codexCatalog?: CodexLiveCatalog;
   /** Aborted when createApp stop() begins so in-flight continueRun boot waits exit promptly. */
   shutdownSignal?: AbortSignal;
+  maintenance?: MaintenanceCancellationStore;
 }
 
 function isAuditableToolResult(value: unknown): value is {
@@ -3232,12 +3237,67 @@ export function isTerminalModelSetupError(error: unknown): boolean {
   );
 }
 
+/** Exact checkpoint CAS; caller owns admission/authority validation and transaction. */
+export function claimRunExecutionLease(
+  tx: Pick<PrismaClient, "run">,
+  run: Parameters<typeof continueRunClaimFence>[0] & { id: string; leaseFence: number },
+  workerId: string,
+) {
+  const now = new Date();
+  return tx.run.updateMany({
+    where: {
+      id: run.id, ...continueRunClaimFence(run), maintenanceCancelRequestedAt: null,
+      OR: [
+        { status: { in: ["queued", "waiting_input", "waiting_takeover"] } },
+        { status: { in: ["leased", "running"] }, leaseExpiresAt: { lte: now } },
+      ],
+    },
+    data: { status: "leased", leaseOwner: workerId, leaseFence: nextFence(run.leaseFence),
+      leaseExpiresAt: new Date(now.getTime() + 5 * 60_000), error: null, checkpoint: null },
+  });
+}
+
 export function createRunExecutor(deps: ExecutorDeps) {
   const contextStrategy = deps.contextStrategy ?? DEFAULT_CONTEXT_STRATEGY;
   const web = deps.web ?? createWebProvider();
   const mediaGeneration = deps.mediaGeneration ?? createMediaGenerationProvider();
   const browser = deps.browser ?? createBrowserProvider(undefined, { sandbox: deps.sandbox });
+  const maintenance = createExecutorMaintenance(deps);
   const cloudAgent = deps.cloudAgent;
+  const executeRunMedia = async ({ run, groupId, name, args, executionId, context, recoverOnly = false }: {
+    run: Pick<Run, "id" | "spaceId" | "userId" | "botId" | "threadId">;
+    groupId: string | null; name: "generate_image" | "generate_video";
+    args: Record<string, unknown>; executionId: string; context: AdapterContext; recoverOnly?: boolean;
+  }) => {
+    const artifacts = deps.artifacts;
+    if (!artifacts || !mediaGeneration) throw new Error("Media generation is unavailable");
+    return generateMediaFromTool({
+      name, args, executionId, recoverOnly, provider: mediaGeneration, prisma: deps.prisma, context, run,
+      attach: (output, fileName, job) => attachWorkspaceFileToThread(
+        { prisma: deps.prisma, artifacts, maxUploadSizeBytes: deps.maxUploadSizeBytes },
+        { spaceId: run.spaceId, userId: run.userId, botId: run.botId, groupId: groupId ?? undefined,
+          runId: run.id, filePath: fileName, bytes: output.bytes, operationId: executionId,
+          onAttached: async (tx, artifact) => {
+            const saved = await tx.externalEffect.updateMany({ where: {
+              id: job.id, status: { not: "media_completed" }, result: { equals: job.result },
+            }, data: { status: "media_polling", result: { ...job.result, artifactId: artifact.id } } });
+            if (!saved.count) throw new Error("Media attachment was already checkpointed");
+          },
+        },
+      ),
+      publish: async (block, jobId, artifactId) => {
+        const committed = await deps.prisma.$transaction(async (tx) => {
+          const claimed = await tx.externalEffect.updateMany({
+            where: { id: jobId, status: { not: "media_completed" } },
+            data: { status: "media_completed", result: { provider: mediaGeneration.id, artifactId } },
+          });
+          if (!claimed.count) return null;
+          return persistMessageInTransaction(tx, run, "bot", [block]);
+        });
+        if (committed) await deps.events.notify(run.threadId, committed.eventSeq).catch(() => undefined);
+      },
+    });
+  };
   const resolveConnectedModel = async (
     scope: { userId: string; spaceId: string },
     provider: string,
@@ -3302,6 +3362,30 @@ export function createRunExecutor(deps: ExecutorDeps) {
   return {
     resolveConnectedModel,
     contextStrategy,
+    async reconcileMaintenanceRuns(): Promise<void> {
+      await maintenance.reconcile((runId) => this.retryRoutineRun(runId), async () => {
+        if (!mediaGeneration || !deps.artifacts) return;
+        const jobs = await deps.prisma.externalEffect.findMany({
+          where: { kind: "media_generation_job", status: { in: ["media_pending", "media_polling"] } },
+          include: { run: { include: { thread: { select: { groupId: true } },
+            bot: { select: { userId: true, spaceId: true } } } } }, take: 50,
+        });
+        for (const job of jobs) {
+          const run = job.run;
+          if (!run || run.bot.userId !== run.userId || run.bot.spaceId !== run.spaceId) continue;
+          try {
+            // Existing provider job only: no model, new submission, or approval replay.
+            await executeRunMedia({ run, groupId: run.thread.groupId, name: "generate_video",
+              args: { jobId: job.id }, executionId: `media-reconcile:${job.id}`, recoverOnly: true,
+              context: { operationId: `media-reconcile:${job.id}`, traceId: run.id,
+                runId: run.id, botId: run.botId, userId: run.userId, spaceId: run.spaceId,
+                signal: AbortSignal.timeout(30_000) } });
+          } catch (error) {
+            getLogger().warn("Existing media job remains unsettled", { runId: run.id, effectId: job.id, error });
+          }
+        }
+      });
+    },
     async resolveModel(scope: {
       userId: string;
       spaceId: string;
@@ -3454,6 +3538,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         expandSkillReferencesInPrompt(routine.prompt, skillRecords) +
         (watchTick?.run ? watchTick.note : "");
       const claimed = await deps.prisma.$transaction(async (tx) => {
+        if (!(await lockMaintenanceAdmission(tx)).admitted) return null;
         const updated = await tx.routine.updateMany({
           where: {
             id: routine.id,
@@ -3578,6 +3663,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
     },
 
     async retryRoutineRun(runId: string) {
+      if (!(await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx))).admitted) {
+        await deps.prisma.run.updateMany({ where: { id: runId, status: "failed" },
+          data: { maintenanceCheckpoint: JSON.stringify({ kind: "routine-retry-held" }) } });
+        return "held" as const;
+      }
       const failed = await deps.prisma.run.findUnique({ where: { id: runId } });
       if (
         !failed?.routineId ||
@@ -3625,8 +3715,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
         return;
       }
       let retry: { id: string; taskId: string } | null;
+      let heldForMaintenance = false;
       try {
         retry = await deps.prisma.$transaction(async (tx) => {
+          if (!(await lockMaintenanceAdmission(tx)).admitted) {
+            heldForMaintenance = true;
+            await tx.run.updateMany({ where: { id: runId, status: "failed" },
+              data: { maintenanceCheckpoint: JSON.stringify({ kind: "routine-retry-held" }) } });
+            return null;
+          }
           // Claim the still-eligible routine without changing its state. One-shot routines
           // may already be inactive; match their crons so an edit cannot revive a paused routine.
           const claimed = await tx.routine.updateMany({
@@ -3698,6 +3795,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         if (isUniqueViolation(error)) return;
         throw error;
       }
+      if (heldForMaintenance) return "held" as const;
       if (!retry) {
         const laterRun = await deps.prisma.run.findFirst({
           where: { routineId: failed.routineId, createdAt: { gt: failed.createdAt } },
@@ -3728,31 +3826,44 @@ export function createRunExecutor(deps: ExecutorDeps) {
       const run = await deps.prisma.run.findUnique({ where: { id: runId } });
       if (!run) return;
       if (isTerminal(run.status as RunStatus)) return;
+      if (run.status === "maintenance_paused" || run.maintenanceCancelRequestedAt) return;
+      if (["leased", "running"].includes(run.status) &&
+        (!run.leaseExpiresAt || run.leaseExpiresAt.getTime() > Date.now())) return;
+      let maintenanceContinuation: ExecutorContinuation | undefined;
+      let checked: FleetResumeAuthority = {};
+      let revalidateAdmission = false;
+      let admissionRevision = 0;
+      try {
+        maintenanceContinuation = readExecutorContinuation(run.maintenanceCheckpoint, runId);
+        const admission = await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx));
+        if (!admission.admitted) return;
+        admissionRevision = admission.revision;
+        // A queued/approval run may predate the pause without a runtime checkpoint.
+        // Revalidate all native authority after a pause; only Fleet bots acquire
+        // Fleet's tracker/dependency/deadline authority checks.
+        revalidateAdmission = Boolean(maintenanceContinuation) || admission.revision > 0;
+        if (revalidateAdmission) checked = await maintenance.externalAuthority(run);
+      } catch {
+        await deps.prisma.run.updateMany({ where: {
+          id: run.id, status: run.status, leaseFence: run.leaseFence, maintenanceCancelRequestedAt: null,
+        }, data: { ...(run.maintenanceCheckpoint ? { status: "maintenance_paused", leaseOwner: null, leaseExpiresAt: null } : {}),
+          error: maintenanceAttention("continuation-verification-unavailable") } });
+        return;
+      }
       let { resumeCheckpoint, heldForTakeover, resumeHeldLease, takeoverResume } =
         takeoverContinuePlan(run);
 
       const fence = nextFence(run.leaseFence);
-      const now = new Date();
-      const leased = await deps.prisma.run.updateMany({
-        where: {
-          id: runId,
-          ...continueRunClaimFence(run),
-          OR: [
-            { status: { in: ["queued", "waiting_input", "waiting_takeover"] } },
-            {
-              status: { in: ["leased", "running"] },
-              leaseExpiresAt: { lte: now },
-            },
-          ],
-        },
-        data: {
-          status: "leased",
-          leaseOwner: workerId,
-          leaseFence: fence,
-          leaseExpiresAt: new Date(Date.now() + 5 * 60_000),
-          error: null,
-          checkpoint: null,
-        },
+      const leased = await deps.prisma.$transaction(async (tx) => {
+        const admission = await lockMaintenanceAdmission(tx);
+        if (!admission.admitted) return { count: 0 };
+        // Pause/resume raced the out-of-transaction check: retry this same durable
+        // run, never claim a post-pause lease using a pre-pause authority snapshot.
+        if (admission.revision !== admissionRevision) return { count: 0 };
+        if (revalidateAdmission && !(await maintenance.validateLease(tx, run, maintenanceContinuation, checked))) {
+          return { count: 0 };
+        }
+        return claimRunExecutionLease(tx, run, workerId);
       });
       if (leased.count !== 1) return;
 
@@ -3837,6 +3948,24 @@ export function createRunExecutor(deps: ExecutorDeps) {
         });
 
       let leaseValid = true;
+      let maintenanceRevision: number | undefined;
+      let maintenanceCheckpointed = false;
+      let maintenanceSetupHeld = false;
+      const beforeExecution = async () => {
+        if (maintenanceRevision !== undefined) return false;
+        return deps.prisma.$transaction(async (tx) => {
+          const admission = await lockMaintenanceAdmission(tx);
+          const current = await tx.run.findUnique({ where: { id: runId },
+            select: { status: true, leaseOwner: true, leaseFence: true, maintenanceCancelRequestedAt: true } });
+          if (!current || current.status !== "running" || current.leaseOwner !== workerId ||
+            current.leaseFence !== fence || current.maintenanceCancelRequestedAt) {
+            runAbortController?.abort();
+            throw new Error("Run execution lease cancelled or replaced");
+          }
+          if (!admission.admitted) maintenanceRevision = admission.revision;
+          return admission.admitted;
+        });
+      };
       let runCompleted = false;
       let lastLeaseCheckAt = 0;
       let retainComputerLease = false;
@@ -3865,6 +3994,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
           });
       }, 60_000);
       heartbeat.unref?.();
+      const cancellationCheck = setInterval(() => {
+        if (runCompleted) return;
+        void deps.prisma.run.findUnique({ where: { id: runId },
+          select: { status: true, maintenanceCancelRequestedAt: true } }).then((current) => {
+          if (current?.maintenanceCancelRequestedAt || current?.status === "cancelled") {
+            runAbortController?.abort();
+            return deps.runtime.abort(runId);
+          }
+        }).catch((error) => getLogger().warn("Run cancellation check failed", { runId, error }));
+      }, 2_000);
+      cancellationCheck.unref?.();
       const stopHeartbeatAfterCompletion = () => {
         runCompleted = true;
         clearInterval(heartbeat);
@@ -3985,6 +4125,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         );
         let liveSlugs: string[] = [];
         if (needsLivePluginSync(composioRows)) {
+          if (!(await beforeExecution())) throw new MaintenanceBoundary();
           const listing = await loadLivePluginSlugs(deps.listConnectedPluginSlugs, run.userId);
           if (listing.ok) {
             liveSlugs = listing.slugs;
@@ -4025,8 +4166,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           payload: { trigger: run.trigger, routineId: run.routineId },
         });
 
+        if (!(await beforeExecution())) throw new MaintenanceBoundary();
         const discoveredPromise = deps.connector
-          ? deps.connector.discoverTools(context)
+          ? Promise.resolve(await deps.connector.discoverTools(context))
           : Promise.resolve([]);
         const groupAuthors = thread.groupId
           ? await loadGroupAuthorNames(deps.prisma, {
@@ -4110,6 +4252,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           recallEveryRun,
           prompt: task.prompt,
         });
+        if (!(await beforeExecution())) throw new MaintenanceBoundary();
         const recallPromise =
           recallQuery !== null && semanticMemory && memoryScope
             ? semanticMemory.recall(
@@ -4507,9 +4650,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? `Your Team Computer home is ${teamBotWorkspaceDirectory(bot.id)}. Relative file paths and shell working directories start there. Put intentionally shared work under shared/. Other bots' folders are visible under bots/; treat them as their working areas.`
             : "This entire computer workspace is your private home. Relative file paths and shell working directories start at its root.";
 
-        let assembled = "";
-        let currentTextSegment = "";
-        let messageSegments: MessageBlock[] = [];
+        const presentation = maintenanceContinuation?.presentation;
+        let assembled = typeof presentation?.assembled === "string" ? presentation.assembled : "";
+        let currentTextSegment = typeof presentation?.currentTextSegment === "string" ? presentation.currentTextSegment : "";
+        let messageSegments: MessageBlock[] = Array.isArray(presentation?.messageSegments) ? presentation.messageSegments as MessageBlock[] : [];
         // Terminal subagent rows are published as their own messages (not appended to
         // messageSegments). Treat that like tool/step durable activity so we do not invent
         // an empty-run "done." completion afterward.
@@ -4520,10 +4664,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let publishedMidTurnUserMessage = false;
         // Some runs hold back pre-tool narration instead of posting it as chat.
         // Keep the last segment in case the model supplies no final reply.
-        let discardedMidTurnNarration = false;
-        let lastDiscardedMidTurnNarration = "";
-        let explicitNoResponse = false;
-        let assistantTurnText = "";
+        let discardedMidTurnNarration = presentation?.discardedMidTurnNarration === true;
+        let lastDiscardedMidTurnNarration = typeof presentation?.lastDiscardedMidTurnNarration === "string" ? presentation.lastDiscardedMidTurnNarration : "";
+        let explicitNoResponse = presentation?.explicitNoResponse === true;
+        let assistantTurnText = typeof presentation?.assistantTurnText === "string" ? presentation.assistantTurnText : "";
         const recordExplicitNoResponse = (text: string) => {
           explicitNoResponse ||= isExactNoResponse(text) || /\bNO_RESPONSE\b/.test(text);
         };
@@ -4577,11 +4721,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         let pendingProgress = "";
         let lastProgressAt = 0;
-        let hasStreamedText = false;
+        let hasStreamedText = presentation?.hasStreamedText === true;
         // Set by a tool call or a later model turn's first text: the next text starts a new
         // assistant turn and needs a break from the earlier text that stayed in this reply
         // (held-back narration, text-only turns of a routine run).
-        let assistantTurnBreakPending = false;
+        let assistantTurnBreakPending = presentation?.assistantTurnBreakPending === true;
         let toolCallStreak: ToolCallStreak = { key: undefined, count: 0 };
         let lastComputerFrameId: string | undefined;
         let unchangedVisualStreak: UnchangedVisualStreak = { count: 0 };
@@ -4687,16 +4831,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
           return secretPausedToolResult();
         };
 
-        const mutatingEffectOccurrences = new Map<string, number>();
+        const mutatingEffectOccurrences = new Map<string, number>(maintenanceContinuation?.occurrences);
+        const executionOccurrences = new Map<string, number>(maintenanceContinuation?.executions);
         const consumedEffectIds = new Set<string>();
         // RAKAZO_APPROVAL_DIRECT: results of approved actions run before the first model step,
         // keyed by the live tool fingerprint; the capture records which call a dispatch consumed.
         const directApprovalResults = new Map<string, unknown>();
-        let directApprovalCapture: { fingerprint?: string } | undefined;
-        const nextMutatingEffectOccurrence = (toolName: string, args: Record<string, unknown>) => {
+        let directApprovalCapture: { fingerprint?: string; occurrenceFingerprint?: string } | undefined;
+        const nextMutatingEffectOccurrence = (toolName: string, args: Record<string, unknown>, executionId: string) => {
+          const previous = executionOccurrences.get(executionId);
+          if (previous !== undefined) return previous;
           const fingerprint = toolEffectIdempotencyKey(runId, toolName, args);
+          if (directApprovalCapture) directApprovalCapture.occurrenceFingerprint = fingerprint;
           const occurrence = mutatingEffectOccurrences.get(fingerprint) ?? 0;
           mutatingEffectOccurrences.set(fingerprint, occurrence + 1);
+          executionOccurrences.set(executionId, occurrence);
           return occurrence;
         };
 
@@ -4718,6 +4867,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           observer?: AgentToolExecutionObserver,
         ) => {
           context.signal.throwIfAborted();
+          if (!(await beforeExecution())) throw new MaintenanceBoundary();
           if (handedOff) {
             return {
               error: "This stage was handed off. End the turn without more tool calls.",
@@ -5135,7 +5285,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const occurrence =
             name === "request_secret"
               ? 0
-              : nextMutatingEffectOccurrence(replayEffectToolName, args);
+              : nextMutatingEffectOccurrence(replayEffectToolName, args, executionId);
           const effectKey =
             usesApprovalKey && occurrence === 0
               ? approvalEffectKey(runId, replayEffectToolName, args)
@@ -5155,6 +5305,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
 
           const runAutoReview = async () => {
             if (!injectedReview && !checker) return;
+            if (!(await beforeExecution())) throw new MaintenanceBoundary();
             try {
               const reviewRequest = {
                 toolName: name,
@@ -5240,6 +5391,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   });
                 }
               }
+              if (!(await beforeExecution())) throw new MaintenanceBoundary();
               const judge = await provider.review(reviewRequest, reviewContext);
               if (context.signal.aborted) return;
               reviewReason = judge.reason;
@@ -5257,7 +5409,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   },
                 });
               }
-            } catch {
+            } catch (error) {
+              if (error instanceof MaintenanceBoundary) throw error;
               // Cancellation must not write a review the next attempt would reuse.
               if (context.signal.aborted) return;
               // Auth/refresh failures must fail closed like a checker error, not fail the run.
@@ -5310,6 +5463,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const needsApproval = gateDecision === "ask";
           const bypassApproval = gateDecision === "allow" && requiresApprovalByDefault;
           let claimedEffect = false;
+          let claimedFrom: "approved" | "intended" | undefined;
 
           const callMediaTool = async (recoverOnly = false) => {
             if (
@@ -5319,61 +5473,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
               !deps.artifacts
             )
               return { error: "Media generation is unavailable." };
-            const artifacts = deps.artifacts;
-            return generateMediaFromTool({
-              name,
-              args,
-              executionId: applied?.effect.id ?? executionId,
-              recoverOnly,
-              provider: mediaGeneration,
-              prisma: deps.prisma,
-              context,
-              run,
-              attach: (output, fileName, job) =>
-                attachWorkspaceFileToThread(
-                  { prisma: deps.prisma, artifacts, maxUploadSizeBytes: deps.maxUploadSizeBytes },
-                  {
-                    spaceId: run.spaceId,
-                    userId: run.userId,
-                    botId: bot.id,
-                    groupId: thread.groupId ?? undefined,
-                    runId: run.id,
-                    filePath: fileName,
-                    bytes: output.bytes,
-                    operationId: executionId,
-                    onAttached: async (tx, artifact) => {
-                      const checkpointed = await tx.externalEffect.updateMany({
-                        where: {
-                          id: job.id,
-                          status: { not: "media_completed" },
-                          result: { equals: job.result },
-                        },
-                        data: {
-                          status: "media_polling",
-                          result: { ...job.result, artifactId: artifact.id },
-                        },
-                      });
-                      if (!checkpointed.count)
-                        throw new Error("Media attachment was already checkpointed");
-                    },
-                  },
-                ),
-              publish: async (block, jobId, artifactId) => {
-                const committed = await deps.prisma.$transaction(async (tx) => {
-                  // Commit completion with the message so a restarted poll cannot post twice.
-                  const claimed = await tx.externalEffect.updateMany({
-                    where: { id: jobId, status: { not: "media_completed" } },
-                    data: {
-                      status: "media_completed",
-                      result: { provider: mediaGeneration.id, artifactId },
-                    },
+            return executeRunMedia({
+              run, groupId: thread.groupId, name, args,
+              executionId: applied?.effect.id ?? executionId, context, recoverOnly,
+            }).catch(async (error: unknown) => {
+              if (error instanceof MaintenanceBoundary) {
+                maintenanceRevision = error.revision;
+                // The nested submission fence denied before any provider call. Only this
+                // known-unstarted claim may return to its exact prior approval state.
+                if (applied && claimedEffect) {
+                  const restored = await deps.prisma.externalEffect.updateMany({
+                    where: { id: applied.effect.id, status: "executing" },
+                    data: { status: applied.effect.status === "approved" ? "approved" : "intended" },
                   });
-                  if (!claimed.count) return null;
-                  return persistMessageInTransaction(tx, run, "bot", [block]);
-                });
-                if (committed)
-                  await deps.events.notify(run.threadId, committed.eventSeq).catch(() => undefined);
-              },
+                  if (restored.count !== 1) throw uncertainEffectError(name);
+                }
+              }
+              throw error;
             });
           };
           const settleToolUncertainty = async (effectId: string, toolName: string) => {
@@ -5391,9 +5507,39 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const claimOrReturn = async (
             from: "approved" | "intended",
           ): Promise<unknown | undefined> => {
-            const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
-            if (await claim(deps.prisma, applied!.effect.id)) {
+            const claimed = await deps.prisma.$transaction(async (tx) => {
+              const admission = await lockMaintenanceAdmission(tx);
+              if (!admission.admitted) {
+                maintenanceRevision = admission.revision;
+                return false;
+              }
+              const owned = await tx.run.findUnique({ where: { id: runId },
+                select: { status: true, leaseOwner: true, leaseFence: true, maintenanceCancelRequestedAt: true } });
+              if (!owned || owned.status !== "running" || owned.leaseOwner !== workerId ||
+                owned.leaseFence !== fence || owned.maintenanceCancelRequestedAt) {
+                throw new Error("Run execution lease cancelled or replaced");
+              }
+              await tx.$queryRaw`SELECT id FROM external_effects WHERE id = ${applied!.effect.id} FOR UPDATE`;
+              const currentEffect = await tx.externalEffect.findUnique({ where: { id: applied!.effect.id } });
+              if (!currentEffect || currentEffect.status !== from ||
+                currentEffect.kind !== applied!.effect.kind ||
+                stableJsonValue(currentEffect.request) !== stableJsonValue(applied!.effect.request)) return false;
+              const route = connectorCall.route;
+              if (route?.connectorId === "mcp" && route.resourceId) {
+                await tx.$queryRaw`SELECT id FROM mcp_servers WHERE id = ${route.resourceId} FOR SHARE`;
+                const server = await tx.mcpServer.findFirst({ where: {
+                  id: route.resourceId, enabled: true, userId: run.userId, spaceId: run.spaceId,
+                } });
+                if (!server || (route.resourceRevision !== undefined && server.revision !== route.resourceRevision)) {
+                  return false;
+                }
+              }
+              return claimMaintenanceEffect(tx, applied!.effect.id, from);
+            });
+            if (maintenanceRevision !== undefined) throw new MaintenanceBoundary();
+            if (claimed) {
               claimedEffect = true;
+              claimedFrom = from;
               return undefined;
             }
             const current = await deps.prisma.externalEffect.findUnique({
@@ -5529,6 +5675,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           } else if (needsApproval && applied) {
             return requestApproval();
           } else if (bypassApproval && applied) {
+            const early = await claimOrReturn("intended");
+            if (early !== undefined) return early;
+          } else if (applied && !claimedEffect) {
             const early = await claimOrReturn("intended");
             if (early !== undefined) return early;
           }
@@ -7383,6 +7532,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
               { ...connectorCall, tool: name, args, executionId: effectKey },
               context,
             )) {
+              if (event.type === "maintenance-held") {
+                // Fleet settled earlier banks and fenced the next one. Re-arm
+                // only this exact call, retaining its identity and approval.
+                if (!applied || !claimedFrom) throw new Error("Maintenance effect identity unavailable");
+                const restored = await deps.prisma.externalEffect.updateMany({
+                  where: { id: applied.effect.id, status: "executing" },
+                  data: { status: claimedFrom },
+                });
+                if (restored.count !== 1) throw uncertainEffectError(name);
+                maintenanceRevision = event.revision;
+                throw new MaintenanceBoundary(event.revision);
+              }
               if (event.type === "result") {
                 result = event.data;
                 const logIds = collectLogIds(event.data);
@@ -7467,7 +7628,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           : taskPrompt;
         const exposedToolNames = new Set(tools.map((tool) => tool.name));
         let approvalContinuation: string | undefined;
-        if (approvalDirect() && approvedEffects.length > 0) {
+        if (!maintenanceContinuation && approvalDirect() && approvedEffects.length > 0) {
           // RAKAZO_APPROVAL_DIRECT: run each approved action now, in approval order, through the
           // same dispatch a model replay uses (claim, live re-checks, audit), then report results.
           const executed: { toolName: string; args: unknown; result: unknown }[] = [];
@@ -7476,7 +7637,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const effect = approvedEffects[index]!;
             const executionId = `approval-direct-${index}`;
             const startedAt = Date.now();
-            const capture: { fingerprint?: string } = {};
+            const capture: { fingerprint?: string; occurrenceFingerprint?: string } = {};
             directApprovalCapture = capture;
             let result: unknown;
             try {
@@ -7488,6 +7649,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       executionId,
                     )
                   : { error: "Approved tool request is not a JSON object" };
+            } catch (error) {
+              if (!(error instanceof MaintenanceBoundary)) throw error;
+              const occurrence = executionOccurrences.get(executionId);
+              if (capture.occurrenceFingerprint && occurrence !== undefined) {
+                mutatingEffectOccurrences.set(capture.occurrenceFingerprint, occurrence);
+                executionOccurrences.delete(executionId);
+              }
+              break;
             } finally {
               directApprovalCapture = undefined;
             }
@@ -7509,7 +7678,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (capture.fingerprint) directApprovalResults.set(capture.fingerprint, result);
             executed.push({ toolName: call.toolName, args: call.args, result });
           }
-          approvalContinuation = buildDirectApprovalContinuation(executed, runSecrets);
+          approvalContinuation = [
+            buildDirectApprovalContinuation(executed, runSecrets),
+            buildApprovalContinuation(approvedEffects.slice(executed.length),
+              (request) => redactSecrets(JSON.stringify(request), runSecrets), { exposedToolNames }),
+          ].filter(Boolean).join("\n\n") || undefined;
         } else {
           approvalContinuation = buildApprovalContinuation(
             approvedEffects,
@@ -7821,7 +7994,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               },
               ...(preferFallback ? { preferFallback } : {}),
-              resumeFromCheckpoint: takeoverResume?.checkpoint,
+              beforeExecution,
+              resumeFromCheckpoint: maintenanceContinuation?.runtime ?? takeoverResume?.checkpoint,
               script,
               allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
@@ -7922,6 +8096,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
           for await (const event of withRuntimeCleanup(runtimeEvents, runAbortController)) {
             if (approvalPausePending) return;
             if (!leaseValid) return;
+            if (event.type === "checkpoint") {
+              // The producer emitted this only after all admitted tools/helpers/shells drained.
+              pendingProgress += progressRedactor.finish();
+              await flushProgress();
+              flushPendingTools();
+              await workspaceCheckpoint.flush();
+              const saved = await maintenance.checkpoint(run, workerId, fence, maintenanceRevision!,
+                { runtime: event.blob, occurrences: [...mutatingEffectOccurrences],
+                  executions: [...executionOccurrences], presentation: {
+                    assembled, currentTextSegment, messageSegments, discardedMidTurnNarration,
+                    lastDiscardedMidTurnNarration, explicitNoResponse, assistantTurnText,
+                    hasStreamedText, assistantTurnBreakPending,
+                  } });
+              if (!saved) throw new Error("Maintenance checkpoint lease was lost");
+              maintenanceCheckpointed = true;
+              if (screenRelease) screenRelease.keepWarm = true;
+              stopHeartbeatAfterCompletion();
+              continue;
+            }
             const now = Date.now();
             if (now - lastLeaseCheckAt >= 1_000) {
               lastLeaseCheckAt = now;
@@ -8220,6 +8413,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   );
                   if (isToolPauseResult(result)) return;
                 } catch (error) {
+                  if (error instanceof MaintenanceBoundary && event.deferForMaintenance) {
+                    event.deferForMaintenance();
+                    continue;
+                  }
                   await appendToolCompletionAudit(
                     deps,
                     {
@@ -8311,6 +8508,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
             }
           }
+          if (maintenanceCheckpointed) return;
 
           recordExplicitNoResponse(assistantTurnText);
           runComputer.throwIfFailed();
@@ -8523,6 +8721,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
             getLogger().error("history.compact enqueue failed", error);
           }
         } catch (error) {
+          if (error instanceof MaintenanceContinuationUnavailable && maintenanceContinuation) {
+            maintenanceCheckpointed = await maintenance.holdUnstartedContinuation(
+              run, workerId, fence, maintenanceContinuation, error.message);
+            if (maintenanceCheckpointed) {
+              if (screenRelease) screenRelease.keepWarm = true;
+              stopHeartbeatAfterCompletion();
+              return;
+            }
+          }
           // A computer that could not start fails setup, as it did when every run started it.
           runComputer.throwIfFailed();
           if (!terminalCheckpointComplete) {
@@ -8573,6 +8780,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       } catch (setupError) {
+        if (setupError instanceof MaintenanceBoundary) {
+          // No runtime has started here. The durable task and effect ledger are the
+          // untouched setup continuation; do not invent a model transcript.
+          maintenanceSetupHeld = true;
+          const released = await writeComputerRunRequeue(deps, runId, workerId, fence,
+            resumeCheckpoint, heldForTakeover);
+          if (released && maintenanceContinuation) {
+            await deps.prisma.run.updateMany({ where: { id: runId, leaseFence: fence, status: "queued" },
+              data: { maintenanceCheckpoint: JSON.stringify({ ...maintenanceContinuation, leaseFence: fence }) } });
+          }
+          return;
+        }
         const computerBusy = setupError instanceof ComputerBusyError;
         const retryForever = computerBusy || isTooManyDatabaseConnections(setupError);
         if (!computerBusy) {
@@ -8622,8 +8841,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
       } finally {
         detachShutdown?.();
         clearInterval(heartbeat);
+        clearInterval(cancellationCheck);
         if (!retainComputerLease) {
-          if (screenRelease) {
+          if (screenRelease && !maintenanceCheckpointed && !maintenanceSetupHeld) {
             const releaseContext = screenRelease.keepWarm
               ? { ...screenRelease.context, keepScreenWarm: true }
               : screenRelease.context;
@@ -8771,6 +8991,8 @@ async function notifyFailedRoutineRun(
 async function notifyRun(
   deps: ExecutorDeps,
   run: {
+    id: string;
+    leaseFence: number;
     spaceId: string;
     userId: string;
     botId: string;
@@ -8795,11 +9017,13 @@ async function notifyRun(
   if (!notice?.enabled) return;
   await deps.notifications
     .send(notice.groupId ? { ...message, groupId: notice.groupId } : message, {
-      operationId: "notify",
+      operationId: `notify:${run.id}:${message.kind}${
+        message.kind === "help" || message.kind === "takeover" ? `:${run.leaseFence}` : ""}`,
       traceId: run.botId,
       spaceId: run.spaceId,
       userId: run.userId,
       botId: run.botId,
+      runId: run.id,
       signal: new AbortController().signal,
     })
     .catch((error) => {

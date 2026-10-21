@@ -2,6 +2,7 @@ import type {
   AgentRunRequest,
   AutoReviewProvider,
   ConnectorCall,
+  ConnectorEvent,
   ConnectorTool,
 } from "@rakazo/adapter-kit";
 import { MEMORY_REVISION_CONFLICT_ERROR } from "@rakazo/adapter-kit";
@@ -302,10 +303,11 @@ function fixture({
       findFirst: vi.fn(async (_query: unknown) => (outsideSteering ? { id: "steer-1" } : null)),
     },
     externalEffect,
+    mcpServer: { findFirst: vi.fn(async () => ({ id: "resource-1", revision: 1 })) },
     computer: { updateMany: vi.fn(async () => ({ count: 1 })) },
   };
   const transactionalPrisma = Object.assign(prisma, {
-    $queryRaw: vi.fn(async () => []),
+    $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
     $transaction: async (action: (tx: typeof prisma) => unknown) => action(prisma),
   });
   const pauseRunForInput = vi.fn(async () => {
@@ -313,7 +315,7 @@ function fixture({
     return true;
   });
   const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
-  const execute = vi.fn(async function* (call: ConnectorCall) {
+  const execute = vi.fn(async function* (call: ConnectorCall): AsyncIterable<ConnectorEvent> {
     yield { type: "result" as const, data: { item: call.args.id } };
   });
   let calls: { args: Record<string, unknown>; executionId: string }[] = [
@@ -426,7 +428,7 @@ function fixture({
     cancelAtInstructionCommit() {
       transactionalPrisma.$queryRaw.mockImplementation(async (...values: unknown[]) => {
         if (String(values[0]).includes("FROM threads")) run.status = "cancelled";
-        return [];
+        return String(values[0]).includes("maintenance_state") ? [{ active: false, revision: 0 }] : [];
       });
     },
     results,
@@ -444,7 +446,7 @@ function fixture({
         blocks: [{ kind: "text", text: promptText }],
       };
       const tx = {
-        $queryRaw: vi.fn(async () => []),
+        $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
         thread: { update: vi.fn(async () => ({ nextMessageSeq: 2, nextEventSeq: 2 })) },
         message: {
           create: vi.fn(async () => inboundMessage),
@@ -509,6 +511,29 @@ function fixture({
     },
   };
 }
+
+describe("partially held connector effects", () => {
+  it("reuses the exact effect identity instead of caching a partial Fleet recall as completed", async () => {
+    const f = fixture({ name: "memory_recall", readOnly: true });
+    f.execute.mockImplementationOnce(async function* (): AsyncIterable<ConnectorEvent> {
+      yield { type: "maintenance-held", revision: 1 };
+    });
+    // This fixture's synthetic runtime has no checkpoint protocol. It reports the
+    // boundary as a failure; the real Pi continuation is exercised in its suite.
+    await f.run(true);
+    expect(f.effects).toHaveLength(1);
+    expect(f.effects[0]!.status).toBe("intended");
+    const original = { ...f.effects[0]! };
+    await f.run(true);
+    expect(f.effects).toHaveLength(1);
+    expect(f.effects[0]).toMatchObject({
+      id: original.id, idempotencyKey: original.idempotencyKey,
+      request: original.request, status: "completed",
+    });
+    expect(f.execute.mock.calls[0]![0].executionId).toBe(f.execute.mock.calls[1]![0].executionId);
+    expect(f.results).toEqual([{ item: "item-1" }]);
+  });
+});
 
 describe("disabled builtins", () => {
   it("refuses a direct call before any effect or memory write", async () => {

@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "n
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { PrismaClient } from "@rakazo/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deletePushToken,
@@ -20,6 +21,7 @@ const dirs: string[] = [];
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -28,11 +30,70 @@ const notifyContext = {
   traceId: "n",
   spaceId: "w",
   userId: "user-1",
+  runId: "run-1",
   signal: new AbortController().signal,
 };
 
 function jsonResponse(body: unknown, status = 200) {
   return Response.json(body, { status });
+}
+
+interface PushEffectState {
+  id: string;
+  idempotencyKey: string;
+  status: string;
+  kind: string;
+  spaceId: string;
+  runId: string;
+  request: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function pushDatabase() {
+  const state = { paused: false, authorized: true, cancelRequestedAt: null as Date | null };
+  const effects: PushEffectState[] = [];
+  const client = {
+    $queryRaw: vi.fn(async () => [{ active: state.paused, revision: 1 }]),
+    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(client)),
+    run: {
+      findFirst: vi.fn(async () => state.authorized ? {
+        bot: { notifyOnFinish: true }, thread: { groupId: null, group: null }, routine: null,
+        maintenanceCancelRequestedAt: state.cancelRequestedAt,
+      } : null),
+      findUnique: vi.fn(async () => ({ maintenanceCancelRequestedAt: state.cancelRequestedAt })),
+    },
+    spaceMember: { findUnique: vi.fn(async () => state.authorized ? { id: "member" } : null) },
+    externalEffect: {
+      upsert: vi.fn(async ({ create }: { create: Omit<PushEffectState, "id" | "createdAt" | "updatedAt"> }) => {
+        let effect = effects.find((row) => row.idempotencyKey === create.idempotencyKey);
+        if (!effect) {
+          effect = { ...create, id: `push-${effects.length}`, createdAt: new Date(), updatedAt: new Date() };
+          effects.push(effect);
+        }
+        return { ...effect };
+      }),
+      findMany: vi.fn(async () => effects.filter((row) => row.status === "intended").map((row) => ({ ...row }))),
+      updateMany: vi.fn(async ({ where, data }: {
+        where: { id?: string; kind?: string; status?: string | { in: string[] }; updatedAt?: { lt: Date } };
+        data: { status: string };
+      }) => {
+        let count = 0;
+        for (const row of effects) {
+          if (where.id && row.id !== where.id) continue;
+          if (where.kind && row.kind !== where.kind) continue;
+          if (typeof where.status === "string" && row.status !== where.status) continue;
+          if (typeof where.status === "object" && !where.status.in.includes(row.status)) continue;
+          if (where.updatedAt && row.updatedAt >= where.updatedAt.lt) continue;
+          row.status = data.status;
+          row.updatedAt = new Date();
+          count++;
+        }
+        return { count };
+      }),
+    },
+  };
+  return { prisma: client as unknown as PrismaClient, client, state, effects };
 }
 
 describe("expo push tickets", () => {
@@ -285,7 +346,7 @@ describe("expo push", () => {
     dirs.push(dataDir);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const push = new ExpoPushProvider(dataDir);
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma);
     await push.send(
       { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
       {
@@ -293,6 +354,7 @@ describe("expo push", () => {
         traceId: "n",
         spaceId: "w",
         userId: "missing",
+        runId: "run-1",
         signal: new AbortController().signal,
       },
     );
@@ -306,6 +368,7 @@ describe("expo push", () => {
           traceId: "n",
           spaceId: "w",
           userId: "missing",
+          runId: "run-1",
           signal: new AbortController().signal,
         },
       ),
@@ -323,7 +386,7 @@ describe("expo push", () => {
         Promise.resolve(jsonResponse({ data: { status: "ok", id: "ticket" } })),
       );
     vi.stubGlobal("fetch", fetchMock);
-    const push = new ExpoPushProvider(dataDir);
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma);
     await push.send(
       { kind: "takeover", title: "Need you", body: "on screen", botId: "bot-1", threadId: "th-1" },
       notifyContext,
@@ -353,7 +416,7 @@ describe("expo push", () => {
 
     await push.send(
       { kind: "takeover", title: "Need you", body: "on screen", botId: "bot-1", threadId: "th-1" },
-      notifyContext,
+      { ...notifyContext, operationId: "another-notice" },
     );
     const secondInit = (fetchMock.mock.calls[1] as [string, RequestInit])[1];
     const secondBody = JSON.parse(String(secondInit.body)) as { data: { deliveryId: string } };
@@ -403,7 +466,7 @@ describe("expo push", () => {
     await savePushToken(dataDir, "user-1", token, "session-1");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const push = new ExpoPushProvider(dataDir, async () => null);
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma, async () => null);
 
     await expect(
       push.deliver(
@@ -417,7 +480,7 @@ describe("expo push", () => {
 
     await endSessionPushToken(dataDir, "user-1", "session-1", "session-2");
     await expect(loadPushToken(dataDir, "user-1")).resolves.toBe(token);
-    const replaced = new ExpoPushProvider(dataDir, async (sessionId) =>
+    const replaced = new ExpoPushProvider(dataDir, pushDatabase().prisma, async (sessionId) =>
       sessionId === "session-2" ? new Date(Date.now() + 60_000) : null,
     );
     await expect(replaced.hasPushRecipient("user-1")).resolves.toBe(true);
@@ -429,7 +492,7 @@ describe("expo push", () => {
     await savePushToken(dataDir, "user-1", "ExponentPushToken[test]", "session-1");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const push = new ExpoPushProvider(dataDir, async () => new Date(Date.now() - 1_000));
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma, async () => new Date(Date.now() - 1_000));
 
     await expect(
       push.deliver(
@@ -453,7 +516,7 @@ describe("expo push", () => {
     let waiting = false;
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const push = new ExpoPushProvider(dataDir, async () => {
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma, async () => {
       waiting = true;
       await gate;
       return new Date(Date.now() + 60_000);
@@ -554,7 +617,7 @@ flock(fd, 8);
         Promise.resolve(jsonResponse({ data: { status: "ok", id: "ticket" } })),
       );
     vi.stubGlobal("fetch", fetchMock);
-    const push = new ExpoPushProvider(dataDir, async () => new Date(Date.now() + 60_000));
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma, async () => new Date(Date.now() + 60_000));
 
     await expect(
       push.deliver(
@@ -571,7 +634,7 @@ flock(fd, 8);
     await savePushToken(dataDir, "user-1", "ExponentPushToken[test]", "session-1");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const push = new ExpoPushProvider(dataDir);
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma);
 
     await expect(
       push.deliver(
@@ -589,7 +652,7 @@ flock(fd, 8);
     await savePushToken(dataDir, "user-1", "ExponentPushToken[test]", "session-1");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const push = new ExpoPushProvider(dataDir, async () => {
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma, async () => {
       throw new Error("database unavailable");
     });
 
@@ -611,7 +674,7 @@ flock(fd, 8);
       "fetch",
       vi.fn().mockResolvedValue(jsonResponse({ errors: [{ message: "boom" }] }, 500)),
     );
-    const push = new ExpoPushProvider(dataDir);
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma);
     await expect(
       push.send(
         { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
@@ -631,7 +694,7 @@ flock(fd, 8);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
 
     await expect(
-      new ExpoPushProvider(dataDir).send(
+      new ExpoPushProvider(dataDir, pushDatabase().prisma).send(
         { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
         notifyContext,
       ),
@@ -663,7 +726,7 @@ flock(fd, 8);
 
     const started = Date.now();
     await expect(
-      new ExpoPushProvider(dataDir).send(
+      new ExpoPushProvider(dataDir, pushDatabase().prisma).send(
         { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
         { ...notifyContext, signal: abort.signal },
       ),
@@ -682,7 +745,7 @@ flock(fd, 8);
     );
 
     await expect(
-      new ExpoPushProvider(dataDir).send(
+      new ExpoPushProvider(dataDir, pushDatabase().prisma).send(
         { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
         notifyContext,
       ),
@@ -696,7 +759,7 @@ flock(fd, 8);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not json")));
 
     await expect(
-      new ExpoPushProvider(dataDir).send(
+      new ExpoPushProvider(dataDir, pushDatabase().prisma).send(
         { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
         notifyContext,
       ),
@@ -716,7 +779,7 @@ flock(fd, 8);
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      new ExpoPushProvider(dataDir).send(
+      new ExpoPushProvider(dataDir, pushDatabase().prisma).send(
         { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
         { ...notifyContext, signal: controller.signal },
       ),
@@ -729,7 +792,7 @@ flock(fd, 8);
     dirs.push(dataDir);
     await savePushToken(dataDir, "user-1", "ExponentPushToken[test]");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    const push = new ExpoPushProvider(dataDir);
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma);
     await expect(
       push.send(
         { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
@@ -751,7 +814,7 @@ flock(fd, 8);
         });
       }),
     );
-    const push = new ExpoPushProvider(dataDir);
+    const push = new ExpoPushProvider(dataDir, pushDatabase().prisma);
     await expect(
       push.send(
         { kind: "completion", title: "done", body: "ok", botId: "b", threadId: "t" },
@@ -759,5 +822,154 @@ flock(fd, 8);
       ),
     ).rejects.toThrow("DeviceNotRegistered");
     await expect(loadPushToken(dataDir, "user-1")).resolves.toBe("ExponentPushToken[new]");
+  });
+});
+
+describe("durable push admission", () => {
+  const message = { kind: "completion" as const, title: "Done", body: "Finished", botId: "b", threadId: "t" };
+
+  async function fixture() {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-push-maintenance-"));
+    dirs.push(dataDir);
+    await savePushToken(dataDir, notifyContext.userId, "ExponentPushToken[test]");
+    const db = pushDatabase();
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({ data: { status: "ok", id: "ticket" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    return { dataDir, db, fetchMock, push: new ExpoPushProvider(dataDir, db.prisma) };
+  }
+
+  it("keeps paused notices through restart and delivers them once on resume", async () => {
+    const { dataDir, db, fetchMock, push } = await fixture();
+    db.state.paused = true;
+    await expect(push.deliver(message, notifyContext)).resolves.toBe("pending");
+    expect(db.effects[0]?.status).toBe("intended");
+    expect(fetchMock).not.toHaveBeenCalled();
+    const restarted = new ExpoPushProvider(dataDir, db.prisma);
+    await restarted.reconcile(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    db.state.paused = false;
+    await restarted.reconcile(true);
+    await restarted.send(message, notifyContext);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(db.effects[0]?.status).toBe("completed");
+  });
+
+  it("settles an admitted send while paused without admitting a concurrent duplicate", async () => {
+    const { db, fetchMock, push } = await fixture();
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { entered = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    fetchMock.mockImplementation(async () => {
+      entered();
+      await gate;
+      return jsonResponse({ data: { status: "ok", id: "ticket" } });
+    });
+    const sending = push.deliver(message, notifyContext);
+    await waiting;
+    expect(db.effects[0]?.status).toBe("executing");
+    db.state.paused = true;
+    await expect(push.deliver(message, notifyContext)).resolves.toBe("executing");
+    release();
+    await expect(sending).resolves.toBe("delivered");
+    expect(db.effects[0]?.status).toBe("completed");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("never replays an unknown provider response after restart or resume", async () => {
+    const { dataDir, db, fetchMock, push } = await fixture();
+    fetchMock.mockRejectedValueOnce(new Error("connection lost after submission"));
+    await expect(push.send(message, notifyContext)).rejects.toThrow("connection lost");
+    expect(db.effects[0]?.status).toBe("uncertain");
+    const restarted = new ExpoPushProvider(dataDir, db.prisma);
+    await restarted.reconcile(true);
+    await expect(restarted.deliver(message, notifyContext)).resolves.toBe("uncertain");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("marks crashed submissions uncertain while held and does not resend them", async () => {
+    const { dataDir, db, fetchMock, push } = await fixture();
+    db.state.paused = true;
+    await push.send(message, notifyContext);
+    const effect = db.effects[0]!;
+    effect.status = "executing";
+    effect.updatedAt = new Date(Date.now() - 120_000);
+    const restarted = new ExpoPushProvider(dataDir, db.prisma);
+    await restarted.reconcile(false);
+    expect(effect.status).toBe("uncertain");
+    db.state.paused = false;
+    await restarted.reconcile(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("revalidates ownership and preferences before a queued send", async () => {
+    const { db, fetchMock, push } = await fixture();
+    db.state.paused = true;
+    await push.send(message, notifyContext);
+    db.state.paused = false;
+    db.state.authorized = false;
+    await push.reconcile(true);
+    expect(db.effects[0]?.status).toBe("cancelled");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("requires an affirmative Expo acceptance, not merely a successful HTTP status", async () => {
+    const { db, fetchMock, push } = await fixture();
+    fetchMock.mockResolvedValueOnce(jsonResponse({}));
+    await expect(push.send(message, notifyContext)).rejects.toThrow("invalid response");
+    expect(db.effects[0]?.status).toBe("uncertain");
+    await push.reconcile(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("aborts the actual in-flight Expo request when force-stop targets its terminal source run", async () => {
+    const { db, fetchMock, push } = await fixture();
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    let requestSignal: AbortSignal | undefined;
+    fetchMock.mockImplementation(async (_url, init) => {
+      requestSignal = init?.signal ?? undefined;
+      entered();
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener("abort", () => reject(requestSignal?.reason), { once: true });
+      });
+    });
+    const sending = push.deliver(message, notifyContext);
+    const rejected = expect(sending).rejects.toThrow("cancellation requested");
+    await started;
+    db.state.paused = true;
+    db.state.cancelRequestedAt = new Date();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await rejected;
+    expect(requestSignal?.aborted).toBe(true);
+    expect(db.effects[0]?.status).toBe("uncertain");
+    expect(vi.getTimerCount()).toBe(0);
+    db.state.paused = false;
+    await push.reconcile(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("cancels an unsent intent whose source was force-stopped instead of submitting it after resume", async () => {
+    const { db, fetchMock, push } = await fixture();
+    db.state.paused = true;
+    await push.send(message, notifyContext);
+    db.state.cancelRequestedAt = new Date();
+    db.state.paused = false;
+    await push.reconcile(true);
+    expect(db.effects[0]?.status).toBe("cancelled");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("retains a safely unsubmitted notice if the initial cancellation observation fails", async () => {
+    const { db, fetchMock, push } = await fixture();
+    db.client.run.findUnique.mockRejectedValueOnce(new Error("database unavailable"));
+    await expect(push.send(message, notifyContext)).rejects.toThrow("database unavailable");
+    expect(db.effects[0]?.status).toBe("intended");
+    expect(fetchMock).not.toHaveBeenCalled();
+    await push.reconcile(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(db.effects[0]?.status).toBe("completed");
   });
 });

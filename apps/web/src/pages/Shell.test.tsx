@@ -7,6 +7,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { act, createRef } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
+import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@lingui/react/macro", () => {
@@ -15,6 +16,7 @@ vi.mock("@lingui/react/macro", () => {
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
 
+import { FleetPauseControls } from "../components/FleetPauseControls";
 import { dictation } from "../lib/dictation";
 import { Composer } from "./Shell";
 
@@ -599,5 +601,238 @@ describe("Composer and waiting cards", () => {
     expect(container?.querySelector('[data-testid="composer-open-ask"]')).toBeNull();
     expect(container?.querySelector('[data-testid="composer-answer-confirm"]')).toBeNull();
     expect(onSend).toHaveBeenCalledWith("I'll send it myself", [], expect.any(String));
+  });
+});
+
+describe("Fleet pause controls", () => {
+  const running = {
+    state: { active: false, revision: 2 },
+    status: { phase: "running", activeRuns: 0, activeEffects: 0, pendingRuns: 0, issues: [] },
+  };
+  const pausing = {
+    state: { active: true, revision: 3 },
+    status: {
+      phase: "pausing", activeRuns: 2, activeEffects: 1, pendingRuns: 4,
+      issues: ["Waiting for provider acknowledgement"],
+    },
+  };
+  let fetchMock: Mock;
+  const response = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+  beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    fetchMock = vi.fn().mockImplementation(async (_url, init) => response(init?.method === "POST"
+      ? { state: pausing.state, replayed: false }
+      : running));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  async function renderPause() {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root?.render(<FleetPauseControls spaceId="space-a" />));
+  }
+  async function clickPauseControl(label: string) {
+    const button = Array.from(document.querySelectorAll("button")).find(
+      (element) => element.textContent === label,
+    );
+    expect(button, label).toBeDefined();
+    await act(async () => button?.click());
+  }
+  const mutations = () => fetchMock.mock.calls.filter((call) => call[1]?.method === "POST");
+
+  it.each([401, 403])("reads without mutating and hides controls on HTTP %s", async (status) => {
+    fetchMock.mockImplementation(async () => response({}, status));
+    await renderPause();
+    expect(container?.querySelector("button")).toBeNull();
+    expect(mutations()).toHaveLength(0);
+  });
+
+  it("shows blockers without claiming the fleet is paused and warns before force stop", async () => {
+    fetchMock.mockImplementation(async (_url, init) => response(init?.method === "POST"
+      ? { state: { active: true, revision: 4 }, replayed: false }
+      : pausing));
+    await renderPause();
+    await clickPauseControl("Fleet: Pausing");
+    expect(document.body.textContent).toContain("Active runs: 2");
+    expect(document.body.textContent).toContain("Active effects: 1");
+    expect(document.body.textContent).toContain("Queued/held runs: 4");
+    expect(document.body.textContent).toContain("Waiting for provider acknowledgement");
+    await clickPauseControl("Force stop…");
+    expect(document.body.textContent).toContain("Already-started effects cannot be undone");
+    expect(mutations()).toHaveLength(0);
+    await clickPauseControl("Confirm force stop");
+    expect(JSON.parse(mutations()[0]![1].body)).toEqual({
+      action: "force-stop", expectedRevision: 3, requestId: expect.any(String),
+    });
+  });
+
+  it("keeps the exact command identity after an ambiguous network failure", async () => {
+    let failed = false;
+    fetchMock.mockImplementation(async (_url, init) => {
+      if (init?.method === "POST") {
+        if (!failed) {
+          failed = true;
+          throw new TypeError("Network disconnected");
+        }
+        return response({ state: pausing.state, replayed: true });
+      }
+      return response(failed ? pausing : running);
+    });
+    await renderPause();
+    await clickPauseControl("Fleet: Running");
+    await clickPauseControl("Pause Fleet");
+    expect(document.body.textContent).toContain("Outcome unknown");
+    await clickPauseControl("Retry request");
+    expect(mutations()).toHaveLength(2);
+    expect(mutations()[1]![1].body).toBe(mutations()[0]![1].body);
+    expect(mutations()[0]![1].credentials).toBe("same-origin");
+    expect(new Headers(mutations()[0]![1].headers).get("x-rakazo-space-id")).toBe("space-a");
+    expect(document.body.textContent).not.toContain("Outcome unknown");
+    expect(document.body.textContent).not.toContain("Retry request");
+  });
+
+  it("refreshes a conflict without replaying it and gives the next intent a new identity", async () => {
+    let conflict = false;
+    fetchMock.mockImplementation(async (_url, init) => {
+      if (init?.method === "POST") {
+        conflict = true;
+        return response({}, 409);
+      }
+      return response(conflict ? pausing : running);
+    });
+    await renderPause();
+    await clickPauseControl("Fleet: Running");
+    await clickPauseControl("Pause Fleet");
+    expect(document.body.textContent).toContain("Fleet changed");
+    expect(document.body.textContent).toContain("Pausing");
+    expect(mutations()).toHaveLength(1);
+    await clickPauseControl("Resume Fleet");
+    const first = JSON.parse(mutations()[0]![1].body);
+    const second = JSON.parse(mutations()[1]![1].body);
+    expect(second.expectedRevision).toBe(3);
+    expect(second.requestId).not.toBe(first.requestId);
+    expect(second.action).toBe("resume");
+  });
+
+  it("marks failed refreshes as stale and disables new actions", async () => {
+    await renderPause();
+    await clickPauseControl("Fleet: Running");
+    fetchMock.mockImplementation(async () => response({}, 503));
+    await clickPauseControl("Refresh status");
+    expect(document.body.textContent).toContain("Status unavailable");
+    const pause = Array.from(document.querySelectorAll("button")).find(
+      (element) => element.textContent === "Pause Fleet",
+    );
+    expect(pause?.disabled).toBe(true);
+    expect(mutations()).toHaveLength(0);
+  });
+
+  it("does not treat stored pause intent or contradictory quiescence as effective status", async () => {
+    fetchMock.mockImplementation(async () => response({ state: { active: true, revision: 3 } }));
+    await renderPause();
+    expect(container?.textContent).toContain("Fleet status unavailable");
+    expect(container?.querySelector("button")).toBeNull();
+    fetchMock.mockImplementation(async () => response({
+      ...pausing, status: { ...pausing.status, phase: "paused" },
+    }));
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(container?.textContent).toContain("Fleet status unavailable");
+    expect(mutations()).toHaveLength(0);
+  });
+
+  it("removes already-visible controls if the command is no longer authorized", async () => {
+    await renderPause();
+    await clickPauseControl("Fleet: Running");
+    fetchMock.mockImplementation(async () => response({}, 403));
+    await clickPauseControl("Pause Fleet");
+    expect(container?.querySelector("button")).toBeNull();
+    expect(document.body.textContent).not.toContain("Resume Fleet");
+    expect(document.body.textContent).not.toContain("Retry request");
+  });
+
+  it("allows only one in-flight command despite repeated clicks", async () => {
+    let finish!: (value: Response) => void;
+    fetchMock.mockImplementation(async (_url, init) => init?.method === "POST"
+      ? new Promise<Response>((resolve) => { finish = resolve; })
+      : response(running));
+    await renderPause();
+    await clickPauseControl("Fleet: Running");
+    const pause = Array.from(document.querySelectorAll("button")).find(
+      (element) => element.textContent === "Pause Fleet",
+    )!;
+    await act(async () => {
+      pause.click();
+      pause.click();
+    });
+    expect(mutations()).toHaveLength(1);
+    await act(async () => finish(response({ state: pausing.state, replayed: false })));
+    expect(mutations()).toHaveLength(1);
+  });
+
+  it("retains the exact request when HTTP success contains no durable acknowledgement", async () => {
+    fetchMock.mockImplementation(async (_url, init) => response(init?.method === "POST"
+      ? {}
+      : running));
+    await renderPause();
+    await clickPauseControl("Fleet: Running");
+    await clickPauseControl("Pause Fleet");
+    expect(document.body.textContent).toContain("Outcome unknown");
+    expect(document.body.textContent).toContain("Retry request");
+    fetchMock.mockImplementation(async (_url, init) => response(init?.method === "POST"
+      ? { state: pausing.state, replayed: true }
+      : pausing));
+    await clickPauseControl("Retry request");
+    expect(mutations()).toHaveLength(2);
+    expect(mutations()[1]![1].body).toBe(mutations()[0]![1].body);
+    expect(document.body.textContent).not.toContain("Outcome unknown");
+    expect(document.body.textContent).not.toContain("Retry request");
+    expect(document.body.textContent).toContain("Fleet: Pausing");
+  });
+
+  it("requires a new force-stop confirmation after a revision changes", async () => {
+    fetchMock.mockImplementation(async () => response(pausing));
+    await renderPause();
+    await clickPauseControl("Fleet: Pausing");
+    await clickPauseControl("Force stop…");
+    fetchMock.mockImplementation(async () => response({
+      state: { active: true, revision: 4 },
+      status: { ...pausing.status, phase: "needs_attention" },
+    }));
+    await clickPauseControl("Refresh status");
+    await clickPauseControl("Confirm force stop");
+    expect(document.body.textContent).toContain("Fleet changed");
+    expect(document.body.textContent).toContain("Needs attention");
+    expect(mutations()).toHaveLength(0);
+  });
+
+  it("shows paused with pending work without resuming or discarding it", async () => {
+    fetchMock.mockImplementation(async () => response({
+      state: { active: true, revision: 3 },
+      status: { phase: "paused", activeRuns: 0, activeEffects: 0, pendingRuns: 4, issues: [] },
+    }));
+    await renderPause();
+    await clickPauseControl("Fleet: Paused");
+    expect(document.body.textContent).toContain("Queued/held runs: 4");
+    expect(document.body.textContent).toContain("Resume Fleet");
+    expect(mutations()).toHaveLength(0);
+  });
+
+  it("offers a separately confirmed force stop while Fleet is running", async () => {
+    await renderPause();
+    await clickPauseControl("Fleet: Running");
+    await clickPauseControl("Force stop…");
+    expect(mutations()).toHaveLength(0);
+    await clickPauseControl("Confirm force stop");
+    expect(JSON.parse(mutations()[0]![1].body)).toEqual({
+      action: "force-stop", expectedRevision: 2, requestId: expect.any(String),
+    });
   });
 });

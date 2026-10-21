@@ -125,7 +125,10 @@ describe("structured results through real Pi context selection", () => {
               expect(result.segment).toBe(index - 1);
               expect(result.nextCursor).toBe(index === 12 ? null : `segment-${index}`);
               expect(result.approval).toBe("pending");
-              expect(result.diagnostic).toContain("Tool result truncated");
+              expect(result.contextTruncated).toBe(true);
+              expect(result.diagnostic.length).toBeLessThan(
+                'Quoted "diagnostic" evidence.\n'.repeat(1000).length,
+              );
             }
           },
           response:

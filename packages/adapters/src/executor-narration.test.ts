@@ -80,19 +80,19 @@ function fixture(
     replyQuote: null,
     replyTo: null,
   }));
+  const effects: Array<Record<string, unknown> & { id: string }> = [];
   const prisma = {
     // Upstream's dedicated-computer lease fence locks rows with $queryRaw, checks for another
     // run with a live lease on the computer (none here), then bumps the lease.
-    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
-      callback({
-        $queryRaw: vi.fn(async () => [{ id: "row-1", scope: "dedicated" }]),
-        run: { findMany: vi.fn(async () => []) },
-        computerExecutionLease: {
-          updateManyAndReturn: vi.fn(async () => [{ fence: 1 }]),
-        },
-      }),
-    ),
+    $queryRaw: vi.fn(async () => [{ id: "row-1", scope: "dedicated", active: false, revision: 0 }]),
+    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>): Promise<unknown> =>
+      callback(prisma)),
+    computerExecutionLease: {
+      updateManyAndReturn: vi.fn(async () => [{ fence: 1 }]),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
     run: {
+      findMany: vi.fn(async () => []),
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
       updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -147,10 +147,20 @@ function fixture(
     actionAutoReviewPreference: { findUnique: vi.fn(async () => ({ enabled: false })) },
     externalEffect: {
       findMany: vi.fn(async () => []),
-      findUnique: vi.fn(async () => null),
-      create: vi.fn(async ({ data }: { data: object }) => ({ ...data, id: "effect-1" })),
+      findUnique: vi.fn(async ({ where }: { where: { id?: string; idempotencyKey?: string } }) =>
+        effects.find((effect) => where.id ? effect.id === where.id : effect.idempotencyKey === where.idempotencyKey) ?? null),
+      create: vi.fn(async ({ data }: { data: object }) => {
+        const effect = { ...data, id: `effect-${effects.length + 1}` };
+        effects.push(effect);
+        return { ...effect };
+      }),
       update: vi.fn(),
-      updateMany: vi.fn(async () => ({ count: 1 })),
+      updateMany: vi.fn(async ({ where, data }: { where: { id: string; status?: string }; data: object }) => {
+        const effect = effects.find((row) => row.id === where.id && (!where.status || row.status === where.status));
+        if (!effect) return { count: 0 };
+        Object.assign(effect, data);
+        return { count: 1 };
+      }),
     },
     computer: { updateMany: vi.fn(async () => ({ count: 1 })) },
   };

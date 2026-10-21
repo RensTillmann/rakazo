@@ -36,6 +36,7 @@ import {
   forwardProbeAfterPage,
   groupVoiceChats,
   isApprovalAskBlock,
+  isExecutingRunStatus,
   isPeerReceiptBlocks,
   isRunTerminalEvent,
   isSecretAskBlock,
@@ -715,6 +716,8 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     });
   }, [inGroup, snap?.activeRuns, snap?.members, snap?.run]);
   const working = inGroup ? workingGroupBots.length > 0 : isWorkingStatus(currentBotStatus);
+  // Composer behavior keeps every unresolved run; the footer animates only executing ones.
+  const executingGroupBots = workingGroupBots.filter((bot) => isExecutingRunStatus(bot.status));
 
   const speakFinishedReply = useCallback(() => {
     if (!botId || inGroup || !currentBot) return;
@@ -2370,9 +2373,9 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   );
 
   const workingFooter =
-    !inGroup && currentBot && isWorkingStatus(currentBotStatus) && !hasLiveProgress ? (
+    !inGroup && currentBot && (isExecutingRunStatus(currentBotStatus) || currentBotStatus === "maintenance_paused") && !hasLiveProgress ? (
       <View
-        accessibilityLabel={t("{name} is working", { name: currentBot.name })}
+        accessibilityLabel={currentBotStatus === "maintenance_paused" ? t("Paused") : t("{name} is working", { name: currentBot.name })}
         accessibilityRole="text"
         style={{
           flexDirection: "row",
@@ -2388,14 +2391,16 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
           size={28}
           status={currentBotStatus}
         />
-        <WorkingIndicator />
+        {currentBotStatus === "maintenance_paused" ? (
+          <Text style={{ color: tokens.mutedForeground }}>{t("Paused")}</Text>
+        ) : <WorkingIndicator />}
       </View>
-    ) : inGroup && workingGroupBots.length > 0 ? (
+    ) : inGroup && executingGroupBots.length > 0 ? (
       <View
         accessibilityLabel={
-          workingGroupBots.length === 1
-            ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
-            : t("{count} agents working", { count: workingGroupBots.length })
+          executingGroupBots.length === 1
+            ? t("{name} is working", { name: executingGroupBots[0]?.name ?? t("Agent") })
+            : t("{count} agents working", { count: executingGroupBots.length })
         }
         accessibilityRole="text"
         style={{
@@ -2406,12 +2411,12 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
         }}
       >
         <View style={{ flexDirection: "row", paddingRight: 8 }}>
-          {workingGroupBots.map((bot, index) => (
+          {executingGroupBots.map((bot, index) => (
             <View
               key={bot.botId}
               style={{
                 marginLeft: index === 0 ? 0 : -8,
-                zIndex: workingGroupBots.length - index,
+                zIndex: executingGroupBots.length - index,
               }}
             >
               <BotAvatar color={bot.color} identity={bot.botId} size={28} status={bot.status} />

@@ -28,8 +28,18 @@ export class ScriptedAgentRuntime implements AgentRuntime {
   ): AsyncIterable<AgentRuntimeEvent> {
     const controller = new AbortController();
     running.set(request.runId, controller);
-    const signal = context?.signal ?? controller.signal;
-    try {
+    const signal = context?.signal ? AbortSignal.any([context.signal, controller.signal]) : controller.signal;
+    const saved = request.resumeFromCheckpoint?.startsWith("{")
+      ? JSON.parse(request.resumeFromCheckpoint) as {
+          kind: string; runId: string; cursor: number; script: NonNullable<AgentRunRequest["script"]>;
+        } : undefined;
+    if (saved && (saved.kind !== "scripted-maintenance-v1" || saved.runId !== request.runId ||
+      !Number.isSafeInteger(saved.cursor) || !Array.isArray(saved.script))) {
+      throw new Error("Invalid scripted continuation");
+    }
+    const script = saved?.script ?? request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint);
+    let cursor = 0;
+    const events = async function* (): AsyncIterable<AgentRuntimeEvent> {
       if (shouldFail(request.prompt)) {
         throw new Error("Scripted run failure");
       }
@@ -50,7 +60,7 @@ export class ScriptedAgentRuntime implements AgentRuntime {
         yield { type: "done", text: "stopped" };
         return;
       }
-      const script = request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint);
+      // The continuation carries the original script, not one inferred from changed input.
       // Per-run call index so repeated tools (e.g. message_agent) get distinct
       // executionIds — delivery keys and effect replays key off this value.
       let toolCallSeq = 0;
@@ -129,6 +139,28 @@ export class ScriptedAgentRuntime implements AgentRuntime {
       }
       yield { type: "text", text: "done." };
       yield { type: "done", text: "done." };
+    };
+    try {
+      for await (const event of events()) {
+        if (cursor < (saved?.cursor ?? 0)) { cursor += 1; continue; }
+        if (request.beforeExecution && !(await request.beforeExecution())) {
+          yield { type: "checkpoint", blob: JSON.stringify({
+            kind: "scripted-maintenance-v1", runId: request.runId, cursor, script,
+          }) };
+          return;
+        }
+        let deferred = false;
+        yield event.type === "tool"
+          ? { ...event, deferForMaintenance: () => { deferred = true; } }
+          : event;
+        if (deferred) {
+          yield { type: "checkpoint", blob: JSON.stringify({
+            kind: "scripted-maintenance-v1", runId: request.runId, cursor, script,
+          }) };
+          return;
+        }
+        cursor += 1;
+      }
     } finally {
       controller.abort();
       running.delete(request.runId);

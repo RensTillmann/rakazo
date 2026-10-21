@@ -58,6 +58,7 @@ import { resolveEncryptionKey, resolveSupervisorToken, uploadSizeFromEnv } from 
 import {
   createBoardEvents,
   createDb,
+  createMaintenanceStore,
   createThreadEvents,
   isTooManyDatabaseConnections,
   parsePositiveInteger,
@@ -182,12 +183,13 @@ async function main() {
   // One provider instance so emulator launches and polls share the same Map.
   const cloudAgent = createCloudAgentConnection();
   // Shared with the reconciler so a stuck wait uses the same push path as a finish notice.
-  const notifications = new ExpoPushProvider(dataDir, (sessionId) =>
+  const notifications = new ExpoPushProvider(dataDir, prisma, (sessionId) =>
     pushSessionExpiresAt(prisma, sessionId),
   );
   const executor = createRunExecutor({
     maxUploadSizeBytes: uploadSizeFromEnv(process.env),
     prisma,
+    maintenance: createMaintenanceStore(pool),
     runtime,
     // Live per-account Codex catalog; never refreshes or writes credentials.
     codexCatalog: new CodexCatalogCache(),
@@ -287,6 +289,7 @@ async function main() {
     events,
     notifications,
     leadership: createPostgresReconciliationLeadership(pool),
+    reconcileMaintenanceRuns: () => executor.reconcileMaintenanceRuns(),
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileRoutineRetryNotices: inMemoryJobs

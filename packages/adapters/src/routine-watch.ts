@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import type {
   AdapterContext,
@@ -18,6 +18,10 @@ import {
   createThreadMessageInTransaction,
   parseComputerMode,
 } from "@rakazo/db";
+import { lockMaintenanceAdmission } from "@rakazo/db/maintenance";
+import { Prisma } from "@rakazo/db";
+import { z } from "zod";
+import { getLogger } from "@rakazo/logging";
 import { scheduleComputerSleep } from "./computer-idle.js";
 import { ComputerBusyError, provisionComputer } from "./computer-lifecycle.js";
 import { resolveBotWorkspaceCwd, teamBotWorkspaceDirectory } from "./computer-support.js";
@@ -60,6 +64,7 @@ export type RoutineWatchTarget = {
   botId: string;
   watch: unknown;
   watchState: unknown;
+  check?: { id: string; signal: AbortSignal };
 };
 
 /** Thrown when a check cannot be completed; the routine is paused and the bot says why. */
@@ -67,6 +72,26 @@ export class RoutineWatchError extends Error {}
 
 /** Thrown when a check cannot run yet for a passing reason; it is retried shortly, not paused. */
 export class RoutineWatchRetry extends Error {}
+
+/** A provider operation may have started; an automatic fresh check is unsafe. */
+class RoutineWatchUncertain extends RoutineWatchError {}
+
+const MaintenanceCheckSchema = z.object({
+  id: z.string(),
+  status: z.enum(["executing", "completed", "uncertain"]),
+  startedAt: z.string(),
+  scheduledAt: z.string(),
+  state: RoutineWatchStateSchema.optional(),
+  nextRunAt: z.string().optional(),
+  note: z.string().optional(),
+  cancelRequested: z.boolean().optional(),
+});
+
+export function routineWatchCheckOutstanding(state: unknown): boolean {
+  if (!state || typeof state !== "object" || !("maintenanceCheck" in state)) return false;
+  const check = MaintenanceCheckSchema.safeParse(state.maintenanceCheck);
+  return !check.success || check.data.status !== "completed";
+}
 
 export type RoutineWatchOutcome = {
   state: RoutineWatchState;
@@ -103,6 +128,7 @@ export async function checkRoutineWatch(
   routine: RoutineWatchTarget,
   now: Date = new Date(),
 ): Promise<RoutineWatchOutcome> {
+  routine.check?.signal.throwIfAborted();
   const watch = parseRoutineWatch(routine.watch);
   if (!watch) throw new RoutineWatchError("The change trigger's settings are not valid.");
   const previous = parseRoutineWatchState(routine.watchState);
@@ -110,6 +136,7 @@ export async function checkRoutineWatch(
     watch.kind === "tool"
       ? await readTool(deps, routine, watch)
       : await readComputer(deps, routine, watch);
+  routine.check?.signal.throwIfAborted();
   return compareReading(previous, reading, now);
 }
 
@@ -284,15 +311,50 @@ function clip(text: string): string {
 }
 
 function context(routine: RoutineWatchTarget): AdapterContext {
-  const operationId = `watch:${routine.id}:${Date.now()}`;
+  const operationId = routine.check?.id ?? `watch:${routine.id}:${Date.now()}`;
   return {
     operationId,
     traceId: operationId,
     spaceId: routine.spaceId,
     userId: routine.userId,
     botId: routine.botId,
-    signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+    signal: watchSignal(routine, CHECK_TIMEOUT_MS),
   };
+}
+
+function watchSignal(routine: RoutineWatchTarget, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return routine.check ? AbortSignal.any([routine.check.signal, timeout]) : timeout;
+}
+
+async function watchCheckCancellation(prisma: PrismaClient, routineId: string, checkId: string) {
+  const controller = new AbortController();
+  let checking = false;
+  const check = async () => {
+    if (checking || controller.signal.aborted) return;
+    checking = true;
+    try {
+      const row = await prisma.routine.findUnique({
+        where: { id: routineId }, select: { watchState: true },
+      });
+      const state = z.object({ maintenanceCheck: MaintenanceCheckSchema }).safeParse(row?.watchState);
+      if (!state.success || state.data.maintenanceCheck.id !== checkId ||
+          state.data.maintenanceCheck.cancelRequested) {
+        controller.abort(new RoutineWatchUncertain("The change check was cancelled; its remote outcome is unconfirmed."));
+      }
+    } catch (error) {
+      controller.abort(error);
+      throw error;
+    } finally {
+      checking = false;
+    }
+  };
+  await check();
+  const timer = setInterval(() => {
+    void check().catch((error) => getLogger().error("routine watch cancellation observation", error));
+  }, 2_000);
+  timer.unref?.();
+  return { signal: controller.signal, stop: () => clearInterval(timer) };
 }
 
 async function toolContext(
@@ -372,22 +434,17 @@ async function readComputer(
   try {
     computer = await provisionComputer(deps, bot.computer.id, {
       ...ctx,
-      signal: AbortSignal.timeout(PROVISION_TIMEOUT_MS),
+      signal: watchSignal(routine, PROVISION_TIMEOUT_MS),
     });
   } catch (error) {
-    if (
-      error instanceof ComputerBusyError ||
-      (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name))
-    ) {
-      throw new RoutineWatchRetry();
-    }
-    throw new RoutineWatchError(`Could not start the bot's computer: ${errorText(error)}`);
+    if (error instanceof ComputerBusyError) throw new RoutineWatchRetry();
+    throw new RoutineWatchUncertain(`Could not confirm starting the bot's computer: ${errorText(error)}`);
   }
   scheduleComputerSleep(deps.jobs, bot.computer.id);
   // The check's own time budget starts once the computer is up.
   const botFolder = watchFolder(mode, bot.id);
   const cwd = resolveBotWorkspaceCwd(mode, bot.id, undefined);
-  ctx.signal = AbortSignal.timeout(CHECK_TIMEOUT_MS);
+  ctx.signal = watchSignal(routine, CHECK_TIMEOUT_MS);
 
   if (watch.kind === "command") {
     // Runs this shell command on the bot's computer every interval, in its folder,
@@ -464,7 +521,7 @@ async function run(
       else if (event.type === "exit") code = event.code;
     }
   } catch (error) {
-    throw new RoutineWatchError(`The check could not run on the computer: ${errorText(error)}`);
+    throw new RoutineWatchUncertain(`The check's computer outcome is unknown: ${errorText(error)}`);
   }
   return { stdout, stderr, code };
 }
@@ -513,7 +570,7 @@ async function readTool(
       else if (event.type === "error") failure = event.message;
     }
   } catch (error) {
-    failure = errorText(error);
+    throw new RoutineWatchUncertain(`${toolName} outcome is unknown: ${errorText(error)}`);
   }
   if (data && typeof data === "object") {
     const result = data as { isError?: boolean; error?: unknown };
@@ -577,33 +634,82 @@ export async function tickRoutineWatch(
   const watch = parseRoutineWatch(routine.watch);
   const previous = parseRoutineWatchState(routine.watchState);
   const now = new Date();
+  const storedState = z.record(z.string(), z.json()).nullable().parse(routine.watchState ?? null);
+  const recorded = MaintenanceCheckSchema.safeParse(storedState?.maintenanceCheck);
+  if (storedState?.maintenanceCheck !== undefined && !recorded.success) return { run: false };
+  const priorCheck = recorded.success ? recorded.data : null;
+  const check = {
+    id: randomUUID(), status: "executing" as const,
+    startedAt: now.toISOString(), scheduledAt: scheduledAt.toISOString(),
+  };
+  const baseState = previous ?? {
+    checkedAt: now.toISOString(), outcome: "baseline" as const, fingerprint: null, detail: null,
+  };
+  const admitted = await deps.prisma.$transaction(async (tx) => {
+    if (!(await lockMaintenanceAdmission(tx)).admitted) return false;
+    if (priorCheck) return priorCheck.status === "completed" &&
+      priorCheck.scheduledAt === scheduledAt.toISOString();
+    const claimed = await tx.routine.updateMany({
+      where: {
+        id: routine.id, active: true, nextRunAt: scheduledAt,
+        watchState: { equals: storedState ?? Prisma.DbNull },
+      },
+      data: { watchState: { ...baseState, maintenanceCheck: check } },
+    });
+    return claimed.count === 1;
+  });
+  if (!admitted) return { run: false };
+  if (priorCheck) {
+    const nextRunAt = new Date(priorCheck.nextRunAt ?? "");
+    if (!priorCheck.state || !priorCheck.note || !Number.isFinite(nextRunAt.getTime()))
+      throw new Error("Completed routine watch continuation is incomplete");
+    return { run: true, state: priorCheck.state, nextRunAt, note: priorCheck.note };
+  }
+  const fence = {
+    id: routine.id, active: true, nextRunAt: scheduledAt,
+    watchState: { path: ["maintenanceCheck", "id"], equals: check.id },
+  };
+  const settlementFence = {
+    id: routine.id, watchState: { equals: { ...baseState, maintenanceCheck: check } },
+  };
   let outcome: RoutineWatchOutcome;
+  const cancellation = await watchCheckCancellation(deps.prisma, routine.id, check.id);
   try {
     if (!watch) throw new RoutineWatchError("The change trigger's settings are not valid.");
-    outcome = await checkRoutineWatch(deps, routine, now);
+    outcome = await checkRoutineWatch(deps, {
+      ...routine, check: { id: `watch:${routine.id}:${check.id}`, signal: cancellation.signal },
+    }, now);
   } catch (error) {
     if (error instanceof RoutineWatchRetry) {
       const retryAt = new Date(now.getTime() + RETRY_AFTER_MS);
       const deferred = await deps.prisma.routine.updateMany({
-        where: { id: routine.id, active: true, nextRunAt: scheduledAt },
-        data: { nextRunAt: retryAt },
+        where: fence,
+        data: { nextRunAt: retryAt, watchState: storedState ?? Prisma.DbNull },
       });
       if (deferred.count === 1) await deps.jobs.enqueue(routineWakeupJob(routine.id, retryAt));
+      else await deps.prisma.routine.updateMany({
+        where: { id: routine.id, watchState: fence.watchState },
+        data: { watchState: storedState ?? Prisma.DbNull },
+      });
       return { run: false };
     }
     const reason = error instanceof Error ? error.message : String(error);
+    const failedState = {
+      checkedAt: now.toISOString(), outcome: "failed",
+      fingerprint: previous?.fingerprint ?? null,
+      ...(previous?.entries ? { entries: previous.entries } : {}),
+      detail: reason,
+      ...(error instanceof RoutineWatchUncertain || cancellation.signal.aborted
+        ? { maintenanceCheck: {
+            ...check, status: "uncertain", cancelRequested: cancellation.signal.aborted,
+          } } : {}),
+    };
     const paused = await deps.prisma.routine.updateMany({
-      where: { id: routine.id, active: true, nextRunAt: scheduledAt },
+      where: fence,
       data: {
         active: false,
         nextRunAt: null,
-        watchState: {
-          checkedAt: now.toISOString(),
-          outcome: "failed",
-          fingerprint: previous?.fingerprint ?? null,
-          ...(previous?.entries ? { entries: previous.entries } : {}),
-          detail: reason,
-        } satisfies RoutineWatchState,
+        watchState: failedState,
       },
     });
     if (paused.count === 1) {
@@ -615,25 +721,48 @@ export async function tickRoutineWatch(
         text: `I paused the **${routine.name}** routine because its change check failed: ${reason}\n\nTell me how to fix it, or turn the routine back on once it's sorted.`,
       });
     }
+    else await deps.prisma.routine.updateMany({
+      where: { id: routine.id, watchState: fence.watchState },
+      data: { watchState: failedState },
+    });
     return { run: false };
+  } finally {
+    cancellation.stop();
   }
   const nextRunAt = nextRoutineWatchAt(
     watch,
     new Date(Math.max(now.getTime(), scheduledAt.getTime())),
   );
   if (outcome.changed) {
-    return {
-      run: true,
-      state: outcome.state,
-      nextRunAt,
-      note: `\n\nThis run was started because something you watch changed (${describeRoutineWatch(watch)}).\nWhat changed since the last check:\n${outcome.state.detail ?? "(no detail)"}`,
+    const note = `\n\nThis run was started because something you watch changed (${describeRoutineWatch(watch)}).\nWhat changed since the last check:\n${outcome.state.detail ?? "(no detail)"}`;
+    const completedState = {
+      ...baseState,
+      maintenanceCheck: {
+        ...check, status: "completed", state: outcome.state,
+        nextRunAt: nextRunAt.toISOString(), note,
+      },
     };
+    const saved = await deps.prisma.routine.updateMany({
+      where: { ...fence, ...settlementFence },
+      data: { watchState: completedState },
+    });
+    if (!saved.count) await deps.prisma.routine.updateMany({
+      where: settlementFence, data: { watchState: completedState },
+    });
+    return saved.count ? { run: true, state: outcome.state, nextRunAt, note } : { run: false };
   }
   const claimed = await deps.prisma.routine.updateMany({
-    where: { id: routine.id, active: true, nextRunAt: scheduledAt },
+    where: { ...fence, ...settlementFence },
     data: { nextRunAt, watchState: outcome.state },
   });
-  if (claimed.count !== 1) return { run: false };
+  if (claimed.count !== 1) {
+    // A manual hold/schedule change must not leave a drained check "executing".
+    // Update only its result, never overwrite the independent hold or due date.
+    await deps.prisma.routine.updateMany({
+      where: settlementFence, data: { watchState: outcome.state },
+    });
+    return { run: false };
+  }
   if (watch.loud) {
     await postRoutineWatchMessage(deps, {
       spaceId: routine.spaceId,

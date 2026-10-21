@@ -1,4 +1,4 @@
-import { approvalEffectKey } from "@rakazo/core/node/approval-effect-key";
+import { approvalEffectKey, stableJsonValue } from "@rakazo/core/node/approval-effect-key";
 import { describe, expect, it, vi } from "vitest";
 import {
   approvalPausedToolResult,
@@ -26,6 +26,16 @@ import {
 } from "./approval-effect.js";
 
 describe("approved effect replay", () => {
+  it("retains exact JSON approval bindings when a connector has no resource revision", () => {
+    const route = { connectorId: "demo", resourceId: "account", toolName: "write", resourceRevision: undefined };
+    for (const request of [
+      boundDirectApprovalRequest(route, { title: "Approved" }, "marker"),
+      catalogApprovalRequest("demo_execute_tool", { title: "Approved" }, "marker", route),
+    ]) {
+      expect(stableJsonValue(request)).toBe(stableJsonValue(JSON.parse(JSON.stringify(request))));
+      expect(JSON.stringify(request)).toContain("Approved");
+    }
+  });
   it("replays persisted arguments instead of a changed model reconstruction", () => {
     const approved = { title: "Approved title", body: "Approved body" };
     const queue = createApprovedEffectReplayQueue([

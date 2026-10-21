@@ -464,7 +464,9 @@ async function writeConfirmation(
   key: string,
   body: string,
 ): Promise<void> {
-  await tx.messagingOutbound.deleteMany({ where: { idempotencyKey: key } });
+  await tx.messagingOutbound.deleteMany({
+    where: { idempotencyKey: key, status: { notIn: ["executing", "uncertain"] } },
+  });
   await tx.messagingOutbound.createMany({
     data: [{ idempotencyKey: key, kind: "dm", identityId: identity.id, body }],
     skipDuplicates: true,
@@ -485,7 +487,9 @@ async function enqueueConfirmation(
 ): Promise<void> {
   // Keys are stable per membership/connection across approval cycles; clear
   // the prior cycle's row or skipDuplicates would swallow the new text.
-  await deps.prisma.messagingOutbound.deleteMany({ where: { idempotencyKey: key } });
+  await deps.prisma.messagingOutbound.deleteMany({
+    where: { idempotencyKey: key, status: { notIn: ["executing", "uncertain"] } },
+  });
   await deps.prisma.messagingOutbound.createMany({
     data: [{ idempotencyKey: key, kind: "dm", identityId: identity.id, body }],
     skipDuplicates: true,
@@ -659,7 +663,10 @@ async function inviteMember(
   // A returning member restarts the approval cycle; clear the prior invite
   // row or skipDuplicates would leave them with no prompt to answer.
   await deps.prisma.messagingOutbound.deleteMany({
-    where: { idempotencyKey: `invite:${channel.id}:${identity.id}` },
+    where: {
+      idempotencyKey: `invite:${channel.id}:${identity.id}`,
+      status: { notIn: ["executing", "uncertain"] },
+    },
   });
   await deps.prisma.messagingOutbound.createMany({
     data: [

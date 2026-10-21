@@ -600,6 +600,25 @@ describe("thread event reduction", () => {
     expect(started?.run?.trigger).toBe("call_end");
   });
 
+  it("retains the exact paused run and applies only explicit maintenance checkpoint statuses", () => {
+    const run = threadRun("run-1");
+    const initial: ThreadSnapshot = { ...snapshot([]), run, activeRuns: [run] };
+    const pause = event({
+      type: "run.checkpointed", seq: 5, runId: run.id,
+      payload: { status: "maintenance_paused" },
+    });
+    expect(isThreadSnapshotEvent(pause)).toBe(true);
+    const paused = reduceThreadSnapshot(initial, pause);
+    expect(paused?.run).toMatchObject({ id: run.id, status: "maintenance_paused" });
+    expect(paused?.activeRuns).toHaveLength(1);
+    expect(applyThreadSendReceipt(paused, { botId: "bot-1", runId: "other", taskId: "other" })).toBe(paused);
+    const resumed = reduceThreadSnapshot(paused, event({
+      type: "run.checkpointed", seq: 6, runId: run.id, payload: { status: "queued" },
+    }));
+    expect(resumed?.run).toMatchObject({ id: run.id, status: "queued" });
+    expect(isThreadSnapshotEvent(event({ type: "run.checkpointed", payload: {} }))).toBe(false);
+  });
+
   it("marks the run as waiting when computer takeover is requested", () => {
     const run = threadRun("run-1");
     const initial: ThreadSnapshot = {
@@ -680,13 +699,13 @@ describe("thread event reduction", () => {
     ]);
   });
 
-  it("keeps event-sourced waiting_takeover when a stale refresh still shows the bot busy", () => {
+  it.each(["waiting_takeover", "maintenance_paused"] as const)("keeps event-sourced %s when a stale refresh still shows the bot busy", (status) => {
     const run = threadRun("run-1");
     const waitingLocal: ThreadSnapshot = {
       ...snapshot([]),
       cursor: 10,
-      run: { ...run, status: "waiting_takeover" },
-      activeRuns: [{ ...run, status: "waiting_takeover" }],
+      run: { ...run, status },
+      activeRuns: [{ ...run, status }],
     };
     const staleRefresh: ThreadSnapshot = {
       ...snapshot([]),
@@ -702,7 +721,7 @@ describe("thread event reduction", () => {
       computer({ state: "running", busyBotName: null }),
     );
 
-    expect(reconciled.snapshot.run?.status).toBe("waiting_takeover");
+    expect(reconciled.snapshot.run?.status).toBe(status);
     expect(reconciled.computer?.busyBotName).toBeNull();
     expect(computerTakeoverBlocked(reconciled.computer, reconciled.snapshot.run?.status)).toBe(
       false,

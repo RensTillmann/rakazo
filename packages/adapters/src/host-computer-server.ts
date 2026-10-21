@@ -199,8 +199,9 @@ export async function startHostComputerServer(options: {
       case "workspaceDirectories":
         yield await provider.workspaceDirectories(computer, input.directories, context);
         break;
-      case "cancelRunWork":
-        await provider.cancelRunWork(computer, computer.id, input.targetRunId, context);
+      case "cancelRunWork": {
+        // Interrupt the consumer before killing/waiting: process exit can finish the stream and
+        // remove its controller while cancellation waits for the native process tree to drain.
         for (const [controller, work] of active) {
           if (
             work?.method === "execute" &&
@@ -209,8 +210,9 @@ export async function startHostComputerServer(options: {
           )
             controller.abort();
         }
-        yield null;
+        yield await provider.cancelRunWork(computer, computer.id, input.targetRunId, context);
         break;
+      }
       case "listFiles":
         yield await provider.listFiles(computer, input.path, context);
         break;

@@ -127,9 +127,30 @@ describe("tickRoutineWatch", () => {
   const target = { threadId: "thread-1", botId: "bot-1" };
 
   function setup(result: { data?: unknown; error?: string }, watch: Record<string, unknown> = {}) {
-    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const maintenance = { active: false };
+    const hold = { active: true };
+    const stored: { watchState: unknown } = { watchState: null };
+    const updateMany = vi.fn(async ({ where, data }: {
+      where: { active?: boolean; watchState?: { equals?: unknown; path?: string[] } };
+      data: { active?: boolean; watchState?: unknown };
+    }) => {
+      if (where.active !== undefined && where.active !== hold.active) return { count: 0 };
+      if (where.watchState?.path) {
+        const state = stored.watchState;
+        const marker = state && typeof state === "object" && "maintenanceCheck" in state
+          ? state.maintenanceCheck : null;
+        if (!marker || typeof marker !== "object" || !("id" in marker) ||
+            marker.id !== where.watchState.equals) return { count: 0 };
+      } else if (where.watchState &&
+          JSON.stringify(where.watchState.equals) !== JSON.stringify(stored.watchState)) return { count: 0 };
+      if ("watchState" in data) stored.watchState = data.watchState;
+      if (data.active !== undefined) hold.active = data.active;
+      return { count: 1 };
+    });
     const messages: Array<{ role: string; blocks: unknown }> = [];
     const tx = {
+      $queryRaw: vi.fn(async () => [{ active: maintenance.active, revision: 0 }]),
+      routine: { updateMany },
       thread: { update: vi.fn(async () => ({ nextMessageSeq: 1, nextEventSeq: 1 })) },
       message: {
         create: vi.fn(async ({ data }: { data: { role: string; blocks: unknown } }) => {
@@ -141,7 +162,10 @@ describe("tickRoutineWatch", () => {
     };
     const deps = {
       prisma: {
-        routine: { updateMany },
+        routine: {
+          updateMany,
+          findUnique: vi.fn(async () => ({ watchState: stored.watchState })),
+        },
         connection: { findMany: vi.fn(async () => []) },
         actionApprovalRule: { findMany: vi.fn(async () => []) },
         bot: {
@@ -178,46 +202,34 @@ describe("tickRoutineWatch", () => {
         detail: null,
       },
     };
-    return { deps, routine, updateMany, messages };
+    stored.watchState = routine.watchState;
+    return { deps, routine, updateMany, messages, maintenance, stored, hold };
   }
 
   it("records a quiet no-change check without a message and schedules the next", async () => {
-    const { deps, routine, updateMany, messages } = setup({ data: { changes: [] } });
-    // First reading is the baseline.
+    const { deps, routine, messages, stored } = setup({ data: { changes: [] } });
     await tickRoutineWatch(deps, routine, target, scheduledAt);
-    const baseline = (
-      updateMany.mock.calls[0] as unknown as [
-        { data: { watchState: { checkedAt: string; fingerprint: string } } },
-      ]
-    )[0].data.watchState;
-    routine.watchState = { ...baseline, outcome: "unchanged", detail: null };
+    expect(stored.watchState).toMatchObject({ outcome: "baseline" });
 
-    const tick = await tickRoutineWatch(deps, routine, target, scheduledAt);
-    expect(tick).toEqual({ run: false });
-    expect(updateMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          watchState: expect.objectContaining({ outcome: "unchanged" }),
-        }),
-      }),
+    const tick = await tickRoutineWatch(
+      deps, { ...routine, watchState: stored.watchState }, target, scheduledAt,
     );
+    expect(tick).toEqual({ run: false });
+    expect(stored.watchState).toMatchObject({ outcome: "unchanged" });
     expect(deps.jobs.enqueue).toHaveBeenCalledTimes(2);
     expect(messages).toHaveLength(0);
   });
 
   it("posts 'no changes' when loud", async () => {
-    const { deps, routine, updateMany, messages } = setup(
+    const { deps, routine, messages, stored } = setup(
       { data: { changes: [] } },
       { loud: true },
     );
     await tickRoutineWatch(deps, routine, target, scheduledAt);
-    const baseline = (
-      updateMany.mock.calls[0] as unknown as [
-        { data: { watchState: { checkedAt: string; fingerprint: string } } },
-      ]
-    )[0].data.watchState;
-    routine.watchState = { ...baseline, outcome: "unchanged", detail: null };
-    await tickRoutineWatch(deps, routine, target, scheduledAt);
+    expect(stored.watchState).toMatchObject({ outcome: "baseline" });
+    await tickRoutineWatch(
+      deps, { ...routine, watchState: stored.watchState }, target, scheduledAt,
+    );
     expect(messages.at(-1)).toMatchObject({
       role: "system",
       blocks: [{ kind: "meta", text: "Brain check routine: no changes" }],
@@ -260,7 +272,7 @@ describe("tickRoutineWatch", () => {
     },
   );
 
-  it.each([new ComputerBusyError(), new DOMException("timed out", "TimeoutError")])(
+  it.each([new ComputerBusyError()])(
     "retries temporary provisioning conflicts without losing the baseline",
     async (error) => {
       const { deps, routine, updateMany, messages } = setup({});
@@ -268,13 +280,111 @@ describe("tickRoutineWatch", () => {
       vi.mocked(provisionComputer).mockRejectedValueOnce(error);
       await tickRoutineWatch(deps, routine, target, scheduledAt);
       expect(updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { nextRunAt: expect.any(Date) } }),
+        expect.objectContaining({ data: { nextRunAt: expect.any(Date), watchState: routine.watchState } }),
       );
       expect(deps.jobs.enqueue).toHaveBeenCalledOnce();
       expect(deps.jobs.cancel).not.toHaveBeenCalled();
       expect(messages).toEqual([]);
     },
   );
+
+  it("retains the scheduled watch without provider calls or retry jobs while globally held", async () => {
+    const h = setup({ data: { changed: true } });
+    h.maintenance.active = true;
+    await tickRoutineWatch(h.deps, h.routine, target, scheduledAt);
+    expect(h.deps.connector!.execute).not.toHaveBeenCalled();
+    expect(h.updateMany).not.toHaveBeenCalled();
+    expect(h.deps.jobs.enqueue).not.toHaveBeenCalled();
+    h.maintenance.active = false;
+    await tickRoutineWatch(h.deps, h.routine, target, scheduledAt);
+    expect(h.deps.connector!.execute).toHaveBeenCalledOnce();
+  });
+
+  it("replays a durably completed change check after pause without repeating the provider operation", async () => {
+    const h = setup({ data: {} });
+    h.routine.watchState.fingerprint = "old";
+    vi.mocked(h.deps.connector!.execute).mockImplementationOnce(async function* () {
+      h.maintenance.active = true;
+      yield { type: "result", data: { changed: true } };
+    });
+    const first = await tickRoutineWatch(h.deps, h.routine, target, scheduledAt);
+    expect(first.run).toBe(true);
+    h.routine.watchState = h.stored.watchState as typeof h.routine.watchState;
+    h.maintenance.active = false;
+    const resumed = await tickRoutineWatch(h.deps, h.routine, target, scheduledAt);
+    expect(resumed).toEqual(first);
+    expect(h.deps.connector!.execute).toHaveBeenCalledOnce();
+  });
+
+  it("retains a completed change without clearing a manual routine hold", async () => {
+    const h = setup({});
+    h.routine.watchState.fingerprint = "old";
+    vi.mocked(h.deps.connector!.execute).mockImplementationOnce(async function* () {
+      h.hold.active = false;
+      yield { type: "result", data: { changed: true } };
+    });
+    expect(await tickRoutineWatch(h.deps, h.routine, target, scheduledAt)).toEqual({ run: false });
+    expect(h.hold.active).toBe(false);
+    expect(h.stored.watchState).toMatchObject({ maintenanceCheck: { status: "completed" } });
+    expect(h.deps.jobs.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("does not retry an ambiguous computer provisioning timeout as another remote start", async () => {
+    const h = setup({});
+    h.routine.watch = { kind: "files", paths: ["inbox"] } as unknown as typeof h.routine.watch;
+    vi.mocked(provisionComputer).mockRejectedValueOnce(new DOMException("lost response", "TimeoutError"));
+    await tickRoutineWatch(h.deps, h.routine, target, scheduledAt);
+    expect(h.stored.watchState).toMatchObject({ maintenanceCheck: { status: "uncertain" } });
+    expect(h.deps.jobs.enqueue).not.toHaveBeenCalled();
+  });
+
+  it.each(["executing", "uncertain"])("never replays a %s check after restart", async (status) => {
+    const h = setup({ data: {} });
+    Object.assign(h.routine.watchState, { maintenanceCheck: {
+      id: "original-check", status, startedAt: new Date(0).toISOString(),
+      scheduledAt: scheduledAt.toISOString(),
+    } });
+    expect(await tickRoutineWatch(h.deps, h.routine, target, scheduledAt)).toEqual({ run: false });
+    expect(h.deps.connector!.execute).not.toHaveBeenCalled();
+    expect(h.deps.jobs.enqueue).not.toHaveBeenCalled();
+    expect(h.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("cancels only the exact durable check and preserves its unknown provider outcome", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = setup({});
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => { entered = resolve; });
+      let operationId = "";
+      vi.mocked(h.deps.connector!.execute).mockImplementationOnce(async function* (_call, context) {
+        operationId = context.operationId;
+        entered();
+        await new Promise<void>((_resolve, reject) => {
+          context.signal.addEventListener("abort", () => reject(context.signal.reason), { once: true });
+        });
+        yield { type: "result", data: {} };
+      });
+      const ticking = tickRoutineWatch(h.deps, h.routine, target, scheduledAt);
+      await started;
+      const state = h.stored.watchState;
+      if (!state || typeof state !== "object" || !("maintenanceCheck" in state))
+        throw new Error("Expected durable check");
+      const check = state.maintenanceCheck;
+      if (!check || typeof check !== "object" || !("id" in check))
+        throw new Error("Expected check identity");
+      expect(operationId).toBe(`watch:routine-1:${String(check.id)}`);
+      h.stored.watchState = { ...state, maintenanceCheck: { ...check, cancelRequested: true } };
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(await ticking).toEqual({ run: false });
+      expect(h.stored.watchState).toMatchObject({ maintenanceCheck: {
+        id: check.id, status: "uncertain", cancelRequested: true,
+      } });
+      expect(h.deps.jobs.enqueue).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("applies approval rules to the real tool behind a lazy catalog call", async () => {
     const { deps, routine } = setup({ data: "ok" });
@@ -380,9 +490,15 @@ describe("tickRoutineWatch on a computer", () => {
     exec: { stdout?: string; stderr?: string; code?: number } = {},
     computer = { id: "computer-1", scope: "team", kind: "vm" },
   ) {
-    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const stored: { watchState: unknown } = { watchState: null };
+    const updateMany = vi.fn(async ({ data }: { data: { watchState?: unknown } }) => {
+      if ("watchState" in data) stored.watchState = data.watchState;
+      return { count: 1 };
+    });
     const messages: unknown[] = [];
     const tx = {
+      $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
+      routine: { updateMany },
       thread: { update: vi.fn(async () => ({ nextMessageSeq: 1, nextEventSeq: 1 })) },
       message: {
         create: vi.fn(async ({ data }: { data: unknown }) => {
@@ -399,7 +515,10 @@ describe("tickRoutineWatch on a computer", () => {
     });
     const deps = {
       prisma: {
-        routine: { updateMany },
+        routine: {
+          updateMany,
+          findUnique: vi.fn(async () => ({ watchState: stored.watchState })),
+        },
         bot: {
           findUnique: vi.fn(async () => ({
             id: "bot-1",
@@ -423,7 +542,7 @@ describe("tickRoutineWatch on a computer", () => {
       watch,
       watchState: { checkedAt: "x", outcome: "unchanged", fingerprint: "old", detail: null },
     };
-    return { deps, routine, updateMany, messages, execute };
+    return { deps, routine, updateMany, messages, execute, stored };
   }
 
   it.each(["team", "dedicated"])("checks files in a %s desktop workspace", async (scope) => {
@@ -494,10 +613,10 @@ describe("tickRoutineWatch on a computer", () => {
       paths: ["inbox"],
     });
     expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toEqual({ run: false });
-    const data = (updateMany.mock.calls[0] as unknown as [{ data: Record<string, unknown> }])[0]
+    const data = (updateMany.mock.calls.at(-1) as unknown as [{ data: Record<string, unknown> }])[0]
       .data;
     expect(data).not.toHaveProperty("active");
-    expect(data).not.toHaveProperty("watchState");
+    expect(data.watchState).toEqual(routine.watchState);
     expect((data.nextRunAt as Date).getTime()).toBeLessThan(Date.now() + 2 * 60_000);
     expect(deps.jobs.enqueue).toHaveBeenCalledOnce();
     expect(messages).toHaveLength(0);
@@ -556,7 +675,7 @@ describe("tickRoutineWatch on a computer", () => {
       kind: "fake",
       providerRef: "fake",
     });
-    const { deps, routine, updateMany } = setupComputer(
+    const { deps, routine, stored } = setupComputer(
       { kind: "files", paths: ["a"] },
       { stdout: "/home/rakazo/bots/bot-1/a/x.txt\t1\t5.25\n" },
     );
@@ -567,7 +686,9 @@ describe("tickRoutineWatch on a computer", () => {
       detail: null,
     } as never;
     await tickRoutineWatch(deps, routine, target, scheduledAt);
-    expect(JSON.stringify(updateMany.mock.calls[0])).toContain("1:5.25");
+    expect(stored.watchState).toMatchObject({
+      entries: { "/home/rakazo/bots/bot-1/a/x.txt": "1:5.25" },
+    });
   });
 });
 

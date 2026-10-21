@@ -428,9 +428,17 @@ msgstr ""
 msgid "Active"
 msgstr "启用"
 
+#: src/components/FleetPauseControls.tsx
+msgid "Active effects:"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Active model"
 msgstr "当前模型"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Active runs:"
+msgstr ""
 
 #: src/components/computer/TerminalApp.tsx
 #: src/pages/Shell.tsx
@@ -641,6 +649,10 @@ msgstr "已允许一次"
 #: src/pages/Auth.tsx
 msgid "Already have an account?"
 msgstr "已有账户？"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Already recorded."
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
@@ -1086,6 +1098,8 @@ msgstr "无法读取图像"
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/FlagMessageDialog.tsx
+#: src/components/FleetPauseControls.tsx
+#: src/components/FleetRecoveryList.tsx
 #: src/components/markdown-link-prompt.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/Artifacts.tsx
@@ -1192,6 +1206,10 @@ msgstr "请查看邮箱"
 
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Checking computer setup…"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Checking Fleet status…"
 msgstr ""
 
 #: src/components/ComputersUnavailableHint.tsx
@@ -1436,6 +1454,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Confirm delete"
 msgstr "确认删除"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Confirm force stop"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Auth.tsx
@@ -2573,6 +2595,14 @@ msgstr "每月"
 msgid "Every week"
 msgstr "每周"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Evidence found"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Evidence:"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor 令牌"
@@ -2731,9 +2761,21 @@ msgstr "已完成。"
 msgid "Finishing MCP connection…"
 msgstr "正在完成 MCP 连接…"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Finishing on its own"
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
 msgstr "标记异常操作"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet changed. Review the refreshed status before choosing again."
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet control"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Fleet management"
@@ -2741,6 +2783,30 @@ msgstr ""
 
 #: src/lib/answered-by-label.ts
 msgid "fleet service"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet status unavailable"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet: {phase}"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet: Outcome unknown"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Fleet: Status unavailable"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Force stop interrupts active work instead of waiting for a safe checkpoint. Progress may be incomplete. Already-started effects cannot be undone and their outcome may remain unknown. Fleet will be paused until you resume it."
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Force stop…"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -2904,6 +2970,10 @@ msgstr "频率"
 msgid "How to check"
 msgstr "如何检查"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "I checked it…"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "I’m done"
 msgstr "我做完了"
@@ -3029,6 +3099,19 @@ msgstr ""
 msgid "Issue"
 msgstr ""
 
+#. placeholder {0}: result.status
+#: src/components/FleetRecoveryList.tsx
+msgid "It changed meanwhile (now {0}); nothing was overwritten."
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "It did not take effect"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "It took effect"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Its bots and groups are kept and leave the section."
 msgstr "其中的 Bot 和群组会保留，并移出该分组。"
@@ -3082,6 +3165,10 @@ msgstr "上次检查 {0}：有变化"
 #: src/pages/RoutineEditor.tsx
 msgid "Last check {0}: no changes"
 msgstr "上次检查 {0}：无变化"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Last known: {phase}"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
@@ -3195,6 +3282,10 @@ msgstr "正在加载规则…"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Loading unfinished operations…"
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -3452,6 +3543,10 @@ msgstr "分钟"
 msgid "Missed call"
 msgstr ""
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Missing:"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
@@ -3572,6 +3667,10 @@ msgstr "给这个群组命名"
 #: src/pages/RoutineEditor.tsx
 msgid "Name this routine"
 msgstr "给这个例行任务命名"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Needs attention"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
@@ -3795,6 +3894,10 @@ msgstr "不在插件目录中"
 msgid "Not now"
 msgstr "暂不"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Not recorded."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Not sent — @{unsentTo} doesn't see this reply"
 msgstr ""
@@ -3989,6 +4092,18 @@ msgstr "原消息不可用"
 msgid "Other model…"
 msgstr "其他模型…"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Outcome unknown"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Outcome unknown. Refresh status or retry the same request."
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Outcome unknown. The list below shows the current state."
+msgstr ""
+
 #: src/pages/Board.tsx
 msgid "Owner"
 msgstr ""
@@ -4043,9 +4158,24 @@ msgstr "粘贴你的 API 密钥"
 msgid "Paste your API key, then test again."
 msgstr "请粘贴你的 API 密钥，然后重新测试。"
 
+#: src/components/FleetPauseControls.tsx
+msgid "Pause Fleet"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Pause new Fleet work while active runs reach a safe checkpoint. Resume is always manual."
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+#: src/lib/roster-status.ts
+#: src/pages/ActivityList.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "已暂停"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Pausing"
+msgstr ""
 
 #: src/components/call/VoiceChatCard.tsx
 msgid "Phone call"
@@ -4167,6 +4297,10 @@ msgstr ""
 msgid "Queued"
 msgstr "排队中"
 
+#: src/components/FleetPauseControls.tsx
+msgid "Queued/held runs:"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Quote"
 msgstr ""
@@ -4212,6 +4346,24 @@ msgstr "重新连接 OAuth"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "正在重新连接"
+
+#. placeholder {0}: item.proposed.status
+#: src/components/FleetRecoveryList.tsx
+msgid "Record as {0}"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Record my check"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Record what you verified at the destination. This does not resume or retry anything."
+msgstr ""
+
+#. placeholder {0}: result.status
+#: src/components/FleetRecoveryList.tsx
+msgid "Recorded. It is now {0}."
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -4278,6 +4430,10 @@ msgstr "刷新"
 
 #: src/components/ReplyReview.tsx
 msgid "Refresh customer context"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Refresh status"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -4430,6 +4586,10 @@ msgstr ""
 msgid "Replying to {0}"
 msgstr ""
 
+#: src/components/FleetPauseControls.tsx
+msgid "Request rejected. Refresh status before choosing again."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr "调研和写作"
@@ -4505,6 +4665,10 @@ msgstr "已恢复"
 msgid "Restoring your workspace"
 msgstr ""
 
+#: src/components/FleetPauseControls.tsx
+msgid "Resume Fleet"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "Resume room"
 msgstr ""
@@ -4521,6 +4685,10 @@ msgstr "重试"
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "Retry now"
 msgstr "立即重试"
+
+#: src/components/FleetPauseControls.tsx
+msgid "Retry request"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Retry screen"
@@ -4585,6 +4753,10 @@ msgstr "例行任务"
 msgid "Routines that run while you're away"
 msgstr ""
 
+#: src/components/FleetRecoveryList.tsx
+msgid "run"
+msgstr ""
+
 #: src/components/LiveActivityModal.tsx
 msgid "Run"
 msgstr ""
@@ -4605,6 +4777,7 @@ msgstr "运行时间必须是将来的时间。"
 msgid "running"
 msgstr "运行中"
 
+#: src/components/FleetPauseControls.tsx
 #: src/pages/ActivityList.tsx
 msgid "Running"
 msgstr "运行中"
@@ -5101,6 +5274,10 @@ msgstr ""
 msgid "Start recording"
 msgstr "开始录制"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "started"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Starting"
 msgstr "正在开始"
@@ -5129,6 +5306,10 @@ msgstr ""
 
 #: src/components/UsageBars.tsx
 msgid "Status refresh unavailable"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "Status unavailable. Last known state is stale; new actions are disabled."
 msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
@@ -5555,6 +5736,14 @@ msgstr "不可用"
 msgid "Undo"
 msgstr "撤销"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Unfinished operations"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Unfinished operations unavailable."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr ""
@@ -5797,6 +5986,10 @@ msgstr "工作日"
 #: src/pages/shell/dialogs.tsx
 msgid "What about its memories?"
 msgstr "它的记忆怎么处理？"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "What did you check?"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "What do you want me on first?"

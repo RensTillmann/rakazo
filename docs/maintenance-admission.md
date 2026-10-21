@@ -1,0 +1,120 @@
+# Global graceful Fleet pause
+
+The deployment owner can pause all bot work from **Fleet: Running** in the web chat header. This is deployment-global, not a selected-space or per-bot switch. Josy, Elena and repair work have no exemption. Implementation, review and deployment approval remain separate; updating source does not update running services.
+
+## Operator controls
+
+- **Pause Fleet** stops new admission. Active work drains to a safe boundary and saves its continuation; ordinary pause does not kill a browser, computer or process.
+- **Resume Fleet** is an explicit owner action. It removes only the global pause, then work is revalidated. It does not enable inactive routines, clear usage/dependency/deadline holds, grant access or revive denied approvals.
+- **Force stop…** requires a separate confirmation. It interrupts work rather than waiting for a checkpoint, leaves Fleet paused, and cannot undo an already-started external action.
+- There is no expiry, automatic resume, startup bypass or repair-bot bypass.
+
+| Status | Meaning |
+| --- | --- |
+| Running | Global admission is open; independent holds can still prevent work. |
+| Pausing | The global fence is active, but runs or effects have not drained. |
+| Paused | No counted active run/effect remains. Queued input can still be waiting. |
+| Needs attention | A continuation, cancellation or external outcome cannot be safely established. It is not silently treated as completed. |
+| Status unavailable | The last reading is stale or unavailable. New control actions are disabled. |
+
+The dialog shows active runs, active effects and queued/held runs. Visible tabs refresh every five seconds and on focus; a reload is not required. An outage preserves the last reading as explicitly stale, not as proof of quiescence.
+
+If a command's response is lost, use **Retry request**. It resends the identical command identity and revision. Do not manufacture a new force-stop request just to retry: that would be a new instruction and could affect work submitted afterward. A stale-revision conflict requires reviewing fresh state before choosing a new action.
+
+## Work and effect boundaries
+
+Schedules, webhooks, direct/room messages, delegated work, approval continuations, recovery and queued dispatch retain their durable input identities while admission is closed. Queued work is not reported as actively executing. New model/tool/provider operations are fenced; already-started operations may finish and are reconciled.
+
+A checkpoint preserves the runtime continuation, transcripts, steering, exact tool/effect identity and relevant resource/approval bindings. Resume does not regenerate an interrupted tool call with new arguments or a new delivery identity. Approved replay still requires the original approval; a maintenance transition is not authorization.
+
+Uncertain outward deliveries are not blindly resent. Submitted media/cloud work can be reconciled without starting replacement work. Semantic memory recall and asynchronous memory writes count as Fleet activity; a pause between banks retains completed results for the same invocation.
+
+Fleet card actions retain their exact admitted question/answer and per-stage receipts. Completed label/comment/memory stages are reused, and local trust changes commit atomically with their receipt. A changed case or a lost provider acknowledgment does not authorize replaying an uncertain action.
+
+Force-stop acknowledgment requires actual drain evidence. A lease expiring, another worker marking a run cancelled, a local abort signal, or an unknown computer is not proof that a remote attempt stopped. Unresolved attempts/effects remain visible. Held items are scanned without allowing an unresolved first page to starve later work.
+
+Ambient room-response decisions retain their operation and batch identity across lease expiry and bridge restart. Another instance cannot judge the same conversation while that operation is unresolved. Only confirmed producer drain settles it; Force stop and Resume do not manufacture a completion receipt. An orphan without drain evidence remains visible for investigation.
+
+## Unfinished operations
+
+Under the counts, the dialog lists every unfinished operation once: runs, attempts, external effects, Fleet service effects and other in-flight operations. Each shows its producer bot, run, start time, current status and one of three states:
+
+| State | Meaning | Owner action |
+| --- | --- | --- |
+| Finishing on its own | Its run still holds a live lease (or the operation is in progress). | None; it settles itself. |
+| Evidence found | The run's own records decide the outcome. | **Record as …** applies exactly that outcome. |
+| Outcome unknown | Nothing recorded decides it. **Missing:** names the evidence that would. | **I checked it…** for an effect whose run ended: choose *It took effect* or *It did not take effect* and say what you checked. |
+
+Evidence is narrow on purpose. A terminal parent run or an expired lease never settles anything. An attempt settles as `interrupted` only when a newer fenced attempt finished the run (the old fence can no longer write). An effect settles only from a recorded call with the same tool and arguments and a recorded completion: success → `completed`; the computer reporting the action failed → `failed`; any other error after the call started → `uncertain`, which keeps the outcome explicitly unknown until the owner checks the destination.
+
+Each settlement is one transaction: owner check, row lock, expected status, evidence re-derived at that moment, then the update plus an audit row in `maintenance_recovery` (operator, basis, from/to status, evidence or note). The effect's `result.reconciliation` carries the same provenance. If the real outcome lands first, the request reports *changed* and overwrites nothing; repeating a request identity returns its original receipt. Settling never resumes, retries, cancels or undoes work and never changes the global pause.
+
+## Resume authority and limits
+
+Native ownership, account/space membership, resource revisions, exact approval requests and unsettled effects are checked at continuation and lease boundaries. Applicable Fleet dispatch authority is read again rather than trusted from old message text. Independent routine and usage brakes remain in force.
+
+Fleet validates all persisted original and steering inputs using the actual notification category. Fresh mailbox/summary inspections and case-less coordinator notifications can resume without inventing a tracker job or claiming external content was verified; previously acted work still requires current continuation evidence.
+
+An unverifiable legacy/prior-work continuation stays held with a reason and its checkpoint intact; global Resume does not erase it or replay it blindly. Inspect the affected thread and current case authority. Use its normal Stop control only when intentionally abandoning that continuation, then create fresh authorized work. Do not delete state, receipts or checkpoints as a recovery shortcut.
+
+The current trusted Fleet verifier binding is an enabled, assigned, revision-matched MCP server at `http://fleet-service:8790/mcp` for a `fleet:` bot profile. An alternative or ambiguous endpoint is unavailable, not implicitly trusted. Existing tracker deadline authority is GitHub milestone `due_on`; this feature does not implement the separately discussed general deadline/priority design.
+
+## HTTP contract
+
+Shared schemas live in `packages/contracts/src/maintenance.ts`; persistence/admission lives in `packages/db/src/maintenance.ts`.
+
+`GET /api/maintenance` requires the authenticated deployment owner and returns a non-cacheable snapshot:
+
+```json
+{
+  "state": { "active": true, "revision": 1 },
+  "status": {
+    "phase": "paused",
+    "activeRuns": 0,
+    "activeEffects": 0,
+    "pendingRuns": 1,
+    "issues": []
+  }
+}
+```
+
+`POST /api/maintenance` additionally requires a configured trusted Origin and `application/json`. Its exact body is:
+
+```json
+{ "requestId": "unique-command-id", "action": "enter", "expectedRevision": 0 }
+```
+
+Actions are `enter`, `resume` and `force-stop`. The acknowledgment contains `{state, replayed}`. An identical committed retry returns its original durable receipt without repeating the action, even if subsequent work/state has changed. Refresh GET for current status. Reusing an identity with different arguments is rejected.
+
+Authentication failure is 401; non-owner/untrusted origin 403; invalid command 400; stale/conflicting command 409; oversized body 413; wrong media type 415; unavailable authority/store 503. The command is not exposed as a model tool. Other accounts, ordinary members and bot credentials cannot operate it.
+
+Owner identity, revision, state and audit receipt are committed atomically. Admission and effect claims use the corresponding database fence; a missing state row or failed authority read fails closed. No network operation belongs inside the admission transaction.
+
+`GET /api/maintenance/recovery` (owner only) returns `{ items: [...] }` with `kind`, `id`, `status`, `state` (`draining`/`settleable`/`unresolved`), `bot`, `runId`, `runStatus`, `operation`, `startedAt`, `lastEvidenceAt`, `evidence`, `proposed` (`{status, basis}` or null), `missing` and `ownerVerifiable`. `POST /api/maintenance/recovery` takes the same Origin/JSON checks and one of:
+
+```json
+{ "requestId": "unique-id", "basis": "evidence", "kind": "attempt", "id": "…", "expectedStatus": "running" }
+{ "requestId": "unique-id", "basis": "owner-verified", "kind": "effect", "id": "…", "expectedStatus": "uncertain", "outcome": "failed", "note": "What I checked (10+ characters)" }
+```
+
+It answers `{ outcome: "settled" | "replayed" | "changed" | "refused", status, reason? }`. Status codes match the control endpoint; the body limit is 4 KiB.
+
+## Coordinated rollout and verification
+
+Apply the native maintenance migration and the Fleet service migrations to the intended database through the existing deployment procedure. Reapply Fleet's `setup/role.sql` as the native database owner after its ledger exists: Fleet needs only its declared public SELECT columns, and native status needs SELECT on the Fleet activity ledger. Do not solve a permission failure by granting public-table writes.
+
+Update API, workers and Fleet service together before activating the control. An old process does not understand the new fences; mixed versions are not proof that a global pause works. Check the deployed revisions and actual status, not just branch HEAD. Merge/deployment and live activation require their own authorization.
+
+Extract updated web message catalogs with `pnpm --filter @rakazo/web intl:extract` before building a release containing new controls. Verify the built interface displays meaningful action labels rather than translation IDs. Historical unfinished attempts and effects can make the first live status **Needs attention** even when their parent runs are terminal; inspect their actual outcomes instead of deleting their records or treating terminal parent status as drain evidence.
+
+Verification uses disposable local PostgreSQL, synthetic users and scripted/emulated providers—not live Fleet or customer accounts. Relevant suites include:
+
+- `packages/db/src/maintenance{,.postgres}.test.ts`: durable commands, contention, persistence and cancellation evidence.
+- `apps/api/src/maintenance{,-intake.postgres}.test.ts`: owner/HTTP boundary, retained intake and exact approval behavior.
+- `packages/adapters/src/executor-maintenance.test.ts`, Pi budget/transport suites and native host-computer tests: checkpoints, current authority, identities and actual cancellation.
+- `packages/adapters/src/messaging-delivery.postgres.test.ts`: ordered delivery, pause races and uncertain outcomes.
+- Fleet service maintenance/authority/card suites and gate tests: service-side work and independent holds.
+
+Native maintenance PostgreSQL suites require `MAINTENANCE_TEST_DATABASE_URL`; delivery uses `VERIFY_DATABASE=1` and `DATABASE_URL`. Use separate disposable databases because workers reconcile durable backlog. Fleet's opt-in suites require `FLEET_MAINTENANCE_POSTGRES_OWNER_URL` and `FLEET_MAINTENANCE_POSTGRES_URL` for the same explicitly allowed local test database with its restricted role. Run Unix process/symlink suites on Linux; container tests need an init/subreaper such as `tini`.
+
+Tests alone do not establish UI behavior. Exercise the actual owner interface, outage/restart, queued input, stale revision, separately confirmed force stop and lost-response retry. A retry must not cancel newer queued input; resume must execute the preserved request once. Also verify non-owner/CSRF refusal and a narrow-screen layout.

@@ -1,5 +1,5 @@
 import { PiAgentRuntime } from "@rakazo/adapters";
-import type { PrismaClient } from "@rakazo/db";
+import type { Prisma, PrismaClient } from "@rakazo/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { compactHistory } from "../../adapters/src/history-compaction.js";
 import { startModelEmulator } from "./model-emulator.js";
@@ -46,9 +46,42 @@ describe("history compaction with real Pi", () => {
         return { count: 1 };
       },
     );
-    const createMany = vi.fn(async () => ({ count: 1 }));
+    const createMany = vi.fn(async (_args: Prisma.UsageRecordCreateManyArgs) => ({ count: 1 }));
     const create = vi.fn();
+    const effects: Array<Record<string, unknown>> = [];
     const prisma = {
+      $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
+      $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
+      run: {
+        findFirst: vi.fn(async () => ({ id: "fixture-run" })),
+        findUnique: vi.fn(async () => ({ maintenanceCancelRequestedAt: null })),
+      },
+      bot: { findFirst: vi.fn(async () => ({ id: thread.botId })) },
+      spaceMember: { findUnique: vi.fn(async () => ({ id: "fixture-member" })) },
+      externalEffect: {
+        upsert: vi.fn(async ({ where, create }: {
+          where: { idempotencyKey: string }; create: Record<string, unknown>;
+        }) => {
+          const existing = effects.find((effect) => effect.idempotencyKey === where.idempotencyKey);
+          if (existing) return { ...existing };
+          const effect = { id: `effect-${effects.length}`, result: null, ...create };
+          effects.push(effect);
+          return { ...effect };
+        }),
+        findMany: vi.fn(async ({ where }: { where: { kind: string; status: string } }) =>
+          effects.filter((effect) => effect.kind === where.kind && effect.status === where.status)
+            .map((effect) => ({ ...effect }))),
+        updateMany: vi.fn(async ({ where, data }: {
+          where: { id: string; status: string | { in: string[] } };
+          data: Record<string, unknown>;
+        }) => {
+          const selected = effects.filter((effect) =>
+            effect.id === where.id && (typeof where.status === "string"
+              ? effect.status === where.status : where.status.in.includes(String(effect.status))));
+          for (const effect of selected) Object.assign(effect, data);
+          return { count: selected.length };
+        }),
+      },
       thread: { findUniqueOrThrow: vi.fn(async () => thread), updateMany },
       message: {
         findMany: vi.fn(async () => [
@@ -78,6 +111,9 @@ describe("history compaction with real Pi", () => {
     expect(memoryProviders.resolve).not.toHaveBeenCalled();
     expect(jobs.enqueue).not.toHaveBeenCalled();
     expect(createMany).toHaveBeenCalledOnce();
+    expect(effects).toEqual([
+      expect.objectContaining({ kind: "history_compaction", status: "intended", runId: "fixture-run" }),
+    ]);
     expect(createMany.mock.calls[0]?.[0]).toMatchObject({
       skipDuplicates: true,
       data: [
@@ -97,6 +133,10 @@ describe("history compaction with real Pi", () => {
 
     await compactHistory(deps, thread.id);
     server.assertComplete();
+    expect(effects).toEqual([
+      expect.objectContaining({ kind: "history_compaction", status: "completed" }),
+      expect.objectContaining({ kind: "history_compaction_memory", status: "cancelled" }),
+    ]);
     expect(updateMany).toHaveBeenCalledExactlyOnceWith({
       where: {
         id: thread.id,

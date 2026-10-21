@@ -447,7 +447,7 @@ export function createGroupRepos(prisma: PrismaClient) {
                 threadId: current.thread.id,
                 botId: { in: removedBotIds },
                 status: {
-                  in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"],
+                  in: activeRunStatuses,
                 },
               },
               select: { id: true, taskId: true },

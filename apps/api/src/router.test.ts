@@ -5454,7 +5454,7 @@ describe("groups.archive", () => {
     });
     const execute = vi.fn(() => {
       calls.push("cancel run work");
-      return [];
+      return [{ type: "exit", code: 0 }];
     });
     const deps = {
       prisma,
@@ -5466,7 +5466,7 @@ describe("groups.archive", () => {
         sandboxProvider: "fake",
       },
       dataDir: "/tmp/rakazo-router-test",
-      sandbox: { releaseScreen, execute },
+      sandbox: { releaseScreen, execute, inspectBackgroundWork: async () => "idle" },
       jobs: { cancel: vi.fn().mockResolvedValue(undefined) },
     } as unknown as RouterDeps;
     const actor = {

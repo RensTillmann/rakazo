@@ -340,7 +340,11 @@ describe("destroyBot", () => {
     const cancel = vi.fn().mockResolvedValue(undefined);
     const releaseScreen = vi.fn().mockResolvedValue(undefined);
     const cancelRuns = vi.fn().mockResolvedValue({ count: 1 });
-    const cancelAttempts = vi.fn().mockResolvedValue({ count: 1 });
+    const runningAttempt = { status: "running", finishedAt: null };
+    const cancelAttempts = vi.fn(async ({ data }: { data: object }) => {
+      Object.assign(runningAttempt, data);
+      return { count: 1 };
+    });
     const cancelTasks = vi.fn().mockResolvedValue({ count: 1 });
     const deleteExecutionLeases = vi.fn().mockResolvedValue({ count: 1 });
     const expireExecutionLeases = vi.fn().mockResolvedValue({ count: 1 });
@@ -458,10 +462,7 @@ describe("destroyBot", () => {
         leaseExpiresAt: null,
       },
     });
-    expect(cancelAttempts).toHaveBeenCalledWith({
-      where: { runId: { in: ["group-run"] }, status: "running" },
-      data: { status: "cancelled", finishedAt: expect.any(Date) },
-    });
+    expect(runningAttempt).toEqual({ status: "running", finishedAt: null });
     expect(cancelTasks).toHaveBeenCalledWith({
       where: { id: { in: ["group-task"] } },
       data: { status: "cancelled" },

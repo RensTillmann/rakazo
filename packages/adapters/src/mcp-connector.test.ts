@@ -459,6 +459,27 @@ describe("MCP connector session cache", () => {
     await connector.close();
   });
 
+  it("keeps the assigned read-only maintenance verifier directly addressable in a large catalog", async () => {
+    const state = { failNext: false, initializations: 0, tools: [
+      ...Array.from({ length: 30 }, (_, index) => ({ name: `tool_${index}`, inputSchema: { type: "object" } })),
+      { name: "maintenance_validate", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } },
+    ] };
+    vi.stubGlobal("fetch", mcpFetch(state));
+    const connector = new McpConnector({ botMcpServer: {
+      findMany: vi.fn().mockResolvedValue([ASSIGNMENT]), findFirst: vi.fn().mockResolvedValue(ASSIGNMENT),
+    } } as never, {} as never, { network: TEST_NETWORK });
+    try {
+      const tools = await connector.discoverTools({ spaceId: "w1", userId: "u1", botId: "bot-1",
+        signal: new AbortController().signal } as never);
+      expect(tools).toHaveLength(4);
+      expect(tools.find((tool) => tool.route?.toolName === "maintenance_validate")).toMatchObject({
+        readOnly: true, route: { connectorId: "mcp", resourceId: SERVER.id, resourceRevision: SERVER.revision },
+      });
+    } finally {
+      await connector.close();
+    }
+  });
+
   it("exposes 20 MCP tools directly and switches at 21", async () => {
     const context = {
       spaceId: "w1",

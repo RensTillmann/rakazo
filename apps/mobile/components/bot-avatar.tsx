@@ -1,7 +1,7 @@
 import type { AvatarStyle } from "@rakazo/contracts";
 import {
-  ACTIVE_RUN_STATUSES,
   avatarIdentitySeed,
+  isExecutingRunStatus,
   organicAvatarPath,
   SHIPPED_BOT_AVATAR_CENTER,
   SHIPPED_BOT_AVATAR_VIEWBOX,
@@ -43,7 +43,7 @@ export const BotAvatar = memo(function BotAvatar({
   muted?: boolean;
 }) {
   const { t } = useI18n();
-  const isWorking = ACTIVE_RUN_STATUSES.some((activeStatus) => activeStatus === status);
+  const isWorking = isExecutingRunStatus(status);
   const { avatarStyle } = useAvatarStyle();
   const parsed = mobileBotAvatarPresentation(color);
   const fillColor = parsed.kind === "shape" || parsed.kind === "color" ? parsed.color : color;

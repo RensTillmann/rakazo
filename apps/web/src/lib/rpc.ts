@@ -1,8 +1,23 @@
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
-import type { AppContract } from "@rakazo/contracts";
-import { LOCAL_SETTINGS_PAGE, LOCAL_SETTINGS_RPC } from "@rakazo/contracts";
+import type {
+  AppContract,
+  MaintenanceCommand,
+  MaintenanceRecovery,
+  MaintenanceRecoveryCommand,
+  MaintenanceRecoveryResult,
+  MaintenanceSnapshot,
+} from "@rakazo/contracts";
+import {
+  LOCAL_SETTINGS_PAGE,
+  LOCAL_SETTINGS_RPC,
+  MaintenanceChangeSchema,
+  MaintenanceRecoveryResultSchema,
+  MaintenanceRecoverySchema,
+  MaintenanceSnapshotSchema,
+} from "@rakazo/contracts";
+import { readBoundedJsonResponse } from "@rakazo/core";
 import { desktopBridge } from "./desktop";
 
 const SPACE_STORAGE_KEY = "rakazo:space-id";
@@ -105,4 +120,57 @@ export function rpcForSpace(spaceId: string): RpcClient {
     spaceClients.set(spaceId, client);
   }
   return client;
+}
+
+export class FleetMaintenanceError extends Error {
+  constructor(public readonly status: number) {
+    super("Fleet maintenance request failed");
+  }
+}
+
+/** Browser Origin is supplied by fetch; never synthesize an operator identity. */
+async function maintenanceRequest(
+  spaceId: string | null,
+  command?: MaintenanceCommand | MaintenanceRecoveryCommand,
+  path = "/api/maintenance",
+) {
+  const response = await fetch(path, {
+    method: command ? "POST" : "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
+    headers: withSpaceHeaders(command ? { "content-type": "application/json" } : undefined, spaceId),
+    ...(command ? { body: JSON.stringify(command) } : {}),
+  });
+  if (!response.ok) throw new FleetMaintenanceError(response.status);
+  return response;
+}
+
+export async function readFleetMaintenance(spaceId: string | null): Promise<MaintenanceSnapshot> {
+  const response = await maintenanceRequest(spaceId);
+  const value = await readBoundedJsonResponse<unknown>(response, 64 * 1024);
+  const snapshot = MaintenanceSnapshotSchema.safeParse(value);
+  if (!snapshot.success) throw new Error("Fleet status unavailable");
+  return snapshot.data;
+}
+
+export async function sendFleetMaintenance(
+  spaceId: string | null,
+  command: MaintenanceCommand,
+): Promise<void> {
+  const response = await maintenanceRequest(spaceId, command);
+  MaintenanceChangeSchema.parse(await readBoundedJsonResponse<unknown>(response, 64 * 1024));
+}
+
+export async function readFleetRecovery(spaceId: string | null): Promise<MaintenanceRecovery> {
+  const response = await maintenanceRequest(spaceId, undefined, "/api/maintenance/recovery");
+  return MaintenanceRecoverySchema.parse(await readBoundedJsonResponse<unknown>(response, 512 * 1024));
+}
+
+export async function settleFleetRecovery(
+  spaceId: string | null,
+  command: MaintenanceRecoveryCommand,
+): Promise<MaintenanceRecoveryResult> {
+  const response = await maintenanceRequest(spaceId, command, "/api/maintenance/recovery");
+  return MaintenanceRecoveryResultSchema.parse(await readBoundedJsonResponse<unknown>(response, 64 * 1024));
 }

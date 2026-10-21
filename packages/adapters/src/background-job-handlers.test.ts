@@ -34,7 +34,10 @@ describe("createBackgroundJobHandlers", () => {
       executor: {
         continueRun: vi.fn(async () => undefined),
       } as unknown as ReturnType<typeof createRunExecutor>,
-      prisma: {} as unknown as PrismaClient,
+      prisma: {
+        $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({ $queryRaw: async () => [{ active: false, revision: 0 }] }),
+      } as unknown as PrismaClient,
       sandbox: {} as unknown as SandboxProvider,
       home: {} as unknown as AgentHomeStore,
       jobs,
@@ -61,6 +64,32 @@ describe("createBackgroundJobHandlers", () => {
       true,
     );
     installLogger(createLogger({ service: "rakazo-worker", level: "off", sinks: [] }));
+  });
+
+  it("keeps a paused run's mirrored outbox durable without scheduling a delivery loop", async () => {
+    vi.mocked(mirrorMessagingOutbound).mockClear();
+    vi.mocked(deliverMessagingOutbound).mockClear();
+    const enqueue = vi.fn();
+    const handlers = createBackgroundJobHandlers({
+      executor: { continueRun: vi.fn(async () => undefined) } as never,
+      prisma: {
+        $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({ $queryRaw: async () => [{ active: true, revision: 1 }] }),
+      } as unknown as PrismaClient,
+      sandbox: {} as SandboxProvider,
+      home: {} as AgentHomeStore,
+      jobs: { enqueue } as unknown as JobPublisher,
+      events: {} as ThreadEvents,
+      workerId: "worker-1",
+      runtime: {} as AgentRuntime,
+      secretStore: {} as EncryptedSecretStore,
+      memoryProviders: { resolve: vi.fn(async () => null) },
+      messaging: {} as MessagingSurface,
+    });
+    await handlers["run.continue"]({ runId: "held-run" });
+    expect(mirrorMessagingOutbound).toHaveBeenCalledWith(expect.anything(), "held-run");
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(deliverMessagingOutbound).not.toHaveBeenCalled();
   });
 
   it("compacts the requested thread with the runtime, job publisher, and model key it was given", async () => {

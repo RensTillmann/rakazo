@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   appendToolCompletionAudit,
   attachSteeringRecall,
+  claimRunExecutionLease,
   createRunExecutor,
   createRunWorkspaceCheckpoint,
   dockerComputerToolInstruction,
@@ -981,6 +982,13 @@ function compatibleSecret(enabledModelIds?: string[]) {
   });
 }
 
+function withMaintenanceAdmission<T extends object>(prisma: T) {
+  return Object.assign(prisma, {
+    $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
+    $transaction: vi.fn(async (work: (tx: T) => Promise<unknown>) => work(prisma)),
+  });
+}
+
 // One compatible connection; `defaults` maps spaceId to that space's saved model.
 function compatiblePrismaParts(defaults: Record<string, string>, plaintext: string) {
   const findFirst = vi.fn(
@@ -1023,7 +1031,7 @@ function compatibleExecutor(
   extra: Record<string, unknown> = {},
 ) {
   return createRunExecutor({
-    prisma: prisma as unknown as PrismaClient,
+    prisma: withMaintenanceAdmission(prisma) as unknown as PrismaClient,
     secretStore: { load: vi.fn(() => plaintext), put: vi.fn() },
     ...extra,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
@@ -1059,9 +1067,9 @@ function pinnedRoutineRunPrisma(modelId: string) {
   };
   return {
     run: {
-      findUnique: vi.fn(async () => run),
-      findUniqueOrThrow: vi.fn(async () => ({ status: "leased", startedAt: null })),
-      updateMany: vi.fn(async () => ({ count: 1 })),
+      findUnique: vi.fn(async () => ({ ...run })),
+      findUniqueOrThrow: vi.fn(async () => ({ ...run, startedAt: null })),
+      updateMany: vi.fn(async ({ data }: { data: object }) => { Object.assign(run, data); return { count: 1 }; }),
     },
     bot: {
       findUniqueOrThrow: vi.fn(async (args: { select?: { computerId?: boolean } }) =>
@@ -2009,6 +2017,7 @@ describe("createRunExecutor", () => {
       },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
           routine: {
             updateMany,
             findUnique: vi.fn(async () => ({
@@ -2088,6 +2097,7 @@ describe("createRunExecutor", () => {
         agentSkill: { findMany: vi.fn(async () => []) },
         $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
           callback({
+            $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
             routine: {
               updateMany: vi.fn(async () => ({ count: 1 })),
               findUnique: vi.fn(async () => claimedModel),
@@ -2234,6 +2244,7 @@ describe("createRunExecutor", () => {
       agentSkill: { findMany: vi.fn(async () => []) },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
           routine: {
             updateMany: vi.fn(async () => ({ count: 1 })),
             findUnique: vi.fn(async () => ({
@@ -2306,6 +2317,7 @@ describe("createRunExecutor", () => {
       agentSkill: { findMany: vi.fn(async () => []) },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
           routine: {
             updateMany: vi.fn(async () => ({ count: 1 })),
             findUnique: vi.fn(async () => ({
@@ -2395,6 +2407,7 @@ description: Prepare standup notes
       },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
           routine: {
             updateMany: vi.fn(async () => ({ count: 1 })),
             findUnique: vi.fn(async () => ({
@@ -2455,6 +2468,7 @@ description: Prepare standup notes
       },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
           routine: {
             updateMany,
             findUnique: vi.fn(async () => ({
@@ -2520,6 +2534,7 @@ description: Prepare standup notes
         transactionCalls += 1;
         if (transactionCalls === 1) {
           return callback({
+            $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
             routine: {
               updateMany: claimUpdateMany,
               findUnique: vi.fn(async () => ({
@@ -2576,9 +2591,10 @@ description: Prepare standup notes
         updateMany,
       },
     } as unknown as PrismaClient;
-    const executor = createRunExecutor({ prisma } as Parameters<typeof createRunExecutor>[0]);
 
-    await executor.continueRun("run-1", "worker-1");
+    await claimRunExecutionLease(prisma, {
+      id: "run-1", status: "queued", checkpoint: "takeover-skipped", leaseFence: 0,
+    }, "worker-1");
 
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2629,9 +2645,10 @@ description: Prepare standup notes
         updateMany,
       },
     } as unknown as PrismaClient;
-    const executor = createRunExecutor({ prisma } as Parameters<typeof createRunExecutor>[0]);
 
-    await executor.continueRun("run-1", "worker-1");
+    await claimRunExecutionLease(prisma, {
+      id: "run-1", status: "waiting_takeover", checkpoint: null, leaseFence: 0,
+    }, "worker-1");
 
     expect(updateMany).toHaveBeenCalledTimes(1);
     expect(updateMany).toHaveBeenCalledWith(
@@ -2676,7 +2693,7 @@ description: Prepare standup notes
         })),
       },
     } as unknown as PrismaClient;
-    const executor = createRunExecutor({ prisma, jobs: { enqueue } } as unknown as Parameters<
+    const executor = createRunExecutor({ prisma: withMaintenanceAdmission(prisma), jobs: { enqueue } } as unknown as Parameters<
       typeof createRunExecutor
     >[0]);
 
@@ -2735,7 +2752,7 @@ description: Prepare standup notes
         })),
       },
     } as unknown as PrismaClient;
-    const executor = createRunExecutor({ prisma, jobs: { enqueue } } as unknown as Parameters<
+    const executor = createRunExecutor({ prisma: withMaintenanceAdmission(prisma), jobs: { enqueue } } as unknown as Parameters<
       typeof createRunExecutor
     >[0]);
 
@@ -2792,7 +2809,7 @@ description: Prepare standup notes
         })),
       },
     } as unknown as PrismaClient;
-    const executor = createRunExecutor({ prisma, jobs: { enqueue } } as unknown as Parameters<
+    const executor = createRunExecutor({ prisma: withMaintenanceAdmission(prisma), jobs: { enqueue } } as unknown as Parameters<
       typeof createRunExecutor
     >[0]);
 
@@ -2846,9 +2863,9 @@ description: Prepare standup notes
     );
     const prisma = {
       run: {
-        findUnique: vi.fn(async () => run),
-        findUniqueOrThrow: vi.fn(async () => ({ status: "leased", startedAt: null })),
-        updateMany: vi.fn(async () => ({ count: 1 })),
+        findUnique: vi.fn(async () => ({ ...run })),
+        findUniqueOrThrow: vi.fn(async () => ({ ...run, startedAt: null })),
+        updateMany: vi.fn(async ({ data }: { data: object }) => { Object.assign(run, data); return { count: 1 }; }),
       },
       bot: { findUniqueOrThrow: botLookup },
       computer: {
@@ -2880,7 +2897,7 @@ description: Prepare standup notes
       scratchpadItem: { findMany: vi.fn(async () => []) },
     } as unknown as PrismaClient;
     const executor = createRunExecutor({
-      prisma,
+      prisma: withMaintenanceAdmission(prisma),
       runtime: {
         describe: () => ({ capabilities: { scripted: false } }),
         run: runtimeRun,
@@ -2927,9 +2944,9 @@ description: Prepare standup notes
     };
     const prisma = {
       run: {
-        findUnique: vi.fn(async () => run),
-        findUniqueOrThrow: vi.fn(async () => ({ status: "leased", startedAt: null })),
-        updateMany: vi.fn(async () => ({ count: 1 })),
+        findUnique: vi.fn(async () => ({ ...run })),
+        findUniqueOrThrow: vi.fn(async () => ({ ...run, startedAt: null })),
+        updateMany: vi.fn(async ({ data }: { data: object }) => { Object.assign(run, data); return { count: 1 }; }),
       },
       bot: {
         findUniqueOrThrow: vi.fn(async (args: { select?: { computerId?: boolean } }) =>
@@ -2986,7 +3003,7 @@ description: Prepare standup notes
       scratchpadItem: { findMany: vi.fn(async () => []) },
     } as unknown as PrismaClient;
     const executor = createRunExecutor({
-      prisma,
+      prisma: withMaintenanceAdmission(prisma),
       runtime: {
         describe: () => ({ capabilities: { scripted: false } }),
         run: runtimeRun,

@@ -22,9 +22,27 @@ function publisher() {
   return { jobs, enqueue };
 }
 
+function maintenanceTransaction(state = { active: false }) {
+  return {
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ $queryRaw: async () => [{ active: state.active, revision: 0 }] })),
+    externalEffect: {
+      updateMany: vi.fn(async () => ({ count: 0 })),
+      findMany: vi.fn(async () => []),
+    },
+  };
+}
+
+function outboundModel() {
+  return {
+    findFirst: vi.fn(async () => null),
+    updateMany: vi.fn(async () => ({ count: 0 })),
+  };
+}
+
 function fakePrisma(
   runs: Array<{ id: string; updatedAt: Date }> = [],
-  routines: Array<{ id: string; nextRunAt: Date | null }> = [],
+  routines: Array<{ id: string; nextRunAt: Date | null; watchState?: unknown }> = [],
   controls: Array<{
     id: string;
     controlBotId: string | null;
@@ -34,15 +52,77 @@ function fakePrisma(
   }> = [],
 ) {
   return {
+    ...maintenanceTransaction(),
     message: { findMany: vi.fn(async () => []) },
     run: { findMany: vi.fn(async () => runs) },
     routine: { findMany: vi.fn(async () => routines) },
     computer: { findMany: vi.fn(async () => controls) },
-    messagingOutbound: { findFirst: vi.fn(async () => null) },
+    messagingOutbound: outboundModel(),
   } as unknown as PrismaClient;
 }
 
 describe("createJobReconciler", () => {
+  it("preserves dispatch across pause and restart while cancellation and human controls still settle", async () => {
+    const state = { active: true };
+    const scheduledFor = new Date();
+    const prisma = fakePrisma(
+      [{ id: "held-run", updatedAt: new Date() }],
+      [{ id: "held-routine", nextRunAt: scheduledFor }],
+      [{
+        id: "computer-1", controlBotId: "bot-1", controlLeaseId: "lease-1",
+        controlLeaseExpiresAt: new Date(), updatedAt: new Date(),
+      }],
+    );
+    Object.assign(prisma, maintenanceTransaction(state));
+    const { jobs, enqueue } = publisher();
+    const reconcileMaintenanceRuns = vi.fn(async () => undefined);
+    const reconcileCloudAgents = vi.fn(async () => undefined);
+    await createJobReconciler({
+      prisma, jobs, reconcileMaintenanceRuns, reconcileCloudAgents,
+    }).reconcileOnce();
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ name: "computer.control-expire" }));
+    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "run.continue" }));
+    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "routine.wakeup" }));
+    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "messaging.deliver" }));
+    expect(reconcileMaintenanceRuns).toHaveBeenCalledOnce();
+    expect(reconcileCloudAgents).toHaveBeenCalledOnce();
+    // A new reconciler represents a process restart; no local pause flag is needed.
+    enqueue.mockClear();
+    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "run.continue" }));
+    state.active = false;
+    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      name: "run.continue", payload: { runId: "held-run" }, keepExisting: true,
+    }));
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      name: "routine.wakeup",
+      payload: { routineId: "held-routine", scheduledFor: scheduledFor.toISOString() },
+    }));
+  });
+
+  it("does not create retry jobs for in-flight or uncertain routine checks", async () => {
+    const due = new Date();
+    const prisma = fakePrisma([], [
+      ...["executing", "uncertain"].map((status) => ({
+        id: status, nextRunAt: due,
+        watchState: { maintenanceCheck: {
+          id: `${status}-check`, status, startedAt: new Date(0).toISOString(),
+          scheduledAt: due.toISOString(),
+        } },
+      })),
+      { id: "ordinary", nextRunAt: due },
+    ]);
+    const { jobs, enqueue } = publisher();
+    const reconciler = createJobReconciler({ prisma, jobs });
+    await reconciler.reconcileOnce();
+    await reconciler.reconcileOnce();
+    expect(enqueue.mock.calls.map(([job]) => job.payload)).toEqual([
+      { routineId: "ordinary", scheduledFor: due.toISOString() },
+      { routineId: "ordinary", scheduledFor: due.toISOString() },
+    ]);
+  });
+
   it("continues the main scans when an auxiliary reconciler fails", async () => {
     const prisma = fakePrisma();
     const { jobs } = publisher();
@@ -233,10 +313,11 @@ describe("createJobReconciler", () => {
         },
       ]);
     const prisma = {
+      ...maintenanceTransaction(),
       run: { findMany: vi.fn(async () => []) },
       routine: { findMany: vi.fn(async () => []) },
       computer: { findMany: computerFindMany },
-      messagingOutbound: { findFirst: vi.fn(async () => null) },
+      messagingOutbound: outboundModel(),
     } as unknown as PrismaClient;
     const { jobs, enqueue } = publisher();
     const reconciler = createJobReconciler({ prisma, jobs }, { batchSize: 2 });
@@ -299,10 +380,11 @@ describe("createJobReconciler", () => {
       .mockResolvedValueOnce(routines.slice(2, 4))
       .mockResolvedValueOnce(routines.slice(4));
     const prisma = {
+      ...maintenanceTransaction(),
       run: { findMany: runFindMany },
       routine: { findMany: routineFindMany },
       computer: { findMany: vi.fn(async () => []) },
-      messagingOutbound: { findFirst: vi.fn(async () => null) },
+      messagingOutbound: outboundModel(),
     } as unknown as PrismaClient;
     const { jobs, enqueue } = publisher();
     const reconciler = createJobReconciler({ prisma, jobs }, { batchSize: 2 });
@@ -396,10 +478,11 @@ describe("createJobReconciler", () => {
       return [];
     });
     const prisma = {
+      ...maintenanceTransaction(),
       run: { findMany: runFindMany, updateMany: vi.fn(async () => ({ count: 1 })) },
       routine: { findMany: vi.fn(async () => []) },
       computer: { findMany: vi.fn(async () => []) },
-      messagingOutbound: { findFirst: vi.fn(async () => null) },
+      messagingOutbound: outboundModel(),
       message: {
         findMany: vi.fn(async () => [
           { blocks: [{ kind: "text", text: "Finished." }], clientNonce: null },
@@ -465,10 +548,11 @@ describe("createJobReconciler", () => {
       return [];
     });
     const prisma = {
+      ...maintenanceTransaction(),
       run: { findMany: runFindMany, updateMany: vi.fn(async () => ({ count: 1 })) },
       routine: { findMany: vi.fn(async () => []) },
       computer: { findMany: vi.fn(async () => []) },
-      messagingOutbound: { findFirst: vi.fn(async () => null) },
+      messagingOutbound: outboundModel(),
       message: {
         findMany: vi.fn(async () => [
           {
@@ -513,6 +597,7 @@ describe("createJobReconciler", () => {
     };
     const stuckText = loopGuardStopText("search", 8);
     const prisma = {
+      ...maintenanceTransaction(),
       run: {
         findMany: vi.fn(async (args: { where?: Record<string, unknown> } = {}) =>
           args.where?.trigger === "bot_message" ? [terminalRun] : [],
@@ -521,7 +606,7 @@ describe("createJobReconciler", () => {
       },
       routine: { findMany: vi.fn(async () => []) },
       computer: { findMany: vi.fn(async () => []) },
-      messagingOutbound: { findFirst: vi.fn(async () => null) },
+      messagingOutbound: outboundModel(),
       message: {
         findMany: vi.fn(async () => [
           { blocks: [{ kind: "text", text: "Searching…" }], clientNonce: null },
@@ -563,10 +648,11 @@ describe("createJobReconciler", () => {
       return [];
     });
     const prisma = {
+      ...maintenanceTransaction(),
       run: { findMany: runFindMany, updateMany: vi.fn(async () => ({ count: 1 })) },
       routine: { findMany: vi.fn(async () => []) },
       computer: { findMany: vi.fn(async () => []) },
-      messagingOutbound: { findFirst: vi.fn(async () => null) },
+      messagingOutbound: outboundModel(),
       message: {
         findMany: vi.fn(async () => [
           {
@@ -615,10 +701,11 @@ describe("createJobReconciler", () => {
       return [];
     });
     const prisma = {
+      ...maintenanceTransaction(),
       run: { findMany: runFindMany, updateMany: vi.fn(async () => ({ count: 1 })) },
       routine: { findMany: vi.fn(async () => []) },
       computer: { findMany: vi.fn(async () => []) },
-      messagingOutbound: { findFirst: vi.fn(async () => null) },
+      messagingOutbound: outboundModel(),
       message: {
         findMany: vi.fn(async () => [
           {
@@ -663,10 +750,11 @@ describe("createJobReconciler", () => {
       return [];
     });
     const prisma = {
+      ...maintenanceTransaction(),
       run: { findMany: runFindMany, updateMany: vi.fn(async () => ({ count: 1 })) },
       routine: { findMany: vi.fn(async () => []) },
       computer: { findMany: vi.fn(async () => []) },
-      messagingOutbound: { findFirst: vi.fn(async () => null) },
+      messagingOutbound: outboundModel(),
       message: { findMany: vi.fn(async () => []) },
     } as unknown as PrismaClient;
     const { jobs } = publisher();

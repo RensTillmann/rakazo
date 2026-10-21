@@ -167,6 +167,95 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
     expect(await h.wakes()).toHaveLength(1);
   });
 
+  async function whilePaused(action: () => Promise<void>) {
+    await prisma.$executeRaw`UPDATE maintenance_state SET active = true WHERE id = 'default'`;
+    try {
+      await action();
+    } finally {
+      await prisma.$executeRaw`UPDATE maintenance_state SET active = false WHERE id = 'default'`;
+    }
+  }
+
+  it("retains a held launch across reconciliation and dispatches its original identity once on resume", async () => {
+    const h = await setup();
+    let id = "";
+    await whilePaused(async () => {
+      id = await h.launch();
+      h.enqueue.mockClear();
+      await h.poll(id);
+      await reconcileCloudAgents(h.deps);
+      expect(h.wire.requests).toHaveLength(0);
+      expect(h.enqueue).not.toHaveBeenCalled();
+      expect(await h.state(id)).toMatchObject({ launchDispatched: false, leaseToken: null });
+    });
+    await reconcileCloudAgents(h.deps);
+    expect(h.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "cloud_agent.poll", payload: { agentId: id } }),
+    );
+    await h.poll(id);
+    await h.poll(id);
+    expect(h.wire.ids.size).toBe(1);
+    expect((await h.state(id)).launchDispatched).toBe(true);
+  });
+
+  it("settles an already-started remote run while paused but retains its wake without dispatch", async () => {
+    const h = await setup();
+    const id = await h.launch();
+    await h.poll(id);
+    await whilePaused(async () => {
+      h.enqueue.mockClear();
+      await h.finish(id);
+      expect((await h.state(id)).status).toBe("finished");
+      expect(await h.wakes()).toEqual([expect.objectContaining({ status: "queued" })]);
+      expect(h.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "run.continue" }));
+      await h.poll(id);
+      expect(await h.wakes()).toHaveLength(1);
+    });
+    const [wake] = await h.wakes();
+    await createJobReconciler({ prisma, jobs: h.deps.jobs }).reconcileOnce();
+    expect(h.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "run.continue", payload: { runId: wake!.id } }),
+    );
+  });
+
+  it("holds a new remote follow-up without retry jobs and sends it once after resume", async () => {
+    const h = await setup();
+    const id = await h.launch();
+    await h.poll(id);
+    await h.finish(id);
+    const requests = h.wire.requests.length;
+    await whilePaused(async () => {
+      await h.tool("reply", { id, prompt: "Add tests" });
+      h.enqueue.mockClear();
+      await h.poll(id);
+      await reconcileCloudAgents(h.deps);
+      expect(h.enqueue).not.toHaveBeenCalled();
+      expect(h.wire.requests).toHaveLength(requests);
+      expect(await h.state(id)).toMatchObject({
+        followup: { prompt: "Add tests" }, followupDispatching: false,
+      });
+    });
+    await h.poll(id);
+    await h.poll(id);
+    expect(h.wire.requests.filter((request) =>
+      request.method === "POST" && request.path.endsWith("/runs"))).toHaveLength(1);
+  });
+
+  it("reconciles an ambiguous idempotent launch and consumes remote cancellation while paused", async () => {
+    const h = await setup();
+    const id = await h.launch();
+    h.wire.loseNextLaunchResponse = true;
+    await h.poll(id);
+    await whilePaused(async () => {
+      await h.poll(id);
+      expect(h.wire.ids.size).toBe(1);
+      expect((await h.state(id)).remoteId).toBeTruthy();
+      await h.tool("cancel", { id });
+      await h.poll(id);
+      expect(await h.state(id)).toMatchObject({ status: "cancelled", cancelRequested: false });
+    });
+  });
+
   it("recovers an accepted launch whose response was lost without creating a second remote agent", async () => {
     const h = await setup();
     const id = await h.launch();
