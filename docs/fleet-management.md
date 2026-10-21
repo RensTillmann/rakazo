@@ -93,7 +93,10 @@ built-in fleet-management tool and does not grant permission to perform the acti
 
 New MCP `question_withdraw` effects record the exact supporting question in
 `ExternalEffect.sourceMessageId`, independently of direct or catalog display aliases.
-Before recording a new binding, the recorder checks the owning account, space and bot,
+Before recording a new binding, the recorder locks the source thread then run in a
+transaction, re-reads the exact source and creates the effect before releasing those
+locks. Answer/withdraw transactions use the same locks, preventing a new binding
+from appearing after their invalidation scan. The recorder checks the owning account, space and bot,
 that the source is a single ordinary unanswered question, and that its exact run/thread
 is waiting for input. Unrelated tools accepting `message_id` do not imply a dependency.
 The nullable indexed reference preserves existing effect requests and history.
@@ -109,8 +112,8 @@ is rejected without queueing the approval run or recording a human answer; an an
 that wins first is subsequently invalidated by the source-ending transaction.
 
 This is not complete lifecycle fencing: legacy-row reconciliation, general cancellation
-and replacement, transactional source binding,
-execution-time checks and dependent-card UI refresh remain to be implemented. The
+and replacement, execution-time source revalidation and dependent-card UI refresh
+remain to be implemented. The
 reference is not a human answer or an authorization grant.
 
 ## What a bot cannot do

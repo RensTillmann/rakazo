@@ -10087,63 +10087,81 @@ export async function recordEffect(
     return { duplicate: true, effect: legacy };
   }
 
-  // Bind only an exact, owned ordinary question. This read establishes identity;
-  // lifecycle transactions and execution claims must still lock/revalidate it.
-  if (sourceMessageId) {
-    if (!run.userId) throw new Error("Approval source is unavailable.");
-    const source = await deps.prisma.message.findFirst({
-      where: {
-        id: sourceMessageId,
-        botId: run.botId,
-        role: "bot",
-        thread: { spaceId: run.spaceId, userId: run.userId },
-      },
-      select: { blocks: true, runId: true, threadId: true },
-    });
-    const blocks = MessageBlockSchema.array().safeParse(source?.blocks);
-    const asks = blocks.success ? blocks.data.filter((block) => block.kind === "ask") : [];
-    const ask = asks[0];
-    if (
-      !source?.runId ||
-      asks.length !== 1 ||
-      !ask ||
-      ask.status === "answered" ||
-      ask.answer !== undefined ||
-      ask.answeredBy ||
-      ask.syncedFrom ||
-      ask.draftFinal !== undefined ||
-      ask.approvalEffectId ||
-      isApprovalAskBlock(ask) ||
-      isSecretAskBlock(ask) ||
-      ask.credential ||
-      ask.instructionUpdate
-    )
-      throw new Error("Approval source is unavailable.");
-    const sourceRun = await deps.prisma.run.findFirst({
-      where: {
-        id: source.runId,
-        threadId: source.threadId,
+  const create = (store: Pick<Prisma.TransactionClient, "externalEffect">) =>
+    store.externalEffect.create({
+      data: {
         spaceId: run.spaceId,
-        userId: run.userId,
-        botId: run.botId,
-        status: "waiting_input",
+        runId: run.id,
+        kind,
+        idempotencyKey,
+        status: "intended",
+        ...(sourceMessageId ? { sourceMessageId } : {}),
+        request: request as never,
       },
-      select: { id: true },
     });
-    if (!sourceRun) throw new Error("Approval source is unavailable.");
-  }
 
-  const effect = await deps.prisma.externalEffect.create({
-    data: {
-      spaceId: run.spaceId,
-      runId: run.id,
-      kind,
-      idempotencyKey,
-      status: "intended",
-      ...(sourceMessageId ? { sourceMessageId } : {}),
-      request: request as never,
-    },
-  });
+  // Source endings take these same locks before invalidation. Re-read and create
+  // inside the transaction so an ending cannot slip between validation and insert.
+  const effect = sourceMessageId
+    ? await deps.prisma.$transaction(async (tx) => {
+        if (!run.userId) throw new Error("Approval source is unavailable.");
+        const candidate = await tx.message.findFirst({
+          where: {
+            id: sourceMessageId,
+            botId: run.botId,
+            role: "bot",
+            thread: { spaceId: run.spaceId, userId: run.userId },
+          },
+          select: { threadId: true, runId: true },
+        });
+        if (!candidate?.runId) throw new Error("Approval source is unavailable.");
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidate.threadId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM runs WHERE id = ${candidate.runId} FOR UPDATE`;
+        const source = await tx.message.findFirst({
+          where: {
+            id: sourceMessageId,
+            botId: run.botId,
+            threadId: candidate.threadId,
+            runId: candidate.runId,
+            role: "bot",
+            thread: { spaceId: run.spaceId, userId: run.userId },
+          },
+          select: { blocks: true, runId: true, threadId: true },
+        });
+        const blocks = MessageBlockSchema.array().safeParse(source?.blocks);
+        const asks = blocks.success ? blocks.data.filter((block) => block.kind === "ask") : [];
+        const ask = asks[0];
+        if (
+          !source?.runId ||
+          asks.length !== 1 ||
+          !ask ||
+          ask.status === "answered" ||
+          ask.answer !== undefined ||
+          ask.answeredBy ||
+          ask.syncedFrom ||
+          ask.draftFinal !== undefined ||
+          ask.approvalEffectId ||
+          isApprovalAskBlock(ask) ||
+          isSecretAskBlock(ask) ||
+          ask.credential ||
+          ask.instructionUpdate
+        )
+          throw new Error("Approval source is unavailable.");
+        const sourceRun = await tx.run.findFirst({
+          where: {
+            id: source.runId,
+            threadId: source.threadId,
+            spaceId: run.spaceId,
+            userId: run.userId,
+            botId: run.botId,
+            status: "waiting_input",
+          },
+          select: { id: true },
+        });
+        if (!sourceRun) throw new Error("Approval source is unavailable.");
+        return create(tx);
+      })
+    : await create(deps.prisma);
   consumedIds?.add(effect.id);
   return { duplicate: false, effect };
 }
