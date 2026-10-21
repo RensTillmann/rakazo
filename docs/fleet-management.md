@@ -171,8 +171,28 @@ listing them all, and retiring the last open item releases the satisfied rest. A
 wakes the bot twice (`releasedRevision`). Releasing never grants an approval or clears the pause.
 
 RPC: `todos.list`, `todos.check({ todoId, revision })`, `todos.confirm({ todoId, revision })`, scoped to
-the caller's space and own to-dos. Table `user_todos`, migration `20261021200000_user_todos`. The hourly
-coordinator check of pending to-dos from the spec is not part of this change.
+the caller's space and own to-dos. Table `user_todos`, migration `20261021200000_user_todos`.
+
+### Hourly checks
+
+The worker's reconciler checks pending automatic to-dos once an hour, so a finished step releases work
+without another click. A to-do is due when it is open, still to do or couldn't-check and its last check
+request (or its creation) is an hour old, or when a check has not reported for an hour. Manual to-dos
+are never swept: they cost no model call. Done — check now stays immediate.
+
+A due to-do goes to `checking` through the same compare-and-set as Done — check now, and its
+requesting bot gets one `todo_check` run. That bot is the case's coordinator: only Josy, or Elena for
+fleet cases, ask Rens cards. The run is context-bounded and quiet: its prompt carries only the to-do,
+why it is needed, its steps and its last result, never the conversation; it posts nothing in the chat
+and cannot ask, message or call the user. It is read-only: any action that would change something, or
+that the owner's rules would ask about, is refused (no card). Shell commands on the bot's own computer
+follow the owner's shell rules, as in every run. The result comes back through `todo_report`, the one
+completion path, so a sweep and a check-now on the same to-do resolve it once and release its work once.
+A check that cannot be done is `unavailable` and is retried the next hour, with the same to-do.
+
+No scheduled check starts while the global pause holds admission (checked again inside each to-do's
+transaction). A verified to-do releases its bot only through the ordinary send path, which the pause
+still holds; it never grants an approval.
 
 ## Dependent-effect identity
 
