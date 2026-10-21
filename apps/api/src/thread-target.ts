@@ -1629,8 +1629,10 @@ async function teardownCancelledRunWork(
     });
   }
   await Promise.all(
-    teardownTargets.map(async ({ computer, botId, runId, lease }) => {
-      if (!computer.providerRef) throw new Error("Cancelled run computer is unavailable for teardown");
+    // A computer with no provider resource yet has nothing that could still run the
+    // cancelled work; expiring its lease below is the whole teardown. Throwing here
+    // only turned an already committed Stop into a 500 that no retry could repair.
+    teardownTargets.filter(({ computer }) => computer.providerRef).map(async ({ computer, botId, runId, lease }) => {
       const context = {
         operationId: "stop",
         traceId: "stop",
