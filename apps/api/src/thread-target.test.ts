@@ -224,6 +224,7 @@ describe("reaction turns", () => {
     withoutRelease?: boolean;
   }) {
     const tx = {
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) },
       $queryRaw: vi.fn().mockResolvedValue([{ id: "group-1" }]),
       thread: {
@@ -3266,6 +3267,8 @@ describe("stopThreadRuns", () => {
         ]),
         findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }),
       },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: {
         // Production team ownership is lease-only: Computer.executionRunId stays null.
@@ -3402,6 +3405,8 @@ describe("stopThreadRuns", () => {
         updateManyAndReturn: vi.fn().mockResolvedValue([{ id: "run-a", botId: "bot-a" }]),
         findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }),
       },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: {
         // Selected via lease for cancelled run A, but legacy columns still name
@@ -3513,6 +3518,8 @@ describe("stopThreadRuns", () => {
         // appendEventInTransaction re-reads the run after the flip.
         findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }),
       },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: { findMany: vi.fn().mockResolvedValue([]) },
       computerExecutionLease: { findMany: vi.fn().mockResolvedValue([]) },
@@ -3598,6 +3605,8 @@ describe("stopThreadRuns", () => {
         updateManyAndReturn: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn(),
       },
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: { findMany: vi.fn() },
       computerExecutionLease: { findMany: vi.fn() },

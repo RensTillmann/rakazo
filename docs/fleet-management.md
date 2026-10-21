@@ -129,6 +129,11 @@ wins and before status messages or steering continuation are created. An answer
 that wins the expiry fence causes no invalidation. An invalidation failure aborts
 the owning transaction, rather than starting continuation on partial cleanup.
 
+Explicit thread Stop also invalidates dependencies for only the runs its cancellation
+update returns, inside the same transaction and before steering/progress cleanup.
+No won cancellation means no dependency scan; storage failure aborts Stop before
+post-commit notification or sandbox teardown.
+
 This is not complete lifecycle fencing: legacy-row reconciliation, other cancellation
 or replacement paths, and dependent-card UI refresh remain to be implemented. The
 reference is not a human answer or an authorization grant.

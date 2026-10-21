@@ -37,6 +37,7 @@ import {
   expireComputerExecutionLeases,
   FLAG_STEERING_ORIGIN,
   IsolationError,
+  invalidateRunSourceApprovalEffects,
   lockOwnedGroup,
   QuestionNotWithdrawableError,
   touchGroupUpdatedAt,
@@ -1533,6 +1534,9 @@ export async function stopThreadRuns(
       select: { id: true, botId: true },
     });
     const ids = cancelled.map((run) => run.id);
+    // Cancellation holds the source-run locks until commit. Invalidate before
+    // cleanup so bound requests cannot outlive Stop or execute from stale cards.
+    await invalidateRunSourceApprovalEffects(tx, ids);
     await tx.steeringMessage.deleteMany({
       where: {
         botId: { in: target.kind === "bot" ? [target.botId] : target.memberBotIds },
