@@ -660,7 +660,7 @@ describe("connector read-only metadata and approval enforcement", () => {
         name: "shell",
         builtin: true,
         trigger: "todo_check",
-        runClientNonce: "todo-sweep:todo-7:3",
+        runClientNonce: "todo-check:todo-7:3",
         rules: [{ effect: "always_allow", matchKind: "shell", matchValue: ".*" }],
       });
       f.setCalls([
@@ -677,7 +677,7 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(JSON.stringify(f.sandboxExecute.mock.calls[0])).toContain("gh api repos/acme/site");
       // Each refusal is recorded on the swept to-do it belongs to.
       expect(f.userTodoFindFirst).toHaveBeenCalledWith({
-        where: { id: "todo-7", spaceId: "space-1", botId: "bot-1" },
+        where: { id: "todo-7", spaceId: "space-1" },
       });
     });
 

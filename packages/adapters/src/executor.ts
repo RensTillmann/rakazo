@@ -144,6 +144,7 @@ import {
   SpaceLimitError,
   searchHistory,
   settleReleasedTakeoverCards,
+  todoCheckRunTarget,
   validateInstructionProposal,
   writeBotInstructions,
 } from "@rakazo/db";
@@ -6038,15 +6039,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (run.trigger === "todo_check") {
               const refused = todoCheckShellRefusal(command);
               if (refused) {
-                const sweep = /^todo-sweep:(.+):(\d+)$/.exec(run.clientNonce ?? "");
-                if (sweep) {
+                const target = todoCheckRunTarget(run.clientNonce);
+                if (target) {
                   await reportUserTodo(deps.prisma, {
                     spaceId: run.spaceId,
                     botId: bot.id,
-                    todoId: sweep[1]!,
+                    todoId: target.todoId,
                     outcome: "unavailable",
                     evidence: `Couldn't check: ${TODO_CHECK_SHELL_REASON} (${refused}).`,
-                    expectedRevision: Number(sweep[2]),
+                    expectedRevision: target.revision,
                   });
                 }
                 return finish({
@@ -6502,9 +6503,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             // The item satisfied its work: the release message is already committed to the thread.
             if (result.wake) {
               const { wake } = result;
-              await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
-                getLogger().error("to-do release notify", error);
-              });
+              if (wake.seq !== null) {
+                await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
+                  getLogger().error("to-do release notify", error);
+                });
+              }
               if (wake.startedRunId) {
                 // The queued run is durable; the reconciler repairs a missed wake.
                 await deps.jobs

@@ -7557,10 +7557,12 @@ async function runUserTodoAction(
   }
   const { wake } = result;
   if (!wake) return { todo: result.todo };
-  await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
-    // The message is durable; subscribers recover it from their cursor.
-    getLogger().error("to-do message notify", error);
-  });
+  if (wake.seq !== null) {
+    await deps.events.notify(wake.threadId, wake.seq).catch((error: unknown) => {
+      // The message is durable; subscribers recover it from their cursor.
+      getLogger().error("to-do message notify", error);
+    });
+  }
   if (wake.startedRunId) {
     // The queued run is durable; the reconciler repairs a missed wake.
     await deps.jobs.enqueue(runContinueJob(wake.startedRunId)).catch((error: unknown) => {

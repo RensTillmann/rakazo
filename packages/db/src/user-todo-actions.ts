@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Actor, UserTodo, UserTodoStatus } from "@rakazo/contracts";
+import { ACTIVE_RUN_STATUSES } from "@rakazo/core";
 import type { Prisma, PrismaClient } from "./client.js";
 import { sendUserMessageInTransaction } from "./events.js";
 import { lockMaintenanceAdmission } from "./maintenance.js";
@@ -23,7 +24,8 @@ export class UserTodoNotFoundError extends Error {
 /** A message the to-do posted to its bot's thread; the caller notifies and wakes after commit. */
 export interface UserTodoWake {
   threadId: string;
-  seq: number;
+  /** The event to notify open tabs of; null when nothing was posted (a check run only). */
+  seq: number | null;
   /** Set when the message started a new queued run rather than steering or queueing behind one. */
   startedRunId: string | null;
 }
@@ -181,14 +183,113 @@ async function beginUserTodoCheck(
   );
 }
 
-/** What every check asks of the requesting bot; the result goes through `todo_report` only. */
+/** What every check asks of the checking bot; the result goes through `todo_report` only. */
 function checkInstructions(row: { id: string }): string {
   return `Verify with your own read-only tools whether this is actually done; do not change anything to make it pass. Then call todo_report with todo_id "${row.id}" and outcome "verified" only with positive evidence it is done, "remaining" if you checked and it is not done (name the remaining step), or "unavailable" if you could not check. Put what you observed in evidence.`;
 }
 
+/** The run tag that names the to-do and the revision a check run checks. */
+export function todoCheckRunNonce(todo: { id: string; revision: number }): string {
+  return `todo-check:${todo.id}:${todo.revision}`;
+}
+
+/** The to-do and revision a `todo_check` run checks, from its tag; null for any other run. */
+export function todoCheckRunTarget(
+  clientNonce: string | null | undefined,
+): { todoId: string; revision: number } | null {
+  const match = /^todo-check:(.+):(\d+)$/.exec(clientNonce ?? "");
+  return match ? { todoId: match[1]!, revision: Number(match[2]) } : null;
+}
+
+/** Bot names or ids (`RAKAZO_CASE_COORDINATOR_BOTS`, comma-separated) that coordinate cases; the first is the default. */
+export function caseCoordinatorNames(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  return (env.RAKAZO_CASE_COORDINATOR_BOTS ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
 /**
- * Done — check now: marks an automatic to-do `checking` and asks its bot, in a normal message
- * to its thread, to verify the steps with its own read-only tools and call `todo_report`.
+ * Who checks a to-do: its case's coordinator. The bot that asked, when it is a coordinator itself
+ * (only coordinators ask Rens: Josy, and Elena for fleet cases); for a case card another bot asked,
+ * the default coordinator; without a case, the bot that asked.
+ */
+export async function userTodoCheckerBotId(
+  db: Pick<Prisma.TransactionClient, "bot">,
+  todo: { spaceId: string; userId: string; botId: string; caseRef: number | null },
+  coordinators: readonly string[] = caseCoordinatorNames(),
+): Promise<string> {
+  if (coordinators.length === 0) return todo.botId;
+  const bots = await db.bot.findMany({
+    where: { spaceId: todo.spaceId, userId: todo.userId, archivedAt: null },
+    select: { id: true, name: true },
+  });
+  const ids = coordinators.flatMap((wanted) => {
+    const bot =
+      bots.find((candidate) => candidate.id === wanted) ??
+      bots.find((candidate) => candidate.name.toLowerCase() === wanted.toLowerCase());
+    return bot ? [bot.id] : [];
+  });
+  if (ids.includes(todo.botId) || todo.caseRef === null) return todo.botId;
+  return ids[0] ?? todo.botId;
+}
+
+/**
+ * Starts the one kind of check, for Done — check now and the hourly sweep alike: a queued,
+ * context-bounded, read-only `todo_check` run of the to-do's checker in its own thread. The prompt
+ * carries only the to-do, why it is needed, its steps and its last result, never a conversation.
+ * The run reports through `todo_report`. Queued like any work, it is held while the pause holds.
+ */
+async function startTodoCheckRun(
+  tx: Prisma.TransactionClient,
+  row: TodoRow,
+  heading: string,
+): Promise<{ runId: string; threadId: string } | null> {
+  const checkerId = await userTodoCheckerBotId(tx, row);
+  const checker = await tx.bot.findFirst({
+    where: { id: checkerId, spaceId: row.spaceId, archivedAt: null },
+    select: { id: true, thread: { select: { id: true } } },
+  });
+  if (!checker?.thread) return null;
+  const prompt = [
+    `${heading} of the user's to-do “${row.title}” (to-do ${row.id}), asked by ${row.bot.name}. Only this to-do matters here; nothing else is asked of you.`,
+    ...(row.why ? [`Why it is needed: ${row.why}`] : []),
+    `The steps the user was asked to do:\n${row.steps}`,
+    ...(row.evidence ? [`Last result: ${row.evidence}`] : []),
+    checkInstructions(row),
+    "This check is read-only: actions that change anything are refused. Do not message the user.",
+  ].join("\n\n");
+  const task = await tx.task.create({
+    data: {
+      spaceId: row.spaceId,
+      botId: checker.id,
+      threadId: checker.thread.id,
+      userId: row.userId,
+      prompt,
+      status: "queued",
+    },
+  });
+  const run = await tx.run.create({
+    data: {
+      spaceId: row.spaceId,
+      botId: checker.id,
+      threadId: checker.thread.id,
+      taskId: task.id,
+      userId: row.userId,
+      status: "queued",
+      trigger: "todo_check",
+      clientNonce: todoCheckRunNonce(row),
+    },
+  });
+  return { runId: run.id, threadId: checker.thread.id };
+}
+
+/**
+ * Done — check now: marks an automatic to-do `checking` and starts its bounded, read-only check
+ * at once, the same run the hourly sweep starts. During the global pause the run stays queued and
+ * is held like any other work until resume; nothing runs.
  */
 export async function requestUserTodoCheck(
   prisma: PrismaClient,
@@ -204,13 +305,11 @@ export async function requestUserTodoCheck(
       new Date(),
     );
     if (!row) throw new UserTodoConflictError();
-    const text = [
-      `Please check my to-do “${row.title}” (to-do ${row.id}). I say I did these steps:`,
-      row.steps,
-      checkInstructions(row),
-    ].join("\n\n");
-    const wake = await postToBot(tx, row, `todo:${row.id}:check:${row.revision}`, text);
-    return { todo: userTodoDto(row), wake };
+    const started = await startTodoCheckRun(tx, row, "Check, asked by the user just now,");
+    return {
+      todo: userTodoDto(row),
+      wake: started ? { threadId: started.threadId, seq: null, startedRunId: started.runId } : null,
+    };
   });
 }
 
@@ -219,13 +318,11 @@ export const USER_TODO_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
  * The hourly sweep: every automatic to-do still pending (open, remaining, unavailable) whose last
- * check request (or creation) is an hour old, and every check that has not reported for an hour,
- * goes to `checking` through the same transition as Done — check now. Its requesting bot, the
- * coordinator that asked the card, gets one context-bounded `todo_check` run: the prompt carries
- * only the to-do, its steps and its last result, never the conversation; the run is read-only and
- * reports through `todo_report`, the one completion path. Manual to-dos are never swept, so they
- * cost no model call. Nothing starts while the global pause holds admission. Returns the runs
- * started; the caller enqueues them.
+ * check request (or creation) is an hour old, and every check that has not reported for an hour
+ * and has no check run still waiting, goes to `checking` through the same transition as Done —
+ * check now and gets the same bounded `todo_check` run of its case coordinator. Manual to-dos are
+ * never swept, so they cost no model call. Nothing starts while the global pause holds admission.
+ * Returns the runs started; the caller enqueues them.
  */
 export async function sweepUserTodoChecks(
   prisma: PrismaClient,
@@ -252,51 +349,25 @@ export async function sweepUserTodoChecks(
     where: due,
     orderBy: [{ checkRequestedAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
     take: options.limit ?? 20,
-    select: { id: true, threadId: true, revision: true },
+    select: { id: true, threadId: true, revision: true, status: true },
   });
   const started: string[] = [];
   for (const candidate of candidates) {
     const runId = await prisma.$transaction(async (tx) => {
       // Under the same admission lock a pause takes: nothing new starts once it holds.
       if (!(await lockMaintenanceAdmission(tx)).admitted) return "paused" as const;
+      // A check run still queued or running (a check-now held by the pause) is not repeated.
+      const waiting = await tx.run.count({
+        where: {
+          trigger: "todo_check",
+          clientNonce: { startsWith: `todo-check:${candidate.id}:` },
+          status: { in: [...ACTIVE_RUN_STATUSES] },
+        },
+      });
+      if (waiting > 0) return null;
       const row = await beginUserTodoCheck(tx, candidate, due, now);
       if (!row) return null;
-      const bot = await tx.bot.findFirst({
-        where: { id: row.botId, spaceId: row.spaceId, archivedAt: null },
-        select: { thread: { select: { id: true } } },
-      });
-      if (!bot?.thread) return null;
-      const prompt = [
-        `Scheduled check of the user's to-do “${row.title}” (to-do ${row.id}). Only this to-do matters here; nothing else is asked of you.`,
-        ...(row.why ? [`Why it is needed: ${row.why}`] : []),
-        `The steps the user was asked to do:\n${row.steps}`,
-        ...(row.evidence ? [`Last result: ${row.evidence}`] : []),
-        checkInstructions(row),
-        "This check is read-only: actions that change anything are refused. Do not message the user.",
-      ].join("\n\n");
-      const task = await tx.task.create({
-        data: {
-          spaceId: row.spaceId,
-          botId: row.botId,
-          threadId: bot.thread.id,
-          userId: row.userId,
-          prompt,
-          status: "queued",
-        },
-      });
-      const run = await tx.run.create({
-        data: {
-          spaceId: row.spaceId,
-          botId: row.botId,
-          threadId: bot.thread.id,
-          taskId: task.id,
-          userId: row.userId,
-          status: "queued",
-          trigger: "todo_check",
-          clientNonce: `todo-sweep:${row.id}:${row.revision}`,
-        },
-      });
-      return run.id;
+      return (await startTodoCheckRun(tx, row, "Scheduled check"))?.runId ?? null;
     });
     if (runId === "paused") break;
     if (runId) started.push(runId);
@@ -358,9 +429,13 @@ export async function reportUserTodo(
   if (remainingStep.length > TODO_DETAIL_MAX_LENGTH)
     return { error: `remaining_step must be at most ${TODO_DETAIL_MAX_LENGTH} characters.` };
   const todo = await prisma.userTodo.findFirst({
-    where: { id: input.todoId, spaceId: input.spaceId, botId: input.botId },
+    where: { id: input.todoId, spaceId: input.spaceId },
   });
-  if (!todo) return { error: "To-do not found, or it belongs to another bot." };
+  // The bot that asked, or the case coordinator that checks it for that bot.
+  const allowed =
+    todo &&
+    (todo.botId === input.botId || (await userTodoCheckerBotId(prisma, todo)) === input.botId);
+  if (!todo || !allowed) return { error: "To-do not found, or it belongs to another bot." };
   const outcome = input.outcome;
   const detail =
     outcome === "remaining"
@@ -372,7 +447,7 @@ export async function reportUserTodo(
     const row = await casUserTodo(
       tx,
       { ...todo, revision: input.expectedRevision ?? todo.revision },
-      { botId: input.botId, status: { in: REPORTABLE } },
+      { botId: todo.botId, status: { in: REPORTABLE } },
       { status: outcome, statusDetail: detail, evidence, checkedAt: new Date() },
     );
     if (!row) {

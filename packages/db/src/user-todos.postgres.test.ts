@@ -10,6 +10,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Pool, type PrismaClient } from "./client.js";
 import { answerRunInput } from "./events.js";
+import { lockMaintenanceAdmission } from "./maintenance.js";
 import { createThreadMessage } from "./messages.js";
 import {
   confirmUserTodo,
@@ -343,7 +344,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     expect(changed.revision).toBeGreaterThan(first.revision);
   });
 
-  it("two concurrent 'check now' clicks make one transition and one check message", async () => {
+  it("two concurrent 'check now' clicks make one transition and one bounded check run", async () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
     const results = await Promise.allSettled([
@@ -361,12 +362,81 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     expect(row.status).toBe("checking");
     expect(row.revision).toBe(todo.revision + 1);
     expect(row.checkRequestedAt).not.toBeNull();
-    const checks = await f.messagesWithNonce(`todo:${todo.id}:check:`);
+    // The same read-only todo_check run the hourly sweep starts, not a chat message.
+    const checks = await f.prisma.run.findMany({
+      where: { spaceId: f.id, trigger: "todo_check" },
+      include: { task: { select: { prompt: true } } },
+    });
     expect(checks).toHaveLength(1);
-    const text = textOf(checks[0]!.blocks);
-    expect(text).toContain(ACCESS.steps);
-    expect(text).toContain(`todo_report with todo_id "${todo.id}"`);
-    expect(checks[0]!.role).toBe("user");
+    expect(checks[0]).toMatchObject({
+      status: "queued",
+      botId: f.bot.id,
+      clientNonce: `todo-check:${todo.id}:${row.revision}`,
+    });
+    expect(checks[0]!.task.prompt).toContain(ACCESS.steps);
+    expect(checks[0]!.task.prompt).toContain(`todo_report with todo_id "${todo.id}"`);
+    expect(checks[0]!.task.prompt).not.toContain("How do you want to do it?");
+    expect(await f.messagesWithNonce("todo:")).toHaveLength(0);
+  });
+
+  it("a check-now during the global pause is held as queued work, not run", async () => {
+    const f = await fixture();
+    const todo = await f.chooseTodo();
+    await f.prisma.$executeRaw`UPDATE maintenance_state SET active = true WHERE id = 'default'`;
+    try {
+      const { todo: checking } = await requestUserTodoCheck(f.prisma, f.actor, {
+        todoId: todo.id,
+        revision: todo.revision,
+      });
+      expect(checking.status).toBe("checking");
+      const [run] = await f.prisma.run.findMany({
+        where: { spaceId: f.id, trigger: "todo_check" },
+      });
+      // Queued work is retained by the pause; the worker's admission refuses to claim it.
+      expect(run).toMatchObject({ status: "queued", startedAt: null });
+      expect((await f.prisma.$transaction((tx) => lockMaintenanceAdmission(tx))).admitted).toBe(
+        false,
+      );
+      // The hourly sweep does not stack a second check on the held one, even after resume.
+      await f.prisma.$executeRaw`UPDATE maintenance_state SET active = false WHERE id = 'default'`;
+      expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(5) })).toEqual([]);
+    } finally {
+      await f.prisma.$executeRaw`UPDATE maintenance_state SET active = false WHERE id = 'default'`;
+    }
+  });
+
+  it("a case to-do another bot asked is checked by the case coordinator, who may report it", async () => {
+    const f = await fixture();
+    const previous = process.env.RAKAZO_CASE_COORDINATOR_BOTS;
+    const josy = await f.prisma.bot.create({
+      data: { spaceId: f.id, userId: f.id, name: "Josy", color: "test" },
+    });
+    await f.prisma.thread.create({ data: { spaceId: f.id, userId: f.id, botId: josy.id } });
+    process.env.RAKAZO_CASE_COORDINATOR_BOTS = "Josy,Elena-coordinator";
+    try {
+      const asked = await f.card([ACCESS], "all", undefined, 383);
+      expect(await asked.answer("choice-2")).toBe(true);
+      const todo = (await f.todos())[0]!;
+      await requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision: todo.revision });
+      const [run] = await f.prisma.run.findMany({
+        where: { spaceId: f.id, trigger: "todo_check" },
+      });
+      expect(run?.botId).toBe(josy.id);
+      const report = (botId: string) =>
+        reportUserTodo(f.prisma, {
+          spaceId: f.id,
+          botId,
+          todoId: todo.id,
+          outcome: "remaining",
+          evidence: "elena-bot is not a collaborator",
+          remainingStep: "Invite elena-bot",
+        });
+      expect(await report(f.other.id)).toHaveProperty("error");
+      expect(await report(josy.id)).toMatchObject({ todo: { status: "remaining" } });
+    } finally {
+      if (previous === undefined) delete process.env.RAKAZO_CASE_COORDINATOR_BOTS;
+      else process.env.RAKAZO_CASE_COORDINATOR_BOTS = previous;
+    }
   });
 
   it("todo_report only takes the requesting bot's report against the current revision", async () => {
@@ -730,7 +800,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const checking = await f.prisma.userTodo.findUniqueOrThrow({ where: { id: access.id } });
     expect(checking).toMatchObject({ status: "checking" });
     // The run names its to-do at the revision it checks, so a refused command lands on it.
-    expect(run!.clientNonce).toBe(`todo-sweep:${access.id}:${checking.revision}`);
+    expect(run!.clientNonce).toBe(`todo-check:${access.id}:${checking.revision}`);
     // The same hour does not start a second check.
     expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(1.2) })).toEqual([]);
     // No message lands in the chat: the check reports through todo_report alone.
@@ -760,7 +830,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     expect(swept + clicked).toBe(1);
     const row = await f.prisma.userTodo.findUniqueOrThrow({ where: { id: todo.id } });
     expect(row).toMatchObject({ status: "checking", revision: todo.revision + 1 });
-    expect((await sweepRuns(f)).length + (await f.messagesWithNonce("todo:")).length).toBe(1);
+    expect(await sweepRuns(f)).toHaveLength(1);
 
     // Both checks may still run (a fresh check-now on the new revision); two verified reports
     // resolve the to-do once and wake the bot once.
@@ -785,6 +855,12 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       1,
     );
     // The check never reported (its run failed): an hour later it is checked again, same to-do.
+    const failRuns = () =>
+      f.prisma.run.updateMany({
+        where: { spaceId: f.id, trigger: "todo_check" },
+        data: { status: "failed" },
+      });
+    await failRuns();
     expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(3) })).toHaveLength(1);
     const unavailable = await reportUserTodo(f.prisma, {
       spaceId: f.id,
@@ -797,6 +873,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       todo: { id: todo.id, status: "unavailable", statusDetail: "No GitHub read tool in this run" },
       wake: null,
     });
+    await failRuns();
     // Retried on the next hour, still the same to-do and still not done.
     const retried = await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(4.5) });
     expect(retried).toHaveLength(1);
