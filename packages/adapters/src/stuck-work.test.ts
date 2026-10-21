@@ -693,6 +693,8 @@ function expireClient(run: ReturnType<typeof candidate>, options?: { cancelled?:
     message: {
       create: vi.fn(async () => ({ id: "message-expired", seq: 1 })),
       findFirst: vi.fn(async () => null),
+      // Expiry also invalidates source-bound approvals; these runs' cards bind none.
+      findMany: vi.fn(async () => []),
     },
     event: {
       findMany: vi.fn(async () => []),

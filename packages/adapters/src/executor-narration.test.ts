@@ -149,6 +149,8 @@ function fixture(
       findMany: vi.fn(async () => []),
       findUnique: vi.fn(async ({ where }: { where: { id?: string; idempotencyKey?: string } }) =>
         effects.find((effect) => where.id ? effect.id === where.id : effect.idempotencyKey === where.idempotencyKey) ?? null),
+      findFirst: vi.fn(async ({ where }: { where: { id?: string } }) =>
+        effects.find((effect) => !where.id || effect.id === where.id) ?? null),
       create: vi.fn(async ({ data }: { data: object }) => {
         const effect = { ...data, id: `effect-${effects.length + 1}` };
         effects.push(effect);

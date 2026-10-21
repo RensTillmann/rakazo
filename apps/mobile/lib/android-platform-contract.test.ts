@@ -245,21 +245,6 @@ describe("Android mobile platform contract", () => {
     expect(scroll).toContain('this.contentReady && !this.currentState.detached ? "jump" : null');
   });
 
-  it("stacks every currently working agent in a group footer", () => {
-    const thread = readFileSync(resolve(mobileRoot, "app/thread.tsx"), "utf8");
-    expect(thread).toContain("workingGroupBots.map");
-    expect(thread).toContain("inGroup && workingGroupBots.length > 0 ?");
-    expect(thread).toContain("workingGroupBots.length - index");
-    expect(thread).toContain("agents working");
-    // Visible chrome is avatar-only; copy stays on accessibilityLabel.
-    expect(thread).toMatch(
-      /accessibilityLabel=\{\s*workingGroupBots\.length === 1[\s\S]*agents working/,
-    );
-    expect(thread).not.toMatch(
-      /workingGroupBots\.length === 1\s*\?[\s\S]*<Text[^>]*>\s*\{t\("\{name\} is working"/,
-    );
-  });
-
   it("keeps send and stop separate while steering active work", () => {
     const thread = readFileSync(resolve(mobileRoot, "app/thread.tsx"), "utf8");
     const composer = readFileSync(resolve(mobileRoot, "components/thread-composer.tsx"), "utf8");

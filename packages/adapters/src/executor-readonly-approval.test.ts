@@ -176,6 +176,14 @@ function fixture({
           return true;
         }),
     ),
+    findFirst: vi.fn(
+      async ({ where }: { where?: { id?: string; runId?: string; spaceId?: string } } = {}) =>
+        effects.find(
+          (effect) =>
+            (!where?.id || effect.id === where.id) &&
+            (!where?.runId || !effect.runId || effect.runId === where.runId),
+        ) ?? null,
+    ),
     findUnique: vi.fn(
       async ({ where }: { where: { id?: string; idempotencyKey?: string } }) =>
         effects.find((effect) =>

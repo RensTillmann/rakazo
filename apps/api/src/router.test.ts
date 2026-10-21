@@ -5439,6 +5439,8 @@ describe("groups.archive", () => {
         updateMany: vi.fn(),
       },
       event: { deleteMany: vi.fn() },
+      // Archival cancellation also invalidates source-bound approvals; none are bound here.
+      message: { findMany: vi.fn(async () => []) },
     };
     const prisma = {
       $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
