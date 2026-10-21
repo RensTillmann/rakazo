@@ -99,6 +99,15 @@ exact route-bound envelope only: an ended source invalidates the request (its ca
 live one gets its source recorded so a later answer, withdrawal or stop ends it at once. A request
 without such an envelope is never given a guessed source.
 
+## Cards end with their run
+
+A card never stays pending on a run that ended. Whenever runs are cancelled (Stop, withdrawal, thread
+clear, expiry, supersession, teaching takeover, room changes), every unanswered card of theirs,
+questions and approvals alike, is retired in the same transaction with a reason ("Withdrawn: <reason>"
+for a withdrawal, "Its run ended without an answer" otherwise) and a `thread.message.updated` event
+refreshes open tabs. Bound approval requests are invalidated as before. The reconciler retires cards
+already left open on ended runs, without touching the runs.
+
 ## Obsolete ordinary questions
 
 An authenticated integration can call `decisions.withdraw` with `botId`, `messageId` and a nonempty
@@ -106,8 +115,10 @@ An authenticated integration can call `decisions.withdraw` with `botId`, `messag
 account and space on a `waiting_input` run. Approval, secret, credential and instruction-update cards
 are refused, as are answered questions and runs with another pending question.
 
-Withdrawal cancels only that old run and its work, retains the question in history, and publishes the
-normal `run.cancelled` event so the decision dock refreshes. It does not record a user answer. A real
+Withdrawal cancels only that old run and its work, retains the question in history retired as
+"Withdrawn: <reason>", and publishes the normal `run.cancelled` event so the decision dock refreshes. It
+does not record a user answer. A question left open on a run that already ended (cancelled, completed or
+failed) is retired the same way without touching the run, and returns `withdrawn: true`. A real
 answer racing withdrawal wins or loses atomically; a resumed run cannot be withdrawn. Repeating a
 withdrawal returns `withdrawn: false` without another terminal event. Other active runs are untouched.
 The cancellation payload includes `messageId`, `reason` and `withdrawnByUserId`. Integrations must
