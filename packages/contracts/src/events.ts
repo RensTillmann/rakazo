@@ -113,6 +113,11 @@ export const AskPrerequisite = z.object({
   steps: z.string().trim().min(1).max(4000),
   /** Why the item is needed, in the user's terms. */
   why: z.string().trim().min(1).max(600).optional(),
+  /**
+   * Other cases or jobs that truly depend on this item (e.g. "Case 142", "#144"). Waiting on the
+   * asking bot itself is implied and never listed.
+   */
+  blocks: z.array(z.string().trim().min(1).max(60)).max(10).optional(),
   /** `automatic`: the bot can check it with its own read-only tools; `manual`: only the user can. */
   verification: z.enum(["automatic", "manual"]),
 });
@@ -127,6 +132,10 @@ export const ASK_PREREQUISITES_MAX = 10;
 export const PrerequisiteRelease = z.enum(["each", "all"]);
 export type PrerequisiteRelease = z.infer<typeof PrerequisiteRelease>;
 
+/** How urgent a card's to-dos are; unknown sorts after `p3`. */
+export const PrerequisitePriority = z.enum(["p0", "p1", "p2", "p3"]);
+export type PrerequisitePriority = z.infer<typeof PrerequisitePriority>;
+
 /** Fleet: the to-do items a card's `todo` option hands to the user, and how they release work. */
 export const AskPrerequisites = z.object({
   items: z
@@ -137,6 +146,7 @@ export const AskPrerequisites = z.object({
       message: "prerequisite keys must be unique within a card",
     }),
   release: PrerequisiteRelease,
+  priority: PrerequisitePriority.optional(),
 });
 export type AskPrerequisites = z.infer<typeof AskPrerequisites>;
 
@@ -146,6 +156,7 @@ export const AskPrerequisitesInput = z.object({
   /** The exact label of the option meaning "I will do it myself". */
   option: z.string().trim().min(1).max(80),
   release: PrerequisiteRelease.default("all"),
+  priority: PrerequisitePriority.optional(),
 });
 export type AskPrerequisitesInput = z.infer<typeof AskPrerequisitesInput>;
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   type AskPrerequisite,
   MessageBlock,
+  type PrerequisitePriority,
   type PrerequisiteRelease,
   type UserTodo,
 } from "@rakazo/contracts";
@@ -109,7 +110,11 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const actor = { spaceId: id, userId: id };
 
     /** A paused run with one question card; option 2 is the to-do option when it has items. */
-    async function card(items?: AskPrerequisite[], release: PrerequisiteRelease = "all") {
+    async function card(
+      items?: AskPrerequisite[],
+      release: PrerequisiteRelease = "all",
+      priority?: PrerequisitePriority,
+    ) {
       const task = await prisma.task.create({
         data: {
           spaceId: id,
@@ -149,7 +154,9 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
                 ...(items ? { todo: true } : {}),
               },
             ],
-            ...(items ? { prerequisites: { items, release } } : {}),
+            ...(items
+              ? { prerequisites: { items, release, ...(priority ? { priority } : {}) } }
+              : {}),
           },
         ],
       });
@@ -627,5 +634,49 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     releases = await f.releases();
     expect(releases).toHaveLength(2);
     expect(textOf(releases[1]!.blocks)).toContain(`${BADGE.title}” (to-do ${badge.id})`);
+  });
+
+  it("orders cards by blocking, then priority, then age, and keeps the bot's item order", async () => {
+    const f = await fixture();
+    const item = (key: string, extra: Partial<AskPrerequisite> = {}): AskPrerequisite => ({
+      key,
+      title: key,
+      steps: `Do ${key}.`,
+      verification: "manual",
+      ...extra,
+    });
+    const answerCard = async (items: AskPrerequisite[], priority?: PrerequisitePriority) => {
+      const asked = await f.card(items, "all", priority);
+      expect(await asked.answer("choice-2")).toBe(true);
+      return asked.message.id;
+    };
+    // Oldest first, but no priority and nothing blocked: last.
+    const unranked = await answerCard([item("unranked")]);
+    const p1 = await answerCard([item("p1")], "p1");
+    // The bot's order on the card is z then a, not key order.
+    const blocking = await answerCard(
+      [item("z-first", { blocks: ["Case 142"] }), item("a-second")],
+      "p3",
+    );
+    const p0 = await answerCard([item("p0")], "p0");
+    // A finished item that blocked others no longer lifts its card.
+    const doneBlocker = await answerCard([item("done", { blocks: ["#144"] })], "p2");
+    const done = await f.prisma.userTodo.findFirstOrThrow({
+      where: { spaceId: f.id, requirementKey: "done" },
+    });
+    await confirmUserTodo(f.prisma, f.actor, { todoId: done.id, revision: done.revision });
+
+    const listed = await listUserTodos(f.prisma, f.actor);
+    expect(listed.map((todo) => todo.groupId)).toEqual([
+      blocking,
+      blocking,
+      p0,
+      p1,
+      doneBlocker,
+      unranked,
+    ]);
+    expect(listed.slice(0, 2).map((todo) => todo.requirementKey)).toEqual(["z-first", "a-second"]);
+    expect(listed[0]).toMatchObject({ blocks: ["Case 142"], priority: "p3", position: 0 });
+    expect(listed.at(-1)).toMatchObject({ blocks: [], priority: null });
   });
 });

@@ -492,6 +492,13 @@ export const builtinAgentTools: ConnectorTool[] = [
                 maxLength: 600,
                 description: "Optional: why this item is needed, in one or two plain sentences.",
               },
+              blocks: {
+                type: "array",
+                maxItems: 10,
+                items: { type: "string", minLength: 1, maxLength: 60 },
+                description:
+                  'Optional: other cases or jobs that truly depend on this item, e.g. "Case 142" or "#144". Never list your own waiting work.',
+              },
               verification: {
                 type: "string",
                 enum: ["automatic", "manual"],
@@ -512,6 +519,11 @@ export const builtinAgentTools: ConnectorTool[] = [
           enum: ["each", "all"],
           description:
             "With `prerequisites`: `each` wakes you as each item is satisfied (work that needs only that item); `all` (default) wakes you once when every item is satisfied.",
+        },
+        priority: {
+          type: "string",
+          enum: ["p0", "p1", "p2", "p3"],
+          description: "With `prerequisites`: how urgent these to-dos are (p0 most urgent).",
         },
       },
       required: ["question", "options"],

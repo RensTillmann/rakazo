@@ -183,6 +183,7 @@ describe("Pi choice asks", () => {
     title: "Pick up the Seoul door badge",
     steps: "Collect the badge at reception.",
     verification: "manual",
+    blocks: ["Case 142"],
   };
 
   it("marks the to-do option and carries every prerequisite item onto the ask", async () => {
@@ -190,6 +191,7 @@ describe("Pi choice asks", () => {
       prerequisites: [seoul, badge],
       option: "Seoul",
       release: "each",
+      priority: "p1",
     };
     const runtime = new PiAgentRuntime();
     const events: AgentRuntimeEvent[] = [];
@@ -204,7 +206,7 @@ describe("Pi choice asks", () => {
           { id: "choice-2", label: "Seoul", todo: true },
           { id: "choice-3", label: "Toronto" },
         ],
-        prerequisites: { items: [seoul, badge], release: "each" },
+        prerequisites: { items: [seoul, badge], release: "each", priority: "p1" },
       }),
     );
   });

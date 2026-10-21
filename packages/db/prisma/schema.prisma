@@ -865,11 +865,17 @@ model UserTodo {
   groupTitle       String
   /// each | all: wake the bot per satisfied item, or once when the whole group is satisfied.
   release          String    @default("all")
+  /// p0..p3 from the card; null sorts after p3.
+  priority         String?
+  /// The item's place on its card (the bot's order).
+  position         Int       @default(0)
   requirementKey   String
   title            String
   steps            String
   /// Why the item is needed, when the bot said.
   why              String?
+  /// Other cases or jobs that truly depend on this item ("Case 142", "#144").
+  blocks           String[]  @default([])
   /// automatic | manual
   verification     String
   /// open | checking | verified | remaining | unavailable | confirmed | retired

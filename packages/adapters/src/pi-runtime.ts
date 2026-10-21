@@ -1479,6 +1479,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           ...(raw.prerequisites == null ? {} : { prerequisites: raw.prerequisites }),
           ...(raw.option == null ? {} : { option: raw.option }),
           ...(raw.release == null ? {} : { release: raw.release }),
+          ...(raw.priority == null ? {} : { priority: raw.priority }),
         };
       }
       if (tool.name === "request_secret") {
@@ -1618,10 +1619,11 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                     prerequisites: args.prerequisites,
                     option: args.option,
                     release: args.release ?? undefined,
+                    priority: args.priority ?? undefined,
                   });
                   if (!parsed.success) {
                     throw new Error(
-                      "ask_user prerequisites needs 1–10 items with unique key (≤200), title (≤300), steps (≤4000) and verification automatic|manual, plus option and release each|all",
+                      "ask_user prerequisites needs 1–10 items with unique key (≤200), title (≤300), steps (≤4000), verification automatic|manual, optional why (≤600) and blocks (≤10), plus option, release each|all and priority p0–p3",
                     );
                   }
                   todo = parsed.data;
@@ -1639,7 +1641,13 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                   })),
                   ...(typeof draft === "string" && draft.trim() ? { draft } : {}),
                   ...(todo
-                    ? { prerequisites: { items: todo.prerequisites, release: todo.release } }
+                    ? {
+                        prerequisites: {
+                          items: todo.prerequisites,
+                          release: todo.release,
+                          ...(todo.priority ? { priority: todo.priority } : {}),
+                        },
+                      }
                     : {}),
                 };
                 // Fleet: the consumer may refuse a card that is already open; the run goes on.
@@ -2213,6 +2221,9 @@ function builtinParameters(tool: ConnectorTool) {
             title: Type.String({ minLength: 1, maxLength: 300 }),
             steps: Type.String({ minLength: 1, maxLength: 4000 }),
             why: Type.Optional(Type.String({ minLength: 1, maxLength: 600 })),
+            blocks: Type.Optional(
+              Type.Array(Type.String({ minLength: 1, maxLength: 60 }), { maxItems: 10 }),
+            ),
             verification: stringEnum(["automatic", "manual"], {}),
           }),
           { minItems: 1, maxItems: 10 },
@@ -2220,6 +2231,7 @@ function builtinParameters(tool: ConnectorTool) {
       ),
       option: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
       release: Type.Optional(stringEnum(["each", "all"], {})),
+      priority: Type.Optional(stringEnum(["p0", "p1", "p2", "p3"], {})),
     });
   }
   if (tool.name === "remember") {

@@ -2,6 +2,7 @@ import {
   ACTIONABLE_USER_TODO_STATUSES,
   type Actor,
   type AskPrerequisites,
+  PrerequisitePriority,
   type PrerequisiteRelease,
   type UserTodo,
   type UserTodoStatus,
@@ -26,6 +27,9 @@ export function userTodoDto(row: UserTodoRow): UserTodo {
     steps: row.steps,
     why: row.why,
     caseNumber: askCaseKey(row.groupTitle)?.replace(/^case /, "") ?? null,
+    blocks: row.blocks,
+    priority: PrerequisitePriority.nullable().catch(null).parse(row.priority),
+    position: row.position,
     verification: row.verification === "manual" ? "manual" : "automatic",
     status: UserTodoStatusSchema.catch("open").parse(row.status),
     statusDetail: row.statusDetail,
@@ -38,7 +42,21 @@ export function userTodoDto(row: UserTodoRow): UserTodo {
   };
 }
 
-/** The caller's to-dos in this space: actionable first, then the most recently changed. */
+const PRIORITY_RANK: Record<string, number> = { p0: 0, p1: 1, p2: 2, p3: 3 };
+
+/** An unfinished item that other cases or jobs depend on: the list shows it as "blocks …". */
+export function userTodoBlocksOthers(todo: Pick<UserTodo, "blocks" | "status">): boolean {
+  return (
+    todo.blocks.length > 0 &&
+    (ACTIONABLE_USER_TODO_STATUSES as readonly string[]).includes(todo.status)
+  );
+}
+
+/**
+ * The caller's to-dos in this space, grouped by card. Cards with an item that blocks other cases
+ * or jobs come first, then by priority (unknown after p3), then the oldest asked. Items keep the
+ * bot's order on the card, whatever their status.
+ */
 export async function listUserTodos(
   prisma: PrismaClient,
   actor: Pick<Actor, "spaceId" | "userId">,
@@ -49,9 +67,29 @@ export async function listUserTodos(
     orderBy: { updatedAt: "desc" },
     take: 200,
   });
-  const actionable = (todo: UserTodo) =>
-    Number((ACTIONABLE_USER_TODO_STATUSES as readonly string[]).includes(todo.status));
-  return rows.map(userTodoDto).sort((a, b) => actionable(b) - actionable(a));
+  const groups = new Map<string, UserTodo[]>();
+  for (const todo of rows.map(userTodoDto)) {
+    const group = groups.get(todo.groupId);
+    if (group) group.push(todo);
+    else groups.set(todo.groupId, [todo]);
+  }
+  const ranked = [...groups.values()].map((items) => ({
+    items: items.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)),
+    blocks: items.some(userTodoBlocksOthers) ? 0 : 1,
+    priority: Math.min(...items.map((item) => PRIORITY_RANK[item.priority ?? ""] ?? 4)),
+    askedAt: items.reduce(
+      (oldest, item) => (item.createdAt < oldest ? item.createdAt : oldest),
+      items[0]!.createdAt,
+    ),
+  }));
+  ranked.sort(
+    (a, b) =>
+      a.blocks - b.blocks ||
+      a.priority - b.priority ||
+      a.askedAt.localeCompare(b.askedAt) ||
+      a.items[0]!.groupId.localeCompare(b.items[0]!.groupId),
+  );
+  return ranked.flatMap((group) => group.items);
 }
 
 /** Whitespace-only edits to the steps are not a material change. */
@@ -63,6 +101,7 @@ export interface ChosenUserTodo {
   id: string;
   title: string;
   status: string;
+  position: number;
 }
 
 /**
@@ -93,11 +132,22 @@ export async function upsertUserTodosFromAnswerInTransaction(
     sourceMessageId: input.sourceMessageId,
     groupTitle: input.question.trim().slice(0, 300),
     release: input.prerequisites.release,
+    priority: input.prerequisites.priority ?? null,
   };
   const chosen: ChosenUserTodo[] = [];
   // Key order, so two answers sharing requirements lock their rows in the same order.
-  const items = [...input.prerequisites.items].sort((a, b) => a.key.localeCompare(b.key));
+  const items = input.prerequisites.items
+    .map((item, position) => ({ ...item, position }))
+    .sort((a, b) => a.key.localeCompare(b.key));
   for (const item of items) {
+    const fields = {
+      title: item.title,
+      steps: item.steps,
+      why: item.why ?? null,
+      blocks: item.blocks ?? [],
+      verification: item.verification,
+      position: item.position,
+    };
     // Concurrent answers for one requirement: the insert races on the unique key, never fails.
     const created = await tx.userTodo.createMany({
       data: [
@@ -105,10 +155,7 @@ export async function upsertUserTodosFromAnswerInTransaction(
           spaceId: input.spaceId,
           ...source,
           requirementKey: item.key,
-          title: item.title,
-          steps: item.steps,
-          why: item.why ?? null,
-          verification: item.verification,
+          ...fields,
         },
       ],
       skipDuplicates: true,
@@ -116,7 +163,7 @@ export async function upsertUserTodosFromAnswerInTransaction(
     const key = { spaceId_requirementKey: { spaceId: input.spaceId, requirementKey: item.key } };
     if (created.count === 1) {
       const row = await tx.userTodo.findUniqueOrThrow({ where: key, select: { id: true } });
-      chosen.push({ id: row.id, title: item.title, status: "open" });
+      chosen.push({ id: row.id, title: item.title, status: "open", position: item.position });
       continue;
     }
     await tx.$queryRaw`SELECT id FROM user_todos WHERE "spaceId" = ${input.spaceId} AND "requirementKey" = ${item.key} FOR UPDATE`;
@@ -130,15 +177,13 @@ export async function upsertUserTodosFromAnswerInTransaction(
       existing.title !== item.title ||
       existing.steps !== item.steps ||
       existing.why !== (item.why ?? null) ||
+      existing.blocks.join("\n") !== fields.blocks.join("\n") ||
       existing.sourceMessageId !== input.sourceMessageId;
     const updated = await tx.userTodo.update({
       where: { id: existing.id },
       data: {
         ...source,
-        title: item.title,
-        steps: item.steps,
-        why: item.why ?? null,
-        verification: item.verification,
+        ...fields,
         ...(material
           ? {
               status: "open" satisfies UserTodoStatus,
@@ -154,9 +199,14 @@ export async function upsertUserTodosFromAnswerInTransaction(
       },
       select: { status: true },
     });
-    chosen.push({ id: existing.id, title: item.title, status: updated.status });
+    chosen.push({
+      id: existing.id,
+      title: item.title,
+      status: updated.status,
+      position: item.position,
+    });
   }
-  return chosen;
+  return chosen.sort((a, b) => a.position - b.position);
 }
 
 /** What the resumed bot is told after the user chose the to-do option. */

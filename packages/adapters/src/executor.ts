@@ -8271,11 +8271,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
               const safePrerequisites = event.prerequisites
                 ? {
                     release: event.prerequisites.release,
+                    ...(event.prerequisites.priority
+                      ? { priority: event.prerequisites.priority }
+                      : {}),
                     items: event.prerequisites.items.map((item) => ({
                       key: item.key,
                       title: redactSecrets(item.title, runSecrets),
                       steps: redactSecrets(item.steps, runSecrets),
                       ...(item.why ? { why: redactSecrets(item.why, runSecrets) } : {}),
+                      ...(item.blocks?.length ? { blocks: item.blocks } : {}),
                       verification: item.verification,
                     })),
                   }

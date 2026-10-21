@@ -254,6 +254,12 @@ export const UserTodoSchema = z.object({
   why: z.string().nullable(),
   /** The `Case <n>` number at the head of the card's question, when it has one. */
   caseNumber: z.string().nullable(),
+  /** Other cases or jobs that truly depend on this item; empty when only its own bot waits. */
+  blocks: z.array(z.string()),
+  /** The card's priority; null sorts after p3. */
+  priority: z.enum(["p0", "p1", "p2", "p3"]).nullable(),
+  /** The item's place on its card, in the bot's order. */
+  position: z.number().int().nonnegative(),
   verification: z.enum(["automatic", "manual"]),
   status: UserTodoStatusSchema,
   /** The remaining step, why it could not be checked, or why it is no longer needed. */
@@ -1123,7 +1129,10 @@ export const appContract = {
     list: oc.output(z.object({ decisions: z.array(PendingDecisionSchema) })),
     withdraw: oc.input(WithdrawDecisionInputSchema).output(WithdrawDecisionOutputSchema),
   },
-  /** Fleet: the caller's manual prerequisites, actionable first. */
+  /**
+   * Fleet: the caller's manual prerequisites, grouped by card: cards blocking other cases or jobs
+   * first, then by priority (unknown after p3), then oldest asked; items in the bot's order.
+   */
   todos: {
     list: oc.output(z.object({ todos: z.array(UserTodoSchema) })),
     /** Done — check now: asks the requesting bot to verify an automatic to-do. */
