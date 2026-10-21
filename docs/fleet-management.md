@@ -173,6 +173,23 @@ wakes the bot twice (`releasedRevision`). Releasing never grants an approval or 
 RPC: `todos.list`, `todos.check({ todoId, revision })`, `todos.confirm({ todoId, revision })`, scoped to
 the caller's space and own to-dos. Table `user_todos`, migration `20261021200000_user_todos`.
 
+### Link to the tracker case
+
+A card's to-dos belong to their tracker case by number: `ask_user` takes `caseRef` (the issue number)
+for the whole set, and each item's `blocks` may name tracker issues as `{ issue, label? }` (free text
+is kept for display only). `user_todos.caseRef` stores it; migration `20261022090000_user_todo_case_ref`
+backfilled it only where the card question started exactly "Case <n> · " or "URGENT · Case <n> · ",
+and left every other to-do unlinked (null), never guessed. The panel's "Case <n>" chip links to the
+issue through the case link setting (`RAKAZO_CASE_LINK_URL`).
+
+The Fleet service, signed in as the deployment owner, uses two RPCs (other callers get `FORBIDDEN`):
+`todos.byCase({ caseRef })` returns every to-do of the case in the caller's space, all statuses; and
+`todos.retireForCase({ caseRef, reason })` retires the case's open, checking, remaining and unavailable
+to-dos with the reason through the same compare-and-set as `todo_retire` (new revision, history kept,
+nothing deleted) and returns those it retired. Verified, confirmed and retired to-dos stay as they are.
+It releases no work, since the case itself ended, and is idempotent. A check still running is retired
+too; its later report is refused. A to-do created later for the case is a normal open to-do.
+
 ### Hourly checks
 
 The worker's reconciler checks pending automatic to-dos once an hour, so a finished step releases work
