@@ -134,6 +134,11 @@ update returns, inside the same transaction and before steering/progress cleanup
 No won cancellation means no dependency scan; storage failure aborts Stop before
 post-commit notification or sandbox teardown.
 
+Queued user/reaction supersession uses a single conditional cancellation returning
+only the rows that still qualify, then invalidates their source dependencies before
+task cleanup in that transaction. A run claimed since a prior observation is not
+cancelled, nor is its task or dependency touched. Failure aborts the owning send.
+
 This is not complete lifecycle fencing: legacy-row reconciliation, other cancellation
 or replacement paths, and dependent-card UI refresh remain to be implemented. The
 reference is not a human answer or an authorization grant.
