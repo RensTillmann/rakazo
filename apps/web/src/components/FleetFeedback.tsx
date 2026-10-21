@@ -69,7 +69,7 @@ export function todoFeedbackContext(todo: UserTodo | null): FleetFeedbackContext
     todo: todo.title,
     todoStatus: todo.status,
     bot: todo.botName,
-    ...(todo.caseNumber ? { caseId: todo.caseNumber } : {}),
+    ...(todo.caseRef === null ? {} : { caseId: String(todo.caseRef) }),
   };
 }
 

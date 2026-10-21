@@ -1,4 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
+import { ReferenceLinksContext, referenceLinkHref } from "@rakazo/chat-ui/web";
 import {
   ACTIONABLE_USER_TODO_STATUSES,
   type UserTodo,
@@ -36,6 +37,11 @@ const TICKABLE: readonly UserTodoStatus[] = ["open", "remaining", "unavailable"]
 const FINISHED: readonly UserTodoStatus[] = ["verified", "confirmed", "retired"];
 const EMPTY: UserTodo[] = [];
 const CHIP = "rounded-full bg-background px-2 py-0.5 text-muted-foreground";
+
+/** A tracker issue's link through the deployment's case link setting; none without it. */
+function caseHref(template: string | null | undefined, issue: number) {
+  return template ? referenceLinkHref(template, String(issue)) : undefined;
+}
 
 function clip(text: string) {
   return text.length > SHORT_TEXT ? `${text.slice(0, SHORT_TEXT - 1).trimEnd()}…` : text;
@@ -205,6 +211,7 @@ const BOX =
 function TodoItem({ todo }: { todo: UserTodo }) {
   const { t } = useLingui();
   const todos = useContext(UserTodosContext)!;
+  const caseLinks = useContext(ReferenceLinksContext).case;
   const [open, setOpen] = useState(false);
   const counting = todos.countdown.has(todo.id);
   const requesting = todos.requesting.has(todo.id);
@@ -336,15 +343,26 @@ function TodoItem({ todo }: { todo: UserTodo }) {
         ) : null}
         {ACTIONABLE.includes(todo.status) && todo.blocks.length ? (
           <span className="flex shrink-0 flex-wrap justify-end gap-1">
-            {todo.blocks.map((ref) => (
-              <span
-                key={ref}
-                data-testid="todo-blocks"
-                className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive"
-              >
-                {t`blocks ${ref}`}
-              </span>
-            ))}
+            {todo.blocks.map(({ issue, label: ref }, index) => {
+              const href = issue === null ? undefined : caseHref(caseLinks, issue);
+              const chip = "rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive";
+              return href ? (
+                <a
+                  key={`${index}:${ref}`}
+                  data-testid="todo-blocks"
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className={`${chip} underline-offset-2 hover:underline`}
+                >
+                  {t`blocks ${ref}`}
+                </a>
+              ) : (
+                <span key={`${index}:${ref}`} data-testid="todo-blocks" className={chip}>
+                  {t`blocks ${ref}`}
+                </span>
+              );
+            })}
           </span>
         ) : null}
         {box === "checked" && manual ? (
@@ -362,7 +380,9 @@ function TodoItem({ todo }: { todo: UserTodo }) {
 function TodoDetails({ todo }: { todo: UserTodo }) {
   const { t, i18n } = useLingui();
   const feedback = useContext(UserTodosContext)?.feedback;
-  const { botName, caseNumber } = todo;
+  const { botName, caseRef } = todo;
+  const caseLinks = useContext(ReferenceLinksContext).case;
+  const caseLink = caseRef === null ? undefined : caseHref(caseLinks, caseRef);
   const asked = i18n.date(new Date(todo.createdAt), { dateStyle: "medium" });
   const format = (iso: string) =>
     i18n.date(new Date(iso), { dateStyle: "medium", timeStyle: "short" });
@@ -401,7 +421,21 @@ function TodoDetails({ todo }: { todo: UserTodo }) {
           : t`You confirm this one`}
       </p>
       <div data-testid="todo-chips" className="flex flex-wrap gap-1.5">
-        {caseNumber ? <span className={CHIP}>{t`Case ${caseNumber}`}</span> : null}
+        {caseRef === null ? null : caseLink ? (
+          <a
+            data-testid="todo-case"
+            href={caseLink}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={`${CHIP} underline-offset-2 hover:text-foreground hover:underline`}
+          >
+            {t`Case ${caseRef}`}
+          </a>
+        ) : (
+          <span data-testid="todo-case" className={CHIP}>
+            {t`Case ${caseRef}`}
+          </span>
+        )}
         <span className={CHIP}>{t`asked ${asked}`}</span>
       </div>
       {feedback ? (

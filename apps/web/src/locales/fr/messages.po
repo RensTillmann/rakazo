@@ -1182,7 +1182,7 @@ msgid "Card view"
 msgstr "Vue en cartes"
 
 #: src/components/TodosControl.tsx
-msgid "Case {caseNumber}"
+msgid "Case {caseRef}"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx

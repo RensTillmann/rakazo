@@ -742,6 +742,7 @@ export {
   MentionOpenBotContext,
   ReferenceLinksContext,
   RemoteImagesContext,
+  referenceLinkHref,
 } from "./markdown";
 
 export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { type ReferenceLinks, ReferenceLinksContext } from "@rakazo/chat-ui/web";
 import type { UserTodo } from "@rakazo/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -58,7 +59,7 @@ function todo(id: string, overrides: Partial<UserTodo> = {}): UserTodo {
     title: `Title ${id}`,
     steps: "1. Open settings\n2. Turn it on",
     why: null,
-    caseNumber: null,
+    caseRef: null,
     blocks: [],
     priority: null,
     position: 0,
@@ -96,6 +97,9 @@ function LocationProbe() {
   return null;
 }
 const ROOMS = [{ id: "room-1", threadId: "t-room" }];
+/** The deployment's case link setting for the next mount; none by default. */
+let referenceLinks: ReferenceLinks = {};
+const CASE_LINK = "https://tracker.example.com/issues/{n}";
 
 async function mount(todos: UserTodo[], children: ReactNode) {
   vi.mocked(rpc.todos.list).mockResolvedValue({ todos });
@@ -103,9 +107,11 @@ async function mount(todos: UserTodo[], children: ReactNode) {
     root.render(
       <MemoryRouter initialEntries={["/app/lily"]}>
         <LocationProbe />
-        <UserTodosProvider scope="user-1:primary" enabled onFeedback={onFeedback}>
-          {children}
-        </UserTodosProvider>
+        <ReferenceLinksContext.Provider value={referenceLinks}>
+          <UserTodosProvider scope="user-1:primary" enabled onFeedback={onFeedback}>
+            {children}
+          </UserTodosProvider>
+        </ReferenceLinksContext.Provider>
       </MemoryRouter>,
     ),
   );
@@ -152,6 +158,7 @@ beforeEach(() => {
   vi.mocked(rpc.todos.check).mockReset();
   vi.mocked(rpc.todos.confirm).mockReset();
   onFeedback.mockReset();
+  referenceLinks = {};
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -469,7 +476,7 @@ describe("To-dos panel", () => {
     await openPanel([
       todo("a", {
         why: "Mailgun rejects mail without it.",
-        caseNumber: "3536",
+        caseRef: 3536,
         evidence: "dig TXT shows v=spf1 -all",
         checkedAt: "2026-10-21T09:15:00.000Z",
       }),
@@ -523,11 +530,12 @@ describe("To-dos panel", () => {
   });
 
   it("shows a red blocks chip per entry only while the item is unfinished", async () => {
+    const deploy = { issue: null, label: "deploy" };
     await openPanel([
-      todo("a", { blocks: ["deploy", "#412"] }),
-      todo("c", { status: "checking", blocks: ["deploy"] }),
-      todo("v", { status: "verified", blocks: ["deploy"] }),
-      todo("r", { status: "retired", blocks: ["deploy"] }),
+      todo("a", { blocks: [deploy, { issue: null, label: "#412" }] }),
+      todo("c", { status: "checking", blocks: [deploy] }),
+      todo("v", { status: "verified", blocks: [deploy] }),
+      todo("r", { status: "retired", blocks: [deploy] }),
     ]);
     await click(doneRow());
     const chips = (id: string) =>
@@ -540,6 +548,55 @@ describe("To-dos panel", () => {
     expect(chips("v")).toEqual([]);
     expect(chips("r")).toEqual([]);
     expect(container.textContent).not.toContain("unblocks");
+  });
+
+  it("links a blocks chip for a tracker issue through the case link setting", async () => {
+    referenceLinks = { case: CASE_LINK };
+    await openPanel([
+      todo("a", {
+        blocks: [
+          { issue: 412, label: "case 412" },
+          { issue: null, label: "deploy" },
+        ],
+      }),
+    ]);
+    const [linked, plain] = [...row("a")!.querySelectorAll('[data-testid="todo-blocks"]')];
+    expect(linked!.tagName).toBe("A");
+    expect(linked!.textContent).toBe("blocks case 412");
+    expect(linked!.getAttribute("href")).toBe("https://tracker.example.com/issues/412");
+    expect(linked!.getAttribute("target")).toBe("_blank");
+    expect(linked!.getAttribute("rel")).toBe("noreferrer noopener");
+    expect(plain!.tagName).toBe("SPAN");
+  });
+
+  it("keeps an issue's blocks chip as text without the case link setting", async () => {
+    await openPanel([todo("a", { blocks: [{ issue: 412, label: "case 412" }] })]);
+    const chip = row("a")!.querySelector('[data-testid="todo-blocks"]')!;
+    expect(chip.tagName).toBe("SPAN");
+    expect(chip.textContent).toBe("blocks case 412");
+  });
+
+  it("links the Case chip to the tracker issue when the case link setting exists", async () => {
+    referenceLinks = { case: CASE_LINK };
+    await openPanel([todo("a", { caseRef: 398 })]);
+    await click(titleButton("a"));
+    const chip = row("a")!.querySelector<HTMLAnchorElement>('[data-testid="todo-case"]')!;
+    expect(chip.tagName).toBe("A");
+    expect(chip.textContent).toBe("Case 398");
+    expect(chip.getAttribute("href")).toBe("https://tracker.example.com/issues/398");
+    expect(chip.getAttribute("target")).toBe("_blank");
+    expect(chip.getAttribute("rel")).toBe("noreferrer noopener");
+  });
+
+  it("shows the Case chip as text without the setting, and none without a case", async () => {
+    await openPanel([todo("a", { caseRef: 398 }), todo("b")]);
+    await click(titleButton("a"));
+    await click(titleButton("b"));
+    const chip = row("a")!.querySelector('[data-testid="todo-case"]')!;
+    expect(chip.tagName).toBe("SPAN");
+    expect(chip.textContent).toBe("Case 398");
+    expect(row("a")!.querySelector('[data-testid="todo-details"] a')).toBeNull();
+    expect(row("b")!.querySelector('[data-testid="todo-case"]')).toBeNull();
   });
 
   it("folds finished items of every group into one Done row at the bottom, grouped", async () => {

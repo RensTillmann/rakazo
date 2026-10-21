@@ -1182,8 +1182,8 @@ msgid "Card view"
 msgstr "Card view"
 
 #: src/components/TodosControl.tsx
-msgid "Case {caseNumber}"
-msgstr "Case {caseNumber}"
+msgid "Case {caseRef}"
+msgstr "Case {caseRef}"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Change password"
