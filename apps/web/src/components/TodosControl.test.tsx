@@ -3,6 +3,7 @@ import type { UserTodo } from "@rakazo/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { rpc } from "../lib/rpc";
 import { TODO_UNDO_MS, TodoChecklist, TodosSidebarButton, UserTodosProvider } from "./TodosControl";
@@ -87,13 +88,25 @@ const advance = (ms: number) =>
     await vi.advanceTimersByTimeAsync(ms);
   });
 
+/** The router location after the last navigation, as "pathname?search". */
+let location = "";
+function LocationProbe() {
+  const current = useLocation();
+  location = `${current.pathname}${current.search}`;
+  return null;
+}
+const ROOMS = [{ id: "room-1", threadId: "t-room" }];
+
 async function mount(todos: UserTodo[], children: ReactNode) {
   vi.mocked(rpc.todos.list).mockResolvedValue({ todos });
   await act(async () =>
     root.render(
-      <UserTodosProvider scope="user-1:primary" enabled onFeedback={onFeedback}>
-        {children}
-      </UserTodosProvider>,
+      <MemoryRouter initialEntries={["/app/lily"]}>
+        <LocationProbe />
+        <UserTodosProvider scope="user-1:primary" enabled onFeedback={onFeedback}>
+          {children}
+        </UserTodosProvider>
+      </MemoryRouter>,
     ),
   );
   await flush();
@@ -103,7 +116,7 @@ const sidebarButton = () =>
   container.querySelector<HTMLButtonElement>('[data-testid="todos-sidebar-button"]');
 
 async function openPanel(todos: UserTodo[], rail = false) {
-  await mount(todos, <TodosSidebarButton rail={rail} />);
+  await mount(todos, <TodosSidebarButton rail={rail} rooms={ROOMS} />);
   await click(sidebarButton()!);
 }
 
@@ -153,9 +166,49 @@ afterEach(() => {
 });
 
 describe("To-dos sidebar button", () => {
-  it("is hidden while there are no to-dos", async () => {
-    await mount([], <TodosSidebarButton rail={false} />);
-    expect(sidebarButton()).toBeNull();
+  it("shows without a badge when there are no to-dos, with an empty panel", async () => {
+    await openPanel([]);
+    const button = sidebarButton()!;
+    expect(button).not.toBeNull();
+    expect(button.getAttribute("aria-label")).toBe("To-dos");
+    expect(button.querySelector('[data-testid="todos-badge"]')).toBeNull();
+    const panel = container.querySelector('[role="dialog"]')!;
+    expect(panel.querySelector('[data-testid="todos-empty"]')?.textContent).toBe(
+      "Nothing waiting on you",
+    );
+    expect(panel.querySelector("section")).toBeNull();
+    expect(doneRow()).toBeUndefined();
+  });
+
+  it("stays visible when the list fails to load", async () => {
+    vi.mocked(rpc.todos.list).mockRejectedValue(new Error("offline"));
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <UserTodosProvider scope="user-1:primary" enabled>
+            <TodosSidebarButton rail={false} rooms={ROOMS} />
+          </UserTodosProvider>
+        </MemoryRouter>,
+      ),
+    );
+    await flush();
+    expect(sidebarButton()).not.toBeNull();
+    expect(sidebarButton()!.querySelector('[data-testid="todos-badge"]')).toBeNull();
+  });
+
+  it("shows the empty state above Done when only finished items remain", async () => {
+    await openPanel([
+      todo("v", { status: "verified" }),
+      todo("r", { status: "retired", statusDetail: "Plan changed" }),
+    ]);
+    expect(sidebarButton()!.querySelector('[data-testid="todos-badge"]')).toBeNull();
+    const panel = container.querySelector('[role="dialog"]')!;
+    expect(panel.querySelector('[data-testid="todos-empty"]')?.textContent).toBe(
+      "Nothing waiting on you",
+    );
+    expect(doneRow().textContent).toBe("Done (2) ▸");
+    await click(doneRow());
+    expect(renderedIds()).toEqual(["v", "r"]);
   });
 
   it("badges the open count and opens the grouped panel", async () => {
@@ -168,7 +221,7 @@ describe("To-dos sidebar button", () => {
         todo("e", { status: "verified" }),
         todo("f", { status: "retired" }),
       ],
-      <TodosSidebarButton rail={false} />,
+      <TodosSidebarButton rail={false} rooms={ROOMS} />,
     );
     const button = sidebarButton()!;
     expect(button.querySelector('[data-testid="todos-badge"]')?.textContent).toBe("4");
@@ -189,6 +242,48 @@ describe("To-dos sidebar button", () => {
 });
 
 describe("To-dos panel", () => {
+  it("links each group's question to its card in the bot's chat or the room", async () => {
+    await openPanel([
+      todo("a", { groupId: "msg-direct", threadId: "t-josy" }),
+      todo("r", {
+        groupId: "msg-room",
+        groupTitle: "Room question?",
+        botId: "lily",
+        botName: "Lily",
+        threadId: "t-room",
+      }),
+    ]);
+    const link = (title: string) =>
+      [...group(title).querySelectorAll<HTMLAnchorElement>("header a")].find(
+        (anchor) => anchor.textContent === "Show question",
+      )!;
+    // The shell's `?m=` jump opens the chat at that message; `src` marks it as a To-dos jump.
+    expect(link("Set up the mail domain?").getAttribute("href")).toBe(
+      "/app/josy?m=msg-direct&src=question",
+    );
+    expect(link("Room question?").getAttribute("href")).toBe(
+      "/app/g/room-1?m=msg-room&src=question",
+    );
+    // The link sits before the progress count.
+    const header = group("Room question?").querySelector("header")!;
+    expect([...header.children].map((child) => child.textContent)).toEqual([
+      "Lily · Room question?",
+      "Show question",
+      "0/1",
+    ]);
+    await click(link("Room question?"));
+    expect(location).toBe("/app/g/room-1?m=msg-room&src=question");
+    // Navigating closes the panel.
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("gives the answered card's checklist no question link", async () => {
+    await mount([todo("a", { groupId: "msg-1" })], <TodoChecklist messageId="msg-1" />);
+    expect(container.querySelector('[data-testid="todo-checklist"]')).not.toBeNull();
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.textContent).not.toContain("Show question");
+  });
+
   it("heads each card's group with bot, wrapped topic, and progress", async () => {
     const topic = "Set up rakazo.dev so outgoing mail passes SPF, DKIM and DMARC?";
     await openPanel([
@@ -516,7 +611,7 @@ describe("Answered card checklist", () => {
         todo("x", { groupId: "msg-2" }),
       ],
       <>
-        <TodosSidebarButton rail={false} />
+        <TodosSidebarButton rail={false} rooms={ROOMS} />
         <TodoChecklist messageId="msg-1" />
         <TodoChecklist messageId="msg-3" />
       </>,

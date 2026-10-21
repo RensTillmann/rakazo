@@ -3980,6 +3980,10 @@ msgstr "没有仍在运行的任务"
 msgid "Nothing remembered yet"
 msgstr "暂无记忆"
 
+#: src/components/TodosControl.tsx
+msgid "Nothing waiting on you"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "通知"
@@ -5183,6 +5187,10 @@ msgstr "显示更多"
 msgid "Show password"
 msgstr "显示密码"
 
+#: src/components/TodosControl.tsx
+msgid "Show question"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Show routine output"
 msgstr ""
@@ -5536,6 +5544,10 @@ msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "That card was already answered or no longer applies, so nothing was sent."
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "That question is further back in the chat."
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx

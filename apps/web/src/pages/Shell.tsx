@@ -261,6 +261,7 @@ import { desktopBridge } from "../lib/desktop";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { publishActivityEvent } from "../lib/live-activity-terminal";
 import { localTimezone } from "../lib/local-timezone";
+import { messageInPage, messageJumpLocation, QUESTION_JUMP_SOURCE } from "../lib/message-jump";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import { parseModelOptionKey } from "../lib/model-catalog";
@@ -973,6 +974,8 @@ function SpaceShell() {
     nonce: number;
   } | null>(null);
   const clearScrollRequest = useCallback(() => setScrollRequest(null), []);
+  /** A To-dos "Show question" jump whose card is not in the chat's history any more. */
+  const [questionMissed, setQuestionMissed] = useState(false);
   const initiallyScrolledThread = useRef<string | null>(null);
   const messageScroll = useRef<HTMLDivElement>(null);
   const pinnedAroundRef = useRef<{
@@ -2031,16 +2034,15 @@ function SpaceShell() {
   async function jumpToSearchHit(hit: SearchHit) {
     setQuery("");
     setSearchHits([]);
-    const params = new URLSearchParams();
-    if (hit.messageId) params.set("m", hit.messageId);
-    if (hit.routineId) params.set("routine", hit.routineId);
-    navigate({
-      pathname: hit.groupId ? `/app/g/${hit.groupId}` : `/app/${hit.botId}`,
-      search: params.toString() ? `?${params.toString()}` : undefined,
-    });
+    navigate(messageJumpLocation(hit));
   }
 
-  async function jumpToMessage(target: { botId?: string; groupId?: string; messageId: string }) {
+  /** Opens the thread at the message; resolves whether the message was found. */
+  async function jumpToMessage(target: {
+    botId?: string;
+    groupId?: string;
+    messageId: string;
+  }): Promise<boolean> {
     const threadTarget = searchHitThreadTarget(target);
     const epoch = historyEpoch.current;
     jumpGeneration.current += 1;
@@ -2052,14 +2054,10 @@ function SpaceShell() {
     // The epoch check drops a jump that raced a conversation clear (or a bot switch): applying
     // the fetched page would pin deleted messages that every later refresh keeps restoring.
     // jumpId drops an older jump that finished after a newer click.
-    if (epoch !== historyEpoch.current || jumpId !== jumpGeneration.current) return;
-    if (target.groupId && activeGroupId.current !== target.groupId) return;
-    if (target.botId && activeBotId.current !== target.botId) return;
-    // A reply folded under its peer marker counts: the transcript expands the marker to show it.
-    const pageTranscript = foldPeerReplies(page.messages, { includePeerReceipts: true });
-    const targetInPage =
-      pageTranscript.markerOf.has(target.messageId) ||
-      pageTranscript.messages.some((message) => message.id === target.messageId);
+    if (epoch !== historyEpoch.current || jumpId !== jumpGeneration.current) return true;
+    if (target.groupId && activeGroupId.current !== target.groupId) return true;
+    if (target.botId && activeBotId.current !== target.botId) return true;
+    const targetInPage = messageInPage(page.messages, target.messageId);
     expandedHistoryThread.current = targetInPage ? page.threadId : null;
     pinnedAroundRef.current = targetInPage
       ? {
@@ -2107,6 +2105,7 @@ function SpaceShell() {
         }
       });
     }
+    return targetInPage;
   }
 
   // The routine panel copies a routine's data into local draft state at click time
@@ -2121,13 +2120,20 @@ function SpaceShell() {
   useEffect(() => {
     const messageId = searchParams.get("m");
     const routineId = searchParams.get("routine");
+    // A To-dos jump says so when the card cannot be shown; search hits keep landing silently.
+    const question = searchParams.get("src") === QUESTION_JUMP_SOURCE;
+    const reportMiss = (found: boolean) => {
+      if (question && !found) setQuestionMissed(true);
+    };
+    const clearJump = () => {
+      // Keep expandedHistoryThread; only strip the jump URL so refresh does not remount.
+      const next = new URLSearchParams(searchParams);
+      next.delete("m");
+      next.delete("src");
+      setSearchParams(next, { replace: true });
+    };
     if (inGroup && groupId && messageId) {
-      void jumpToMessage({ groupId, messageId }).finally(() => {
-        // Keep expandedHistoryThread; only strip the jump URL so refresh does not remount.
-        const next = new URLSearchParams(searchParams);
-        next.delete("m");
-        setSearchParams(next, { replace: true });
-      });
+      void jumpToMessage({ groupId, messageId }).then(reportMiss).finally(clearJump);
       return;
     }
     if (!active) return;
@@ -2146,13 +2152,18 @@ function SpaceShell() {
       setSearchParams(next, { replace: true });
     }
     if (messageId) {
-      void jumpToMessage({ botId: active.id, messageId }).finally(() => {
-        const next = new URLSearchParams(searchParams);
-        next.delete("m");
-        setSearchParams(next, { replace: true });
-      });
+      void jumpToMessage({ botId: active.id, messageId }).then(reportMiss).finally(clearJump);
     }
   }, [active?.id, groupId, inGroup, routines, routinesBotId, searchParams, setSearchParams]);
+  // The miss note belongs to the chat it was shown in and fades after a while.
+  useEffect(() => {
+    if (!questionMissed) return;
+    const timer = window.setTimeout(() => setQuestionMissed(false), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [questionMissed]);
+  useEffect(() => {
+    setQuestionMissed(false);
+  }, [active?.id, groupId]);
   const activeSnapshot = inGroup
     ? snapshot?.groupId === groupId
       ? snapshot
@@ -4101,7 +4112,7 @@ function SpaceShell() {
             <Trans>Integrations</Trans>
           </span>
         </button>
-        <TodosSidebarButton rail={botsSidebarRail} />
+        <TodosSidebarButton rail={botsSidebarRail} rooms={groups} />
         <Popover
           open={menuOpen}
           onOpenChange={(open) => {
@@ -4466,6 +4477,14 @@ function SpaceShell() {
           </div>
         ) : (
           <div className="relative flex min-h-0 flex-1">
+            {questionMissed ? (
+              <p
+                role="status"
+                className="pointer-events-none absolute inset-x-0 top-2 z-10 mx-auto w-fit rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground"
+              >
+                <Trans>That question is further back in the chat.</Trans>
+              </p>
+            ) : null}
             <Transcript
               key={activeSnapshot?.threadId}
               scrollRef={messageScroll}

@@ -16,6 +16,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { Link } from "react-router-dom";
+import { messageJumpLocation, QUESTION_JUMP_SOURCE } from "../lib/message-jump";
 import { rpc } from "../lib/rpc";
 import { useVisibleResource } from "../lib/use-visible-resource";
 
@@ -435,8 +437,25 @@ function GroupLabel({ items, className }: { items: readonly UserTodo[]; classNam
   );
 }
 
+/**
+ * The card's place in its chat: the room whose thread holds it, else the bot's 1:1 chat. The shell's
+ * `?m=` jump fetches the page around the card, scrolls to it and highlights it.
+ */
+function questionLocation(todo: UserTodo, rooms: readonly TodoRoom[]) {
+  const room = rooms.find((candidate) => candidate.threadId === todo.threadId);
+  return messageJumpLocation(
+    room
+      ? { groupId: room.id, messageId: todo.groupId }
+      : { botId: todo.botId, messageId: todo.groupId },
+    QUESTION_JUMP_SOURCE,
+  );
+}
+
+/** A chat a to-do's card can sit in: rooms are told apart from 1:1 chats by their thread. */
+export type TodoRoom = { id: string; threadId: string };
+
 /** Every to-do, grouped by card in server order; finished ones fold into one Done row. */
-function TodosPanel() {
+function TodosPanel({ rooms, onNavigate }: { rooms: readonly TodoRoom[]; onNavigate: () => void }) {
   const { t } = useLingui();
   const context = useContext(UserTodosContext)!;
   const [showFinished, setShowFinished] = useState(false);
@@ -472,6 +491,11 @@ function TodosPanel() {
       </div>
       <Message />
       <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+        {sections.some(({ active }) => active.length) ? null : (
+          <p data-testid="todos-empty" className="px-1 py-2 text-xs text-muted-foreground">
+            <Trans>Nothing waiting on you</Trans>
+          </p>
+        )}
         {sections.map(({ groupId, items, active }) =>
           active.length ? (
             <section
@@ -480,8 +504,15 @@ function TodosPanel() {
               aria-label={items[0]!.groupTitle}
               className="rounded-md border px-2 py-1.5"
             >
-              <header className="flex items-start gap-2 px-1 py-1 text-xs">
+              <header className="flex flex-wrap items-start gap-x-2 gap-y-0.5 px-1 py-1 text-xs">
                 <GroupLabel items={items} className="" />
+                <Link
+                  to={questionLocation(items[0]!, rooms)}
+                  onClick={onNavigate}
+                  className="shrink-0 text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:order-last max-sm:basis-full"
+                >
+                  <Trans>Show question</Trans>
+                </Link>
                 <span data-testid="todo-progress" className="shrink-0 tabular-nums">
                   {progress(items)}
                 </span>
@@ -531,14 +562,18 @@ function TodosPanel() {
   );
 }
 
-/** Sidebar entry above the profile row; hidden until a bot hands over a to-do. */
-export function TodosSidebarButton({ rail }: { rail: boolean }) {
+/**
+ * Sidebar entry above the profile row, always shown; the badge counts open to-dos. `rooms` routes a
+ * room card's "Show question" to the room.
+ */
+export function TodosSidebarButton({ rail, rooms }: { rail: boolean; rooms: readonly TodoRoom[] }) {
   const { t } = useLingui();
   const context = useContext(UserTodosContext);
   const [open, setOpen] = useState(false);
   const watch = context?.watch;
   useEffect(() => (open && watch ? watch() : undefined), [open, watch]);
-  if (!context?.todos.length) return null;
+  // Always shown, also with nothing to do or when the list failed to load.
+  if (!context) return null;
   const count = context.todos.filter((todo) => ACTIONABLE.includes(todo.status)).length;
   const label = count ? t`To-dos, ${count} open` : t`To-dos`;
   return (
@@ -573,7 +608,7 @@ export function TodosSidebarButton({ rail }: { rail: boolean }) {
           sideOffset={8}
           className="w-[min(28rem,calc(100vw-2rem))] p-3"
         >
-          <TodosPanel />
+          <TodosPanel rooms={rooms} onNavigate={() => setOpen(false)} />
         </PopoverContent>
       ) : null}
     </Popover>

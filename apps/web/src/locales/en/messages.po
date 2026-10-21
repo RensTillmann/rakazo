@@ -3980,6 +3980,10 @@ msgstr "Nothing is still running"
 msgid "Nothing remembered yet"
 msgstr "Nothing remembered yet"
 
+#: src/components/TodosControl.tsx
+msgid "Nothing waiting on you"
+msgstr "Nothing waiting on you"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "Notifications"
@@ -5183,6 +5187,10 @@ msgstr "Show more"
 msgid "Show password"
 msgstr "Show password"
 
+#: src/components/TodosControl.tsx
+msgid "Show question"
+msgstr "Show question"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Show routine output"
 msgstr "Show routine output"
@@ -5537,6 +5545,10 @@ msgstr "Text"
 #: src/components/DecisionDock.tsx
 msgid "That card was already answered or no longer applies, so nothing was sent."
 msgstr "That card was already answered or no longer applies, so nothing was sent."
+
+#: src/pages/Shell.tsx
+msgid "That question is further back in the chat."
+msgstr "That question is further back in the chat."
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."

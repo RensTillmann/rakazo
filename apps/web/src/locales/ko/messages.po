@@ -3980,6 +3980,10 @@ msgstr "실행 중인 작업 없음"
 msgid "Nothing remembered yet"
 msgstr "아직 기억한 내용이 없습니다"
 
+#: src/components/TodosControl.tsx
+msgid "Nothing waiting on you"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "알림"
@@ -5183,6 +5187,10 @@ msgstr "더 보기"
 msgid "Show password"
 msgstr "비밀번호 표시"
 
+#: src/components/TodosControl.tsx
+msgid "Show question"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Show routine output"
 msgstr ""
@@ -5536,6 +5544,10 @@ msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "That card was already answered or no longer applies, so nothing was sent."
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "That question is further back in the chat."
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
