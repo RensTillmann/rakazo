@@ -94,6 +94,13 @@ When the user edits a reply before answering, one learning note goes to the feed
 the card, so it is sent once; it approves, sends and changes nothing. Without `RAKAZO_FLAG_BOT` no note
 is sent. A note that fails after the answer committed is logged, not retried.
 
+The approval to send a Zendesk reply (`zd_reply { ticket, body, status, tags? }`) shows the Fleet's
+`zd_reply_context` for the ticket: the customer's full `inquiry`, the thread and any note. The version
+the user approved is the `source.version` of the bot's newest answered reply card for
+`zendesk:<ticket>`; when the newest customer message is another version, the review says it is stale.
+A context in another shape shows as unavailable, never guessed. The contract is pinned by the Fleet's
+fixture, copied whole into `apps/api/src/fixtures/zd_reply_context.json`.
+
 Withdrawal approvals recorded before source binding are reconciled on every reconciler pass from their
 exact route-bound envelope only: an ended source invalidates the request (its card is then retired), a
 live one gets its source recorded so a later answer, withdrawal or stop ends it at once. A request
@@ -107,6 +114,11 @@ questions and approvals alike, is retired in the same transaction with a reason 
 for a withdrawal, "Its run ended without an answer" otherwise) and a `thread.message.updated` event
 refreshes open tabs. Bound approval requests are invalidated as before. The reconciler retires cards
 already left open on ended runs, without touching the runs.
+
+Stuck-work expiry (`RAKAZO_STUCK_EXPIRE_HOURS`) never cancels a run that waits on an open card: a
+decision waits for the user as long as it takes, across a pause and a resume. For other stuck work the
+age excludes time the global pause held (from the maintenance audit), so queued work the pause kept is
+not cancelled the moment it resumes; work that is stuck for its own reasons still expires.
 
 ## Obsolete ordinary questions
 
@@ -131,12 +143,19 @@ built-in fleet-management tool and does not grant permission to perform the acti
 ## Manual prerequisites and to-dos
 
 A question card can hand manual steps to the user. `ask_user` takes `prerequisites` (1–10 items, each
-`{ key, title, steps, why?, blocks?, verification: "automatic" | "manual" }`, keys unique on the card;
+`{ key, title, steps, why, blocks?, verification: "automatic" | "manual" }`, keys unique on the card;
 `why` at most 600 characters; `blocks` up to 10 other cases or jobs that truly depend on the item, such
 as "Case 142" or "#144", never the asking bot's own waiting work), `option` (the exact label of the
 option that means "I'll do it"), `release` (`each` or `all`, default `all`) and `priority` (`p0`–`p3`).
 An option that is not one of the card's options, or an invalid item, is refused before the card is
 stored. The card stores the items as `prerequisites` and marks that option `todo: true`.
+
+What the user is asked to do must come with clear instructions. Every new item needs a non-empty `why`
+(why it is needed and how it will be checked) and `steps` with at least one numbered step ("1. …");
+otherwise the whole set is refused with one line per item naming what to fix. The tool description
+tells the bot what a good item holds: real URLs, exact menu names and values, the bot's Credentials
+(never the chat) as the place for a secret, how it is checked, and "(not checked)" after any step it
+has not verified. Cards already stored are not re-checked.
 
 Answering with that option, inside the answer's transaction, creates one `UserTodo` per item, grouped
 by the card (`sourceMessageId`). An item whose `key` already has a to-do in the space keeps that to-do's
@@ -160,18 +179,19 @@ about a to-do goes through the existing Feedback to Elena flow.
 Ticking the checkbox (only the box toggles) means "I did this". For 5 seconds it shows a countdown and
 Undo; nothing is sent if it is undone or the tab closes. Then:
 
-- An automatic item becomes `checking` (a spinner in place of the box); a normal message in the bot's
-  thread asks the requesting bot to check the steps with its own read-only tools and call
-  `todo_report(todo_id, outcome, evidence, remaining_step?)`. `verified` (positive evidence only)
-  ticks the box. `remaining` (checked, not done) unticks it with "still missing: …"; `unavailable`
-  (could not check) unticks it with "couldn't check — tick again to retry", and is never treated as a
-  failed access check.
+- An automatic item becomes `checking` (a spinner in place of the box) and its case coordinator gets
+  the same bounded, read-only `todo_check` run as the hourly sweep (below), at once; nothing is posted
+  in the chat. The run calls `todo_report(todo_id, outcome, evidence, remaining_step?)`. `verified`
+  (positive evidence only) ticks the box. `remaining` (checked, not done) unticks it with "still
+  missing: …"; `unavailable` (could not check) unticks it with "couldn't check — tick again to retry",
+  and is never treated as a failed access check. During the global pause the run stays queued and is
+  held like any other work; it runs after resume.
 - A manual item becomes `confirmed`, ticked and labelled "(you)" rather than verified. No bot run
   checks it.
 - A box is ticked only once its item is verified or confirmed, and then cannot be unticked; a pending
   box cannot be ticked again.
 
-Only the requesting bot can report or retire (`todo_retire(todo_id, reason)` for a cancelled or
+Only the requesting bot, or the case coordinator checking for it, can report; only the requesting bot can retire (`todo_retire(todo_id, reason)` for a cancelled or
 superseded requirement; it then folds into "Done (N)" as no longer needed and takes no actions). Every action is
 a compare-and-set on the to-do's revision: a stale tab gets `CONFLICT`, two clicks make one transition.
 
@@ -206,12 +226,16 @@ too; its later report is refused. A to-do created later for the case is a normal
 The worker's reconciler checks pending automatic to-dos once an hour, so a finished step releases work
 without another click. A to-do is due when it is open, still to do or couldn't-check and its last check
 request (or its creation) is an hour old, or when a check has not reported for an hour. Manual to-dos
-are never swept: they cost no model call. Done — check now stays immediate.
+are never swept: they cost no model call. A to-do whose check run is still queued or running (a
+check-now held by the pause) is not checked again.
 
-A due to-do goes to `checking` through the same compare-and-set as Done — check now, and its
-requesting bot gets one `todo_check` run. That bot is the case's coordinator: only Josy, or Elena for
-fleet cases, ask Rens cards. The run is context-bounded and quiet: its prompt carries only the to-do,
-why it is needed, its steps and its last result, never the conversation; it posts nothing in the chat
+A due to-do goes to `checking` through the same compare-and-set as Done — check now, and gets the same
+`todo_check` run, tagged `todo-check:<id>:<revision>`. The run belongs to the case coordinator
+(`RAKAZO_CASE_COORDINATOR_BOTS`, comma-separated names or ids, first is the default): the bot that
+asked when it is one of them (only Josy, or Elena for fleet cases, ask Rens cards), the default one
+for a case card another bot asked, and the asking bot when there is no case. The run is
+context-bounded and quiet: its prompt carries only the to-do, why it is needed, its steps and its last
+result, never the conversation; it posts nothing in the chat
 and cannot ask, message or call the user. It is read-only: any action that would change something, or
 that the owner's rules would ask about, is refused (no card). Its shell runs only a plain pipeline of
 allowlisted reads, parsed before it runs: `gh api` with GET only (no other `-X`/`--method`, no
