@@ -360,6 +360,16 @@ export function resolveDuplicateEffectGate(
   if (effect.status === "completed") {
     return { action: "return", result: effect.result ?? { duplicate: true } };
   }
+  if (effect.status === "invalidated") {
+    return {
+      action: "return",
+      result: effect.result ?? {
+        error:
+          "This approval no longer applies. Request a new decision only if it is still needed.",
+        invalidated: true,
+      },
+    };
+  }
   if (effect.status === "denied") {
     return {
       action: "return",
