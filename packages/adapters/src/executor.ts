@@ -118,6 +118,7 @@ import {
 import type { McpServer, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   appendEventInTransaction,
+  claimSourceCheckedEffect,
   createSpaceForMember,
   createThreadMessageInTransaction,
   duplicateAskRefusal,
@@ -179,8 +180,6 @@ import {
   catalogApprovalRequest,
   catalogExecuteToolName,
   catalogIdForRoute,
-  claimApprovedEffect,
-  claimIntendedEffect,
   completeExternalEffect,
   createApprovedEffectReplayQueue,
   isToolPauseResult,
@@ -5396,8 +5395,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const claimOrReturn = async (
             from: "approved" | "intended",
           ): Promise<unknown | undefined> => {
-            const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
-            if (await claim(deps.prisma, applied!.effect.id)) {
+            if (await claimSourceCheckedEffect(deps.prisma, run, applied!.effect.id, from)) {
               claimedEffect = true;
               return undefined;
             }

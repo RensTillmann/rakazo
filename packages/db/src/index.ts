@@ -1,3 +1,4 @@
+export { claimSourceCheckedEffect } from "./approval-claim.js";
 export { invalidatePendingApprovalEffect } from "./approval-invalidation.js";
 export * from "./artifact-versions.js";
 export * from "./billing.js";

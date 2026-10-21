@@ -111,9 +111,14 @@ serializing the decision with source invalidation. An invalidation that wins fir
 is rejected without queueing the approval run or recording a human answer; an answer
 that wins first is subsequently invalidated by the source-ending transaction.
 
+Execution claims re-read the bound ordinary question and waiting source run under
+the same source-thread then source-run locks before the effect status CAS. An
+unavailable source invalidates the pending effect rather than executing it. The
+claim is the execution linearization point; a source ending cannot undo an external
+call whose claim already won. Missing account identity fails closed.
+
 This is not complete lifecycle fencing: legacy-row reconciliation, general cancellation
-and replacement, execution-time source revalidation and dependent-card UI refresh
-remain to be implemented. The
+and replacement, and dependent-card UI refresh remain to be implemented. The
 reference is not a human answer or an authorization grant.
 
 ## What a bot cannot do
