@@ -394,6 +394,7 @@ describe("destroyBot", () => {
           findMany: findRuns,
           updateMany: cancelRuns,
         },
+        message: { findMany: vi.fn().mockResolvedValue([]) },
         attempt: { updateMany: cancelAttempts },
         task: { updateMany: cancelTasks },
         chatGroupMember: { deleteMany: deleteMemberships },

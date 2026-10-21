@@ -117,8 +117,15 @@ unavailable source invalidates the pending effect rather than executing it. The
 claim is the execution linearization point; a source ending cannot undo an external
 call whose claim already won. Missing account identity fails closed.
 
-This is not complete lifecycle fencing: legacy-row reconciliation, general cancellation
-and replacement, and dependent-card UI refresh remain to be implemented. The
+The shared cancellation transaction also invalidates explicitly bound pending effects
+for messages attached to the cancelled runs, before callers delete any messages.
+This covers thread clearing, group archival/removal and group dissolution that use
+that seam. The run update holds the source-run lock until commit; new recorders and
+claims re-read the cancelled status under that lock and cannot proceed. Storage
+failures propagate to the owning transaction rather than leaving cleanup best-effort.
+
+This is not complete lifecycle fencing: legacy-row reconciliation, other cancellation
+or replacement paths, and dependent-card UI refresh remain to be implemented. The
 reference is not a human answer or an authorization grant.
 
 ## What a bot cannot do

@@ -3650,7 +3650,13 @@ describe("clearThread", () => {
       task: { updateMany: vi.fn() },
       computerExecutionLease: { updateMany: vi.fn() },
       computer: { updateMany: vi.fn() },
-      message: { deleteMany: vi.fn() },
+      message: {
+        deleteMany: vi.fn(),
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ id: "source-question", thread: { spaceId: "workspace-1" } }]),
+      },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       event: {
         deleteMany: vi.fn(),
         create: vi.fn().mockResolvedValue({
@@ -3670,6 +3676,19 @@ describe("clearThread", () => {
       event: { type: "thread.cleared" },
       cancelledRunIds: ["run-1"],
     });
+    expect(tx.externalEffect.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          spaceId: "workspace-1",
+          sourceMessageId: "source-question",
+          status: { in: ["intended", "approved"] },
+        },
+        data: expect.objectContaining({ status: "invalidated" }),
+      }),
+    );
+    expect(tx.externalEffect.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.message.deleteMany.mock.invocationCallOrder[0]!,
+    );
     expect(tx.computerExecutionLease.updateMany).toHaveBeenCalledWith({
       where: { runId: { in: ["run-1"] } },
       data: { expiresAt: new Date(0) },
@@ -3714,7 +3733,13 @@ describe("clearThread", () => {
       task: { updateMany: vi.fn() },
       computerExecutionLease: { updateMany: vi.fn() },
       computer: { updateMany: vi.fn() },
-      message: { deleteMany: vi.fn() },
+      message: {
+        deleteMany: vi.fn(),
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ id: "source-question", thread: { spaceId: "workspace-1" } }]),
+      },
+      externalEffect: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       event: {
         deleteMany: vi.fn(),
         create: vi.fn().mockResolvedValue({
@@ -3748,6 +3773,19 @@ describe("clearThread", () => {
           spaceId: "workspace-1",
         }),
       }),
+    );
+    expect(tx.externalEffect.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          spaceId: "workspace-1",
+          sourceMessageId: "source-question",
+          status: { in: ["intended", "approved"] },
+        },
+        data: expect.objectContaining({ status: "invalidated" }),
+      }),
+    );
+    expect(tx.externalEffect.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.message.deleteMany.mock.invocationCallOrder[0]!,
     );
     expect(tx.computerExecutionLease.updateMany).toHaveBeenCalledWith({
       where: { runId: { in: ["group-run-1", "group-run-2"] } },
