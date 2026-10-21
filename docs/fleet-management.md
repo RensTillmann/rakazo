@@ -89,6 +89,47 @@ After withdrawing an obsolete question, the integration may ask its corrected qu
 Unchanged pending questions still use the existing duplicate protection. This API is not a new
 built-in fleet-management tool and does not grant permission to perform the action being discussed.
 
+## Manual prerequisites and to-dos
+
+A question card can hand manual steps to the user. `ask_user` takes `prerequisites` (1–10 items, each
+`{ key, title, steps, verification: "automatic" | "manual" }`, keys unique on the card), `option` (the
+exact label of the option that means "I'll do it") and `release` (`each` or `all`, default `all`). An
+option that is not one of the card's options, or an invalid item, is refused before the card is stored.
+The card stores the items as `prerequisites` and marks that option `todo: true`.
+
+Answering with that option, inside the answer's transaction, creates one `UserTodo` per item, grouped
+by the card (`sourceMessageId`). An item whose `key` already has a to-do in the space keeps that to-do's
+identity and progress; changed steps (ignoring whitespace) or verification reset it to open and clear
+its evidence, and a retired one starts over. The answer stays in history as an answer. The to-do records
+intent only: nothing is marked done and nothing is approved. The resumed bot is told the to-do ids and
+not to ask again.
+
+The header's To-dos control lists the items by card ("N of M done", retired items excluded) as checkbox
+rows with the full steps:
+
+- Ticking an automatic item is **Done — check now**: it becomes `checking`, and a normal message in the
+  bot's thread asks the requesting bot to check the steps with its own read-only tools and call
+  `todo_report(todo_id, outcome, evidence, remaining_step?)`. `verified` needs positive evidence;
+  `remaining` (checked, not done) shows "Still to do: …"; `unavailable` (could not check) shows
+  "Couldn't check: …" and is never treated as a failed access check.
+- Ticking a manual item is **I did it**: it becomes `confirmed`, labelled "Confirmed by you" rather than
+  verified. No bot run checks it.
+- The box shows ticked only once the item is verified or confirmed; while checking it shows pending.
+
+Only the requesting bot can report or retire (`todo_retire(todo_id, reason)` for a cancelled or
+superseded requirement; the item then shows "No longer needed: …" and takes no actions). Every action is
+a compare-and-set on the to-do's revision: a stale tab gets `CONFLICT`, two clicks make one transition.
+
+Satisfied items release only the requesting bot's work, through an ordinary message in its thread (the
+same send path as a user message, so a global pause still holds the run): with `each`, every satisfied
+item wakes the bot once, naming it; with `all`, the last satisfied item of the card wakes it once,
+listing them all, and retiring the last open item releases the satisfied rest. A satisfaction never
+wakes the bot twice (`releasedRevision`). Releasing never grants an approval or clears the pause.
+
+RPC: `todos.list`, `todos.check({ todoId, revision })`, `todos.confirm({ todoId, revision })`, scoped to
+the caller's space and own to-dos. Table `user_todos`, migration `20261021200000_user_todos`. The hourly
+coordinator check of pending to-dos from the spec is not part of this change.
+
 ## Dependent-effect identity
 
 New MCP `question_withdraw` effects record the exact supporting question in
