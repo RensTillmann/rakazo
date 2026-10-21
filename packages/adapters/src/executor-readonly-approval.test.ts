@@ -66,6 +66,7 @@ function fixture({
   autoReview = false,
   trigger = "user",
   routineId = null as string | null,
+  runClientNonce = null as string | null,
   secrets = [] as string[],
   prompt = "Read the item",
   bot = {
@@ -107,6 +108,7 @@ function fixture({
   autoReview?: boolean;
   trigger?: string;
   routineId?: string | null;
+  runClientNonce?: string | null;
   secrets?: string[];
   prompt?: string;
   bot?: { name: string; title: string; description: string };
@@ -158,6 +160,7 @@ function fixture({
     status: "queued",
     trigger,
     routineId,
+    clientNonce: runClientNonce,
     sourceMessageId: sourceRole ? "source-1" : null,
     leaseFence: 0,
   };
@@ -218,8 +221,11 @@ function fixture({
   const liveBot = { fleetManagement };
   let outsideSteering = false;
   let offeredTools: string[] = [];
+  // A to-do check reports a refused command on its to-do; none exists here, so it is a no-op.
+  const userTodoFindFirst = vi.fn(async () => null);
   const prisma = {
     user: { findUnique: vi.fn(async () => null) },
+    userTodo: { findFirst: userTodoFindFirst },
     run: {
       findFirst: vi.fn(async () =>
         pendingInstructionsRunId ? { id: pendingInstructionsRunId } : null,
@@ -442,6 +448,7 @@ function fixture({
     results,
     execute,
     sandboxExecute,
+    userTodoFindFirst,
     commit,
     sharedMemoryState,
     pauseRunForInput,
@@ -646,6 +653,40 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(f.pauseRunForInput).not.toHaveBeenCalled();
       expect(f.execute).not.toHaveBeenCalled();
       expect(f.results).toEqual([refusal]);
+    });
+
+    it("runs only an allowlisted read in its shell and records the rest as couldn't check", async () => {
+      const f = fixture({
+        name: "shell",
+        builtin: true,
+        trigger: "todo_check",
+        runClientNonce: "todo-sweep:todo-7:3",
+        rules: [{ effect: "always_allow", matchKind: "shell", matchValue: ".*" }],
+      });
+      f.setCalls([
+        { args: { command: "gh api -X POST repos/acme/site/issues" }, executionId: "call-1" },
+        { args: { command: "cat notes.txt > copy.txt" }, executionId: "call-2" },
+        { args: { command: "gh api repos/acme/site | jq .permissions" }, executionId: "call-3" },
+      ]);
+      await f.run();
+      expect(f.results[0]).toEqual({
+        error: expect.stringContaining("may only read (gh api -X POST)"),
+      });
+      expect(f.results[1]).toEqual({ error: expect.stringContaining("the operator >") });
+      expect(f.sandboxExecute).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(f.sandboxExecute.mock.calls[0])).toContain("gh api repos/acme/site");
+      // Each refusal is recorded on the swept to-do it belongs to.
+      expect(f.userTodoFindFirst).toHaveBeenCalledWith({
+        where: { id: "todo-7", spaceId: "space-1", botId: "bot-1" },
+      });
+    });
+
+    it("leaves a normal run's shell as it was", async () => {
+      const f = fixture({ name: "shell", builtin: true });
+      f.setCalls([{ args: { command: "cat notes.txt > copy.txt" }, executionId: "call-1" }]);
+      await f.run();
+      expect(f.sandboxExecute).toHaveBeenCalledTimes(1);
+      expect(f.userTodoFindFirst).not.toHaveBeenCalled();
     });
 
     it("runs an ordinary read", async () => {

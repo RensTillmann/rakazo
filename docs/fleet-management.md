@@ -185,8 +185,14 @@ requesting bot gets one `todo_check` run. That bot is the case's coordinator: on
 fleet cases, ask Rens cards. The run is context-bounded and quiet: its prompt carries only the to-do,
 why it is needed, its steps and its last result, never the conversation; it posts nothing in the chat
 and cannot ask, message or call the user. It is read-only: any action that would change something, or
-that the owner's rules would ask about, is refused (no card). Shell commands on the bot's own computer
-follow the owner's shell rules, as in every run. The result comes back through `todo_report`, the one
+that the owner's rules would ask about, is refused (no card). Its shell runs only a plain pipeline of
+allowlisted reads, parsed before it runs: `gh api` with GET only (no other `-X`/`--method`, no
+`-f`/`-F`/`--input`, no GraphQL), `gh-app-login` without arguments, `git ls-remote`, `dig`, `nslookup`,
+`host`, `curl` over http(s) with GET or HEAD only and no data, upload, form, config or file output,
+and `cat`, `ls`, `head`, `tail`, `grep`, `jq`, `wc`. Redirection, `;`, `&&`, `||`, `&`, subshells,
+variables and command substitution are refused. A refused command records the to-do as couldn't check
+("needs a command that may change something"); it is checked again the next hour. Normal runs keep
+their shell as before. The result comes back through `todo_report`, the one
 completion path, so a sweep and a check-now on the same to-do resolve it once and release its work once.
 A check that cannot be done is `unavailable` and is retried the next hour, with the same to-do.
 

@@ -713,13 +713,25 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       status: "open",
       checkRequestedAt: null,
     });
-    expect(await f.prisma.userTodo.findUniqueOrThrow({ where: { id: access.id } })).toMatchObject({
-      status: "checking",
-    });
+    const checking = await f.prisma.userTodo.findUniqueOrThrow({ where: { id: access.id } });
+    expect(checking).toMatchObject({ status: "checking" });
+    // The run names its to-do at the revision it checks, so a refused command lands on it.
+    expect(run!.clientNonce).toBe(`todo-sweep:${access.id}:${checking.revision}`);
     // The same hour does not start a second check.
     expect(await sweepUserTodoChecks(f.prisma, { spaceId: f.id, now: inHours(1.2) })).toEqual([]);
     // No message lands in the chat: the check reports through todo_report alone.
     expect(await f.messagesWithNonce("todo:")).toHaveLength(0);
+    // A refused command is recorded the way the executor does it: on that revision.
+    expect(
+      await reportUserTodo(f.prisma, {
+        spaceId: f.id,
+        botId: f.bot.id,
+        todoId: access.id,
+        outcome: "unavailable",
+        evidence: "Couldn't check: needs a command that may change something (gh api -X POST).",
+        expectedRevision: checking.revision,
+      }),
+    ).toMatchObject({ todo: { status: "unavailable" } });
   });
 
   it("a sweep and a check-now on the same item start one check and release once", async () => {

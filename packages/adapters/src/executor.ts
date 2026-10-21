@@ -472,6 +472,7 @@ import {
   listBoardTickets,
   updateTicket,
 } from "./ticket-tools.js";
+import { TODO_CHECK_SHELL_REASON, todoCheckShellRefusal } from "./todo-check-shell.js";
 import { advanceToolCallLoopGuard, loopGuardStopText } from "./tool-loop.js";
 import { READ_TOOL_RESULT_TOOL, toolResultOverflowEnabled } from "./tool-result-overflow.js";
 import { textContentArg } from "./tool-text.js";
@@ -6032,6 +6033,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "shell") {
             const command = String(args.command ?? args.cmd ?? "");
+            // Fleet: a scheduled to-do check is read-only in fact. Its shell runs only an
+            // allowlisted read; anything else is refused and the check recorded as couldn't check.
+            if (run.trigger === "todo_check") {
+              const refused = todoCheckShellRefusal(command);
+              if (refused) {
+                const sweep = /^todo-sweep:(.+):(\d+)$/.exec(run.clientNonce ?? "");
+                if (sweep) {
+                  await reportUserTodo(deps.prisma, {
+                    spaceId: run.spaceId,
+                    botId: bot.id,
+                    todoId: sweep[1]!,
+                    outcome: "unavailable",
+                    evidence: `Couldn't check: ${TODO_CHECK_SHELL_REASON} (${refused}).`,
+                    expectedRevision: Number(sweep[2]),
+                  });
+                }
+                return finish({
+                  error: `This command was not run: a to-do check may only read (${refused}). The to-do is recorded as couldn't check: ${TODO_CHECK_SHELL_REASON}. Stop here; it is checked again later.`,
+                });
+              }
+            }
             // No browser tools for this bot: shell must not start a browser instead.
             if (
               disabledBuiltinTools.has("browser_navigate") &&
