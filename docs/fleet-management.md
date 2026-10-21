@@ -139,6 +139,11 @@ only the rows that still qualify, then invalidates their source dependencies bef
 task cleanup in that transaction. A run claimed since a prior observation is not
 cancelled, nor is its task or dependency touched. Failure aborts the owning send.
 
+Teaching takeover conditionally cancels only active runs owned by the requesting
+account and space, and invalidates their source dependencies inside that same
+transaction before progress cleanup. Only returned cancellations are scanned;
+invalidation failure aborts before computer lease changes.
+
 This is not complete lifecycle fencing: legacy-row reconciliation, other cancellation
 or replacement paths, and dependent-card UI refresh remain to be implemented. The
 reference is not a human answer or an authorization grant.
