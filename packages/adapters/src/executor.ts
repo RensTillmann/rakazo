@@ -53,6 +53,7 @@ import {
   HistoryReadInputSchema,
   HistorySearchInputSchema,
   isAttachmentImageMimeType,
+  MessageBlock as MessageBlockSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   thinkingBlock,
 } from "@rakazo/contracts";
@@ -79,11 +80,13 @@ import {
   formatSkillsCatalogInstruction,
   humanizeToolName,
   inferAttachmentMimeType,
+  isApprovalAskBlock,
   isBackgroundRunTrigger,
   isCallClientNonce,
   isMessagingChannelRun,
   isOneShotRoutineCrons,
   isOwnerStartedRun,
+  isSecretAskBlock,
   isTerminal,
   messagingChannelId,
   messagingChannelPrivacyBlock,
@@ -164,6 +167,7 @@ import {
   approvalReplayPathError,
   approvalReplayResourceError,
   approvalRoutesMatch,
+  approvalSourceMessageId,
   approvedCatalogReplay,
   approvedReplayArgs,
   boundDirectApprovalDetails,
@@ -5151,6 +5155,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 effectRequest,
                 executionId,
                 consumedEffectIds,
+                approvalSourceMessageId(liveRoute, args),
               );
 
           const runAutoReview = async () => {
@@ -9962,12 +9967,13 @@ export function isSubagentToolExecution(executionId: string): boolean {
 
 export async function recordEffect(
   deps: ExecutorDeps,
-  run: { id: string; spaceId: string; threadId: string; botId: string },
+  run: { id: string; spaceId: string; threadId: string; botId: string; userId?: string },
   kind: string,
   idempotencyKey: string,
   request: unknown,
   legacyIdempotencyKey?: string,
   consumedIds?: Set<string>,
+  sourceMessageId?: string,
 ) {
   const existing = await deps.prisma.externalEffect.findUnique({
     where: { idempotencyKey },
@@ -10081,6 +10087,52 @@ export async function recordEffect(
     return { duplicate: true, effect: legacy };
   }
 
+  // Bind only an exact, owned ordinary question. This read establishes identity;
+  // lifecycle transactions and execution claims must still lock/revalidate it.
+  if (sourceMessageId) {
+    if (!run.userId) throw new Error("Approval source is unavailable.");
+    const source = await deps.prisma.message.findFirst({
+      where: {
+        id: sourceMessageId,
+        botId: run.botId,
+        role: "bot",
+        thread: { spaceId: run.spaceId, userId: run.userId },
+      },
+      select: { blocks: true, runId: true, threadId: true },
+    });
+    const blocks = MessageBlockSchema.array().safeParse(source?.blocks);
+    const asks = blocks.success ? blocks.data.filter((block) => block.kind === "ask") : [];
+    const ask = asks[0];
+    if (
+      !source?.runId ||
+      asks.length !== 1 ||
+      !ask ||
+      ask.status === "answered" ||
+      ask.answer !== undefined ||
+      ask.answeredBy ||
+      ask.syncedFrom ||
+      ask.draftFinal !== undefined ||
+      ask.approvalEffectId ||
+      isApprovalAskBlock(ask) ||
+      isSecretAskBlock(ask) ||
+      ask.credential ||
+      ask.instructionUpdate
+    )
+      throw new Error("Approval source is unavailable.");
+    const sourceRun = await deps.prisma.run.findFirst({
+      where: {
+        id: source.runId,
+        threadId: source.threadId,
+        spaceId: run.spaceId,
+        userId: run.userId,
+        botId: run.botId,
+        status: "waiting_input",
+      },
+      select: { id: true },
+    });
+    if (!sourceRun) throw new Error("Approval source is unavailable.");
+  }
+
   const effect = await deps.prisma.externalEffect.create({
     data: {
       spaceId: run.spaceId,
@@ -10088,6 +10140,7 @@ export async function recordEffect(
       kind,
       idempotencyKey,
       status: "intended",
+      ...(sourceMessageId ? { sourceMessageId } : {}),
       request: request as never,
     },
   });

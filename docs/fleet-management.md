@@ -89,6 +89,20 @@ After withdrawing an obsolete question, the integration may ask its corrected qu
 Unchanged pending questions still use the existing duplicate protection. This API is not a new
 built-in fleet-management tool and does not grant permission to perform the action being discussed.
 
+## Dependent-effect identity
+
+New MCP `question_withdraw` effects record the exact supporting question in
+`ExternalEffect.sourceMessageId`, independently of direct or catalog display aliases.
+Before recording a new binding, the recorder checks the owning account, space and bot,
+that the source is a single ordinary unanswered question, and that its exact run/thread
+is waiting for input. Unrelated tools accepting `message_id` do not imply a dependency.
+The nullable indexed reference preserves existing effect requests and history.
+
+This identity check alone is not lifecycle fencing: automatic invalidation, old-row
+reconciliation, transactional source locks, execution-time checks and UI refresh must
+still be enforced at their lifecycle seams. The reference is not a human answer or an
+authorization grant.
+
 ## What a bot cannot do
 
 - Permanently delete a bot.

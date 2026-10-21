@@ -509,3 +509,15 @@ export async function replaceCompletedExternalEffectResult(
   });
   return replaced.count === 1;
 }
+
+/** Only the resolved MCP tool identity, never a model-visible alias or arbitrary
+ * message_id argument, can declare this dependency. Ownership is checked by the
+ * recorder before the reference is persisted. */
+export function approvalSourceMessageId(
+  route: BoundApprovalRoute | undefined,
+  args: Record<string, unknown>,
+): string | undefined {
+  if (route?.connectorId !== "mcp" || route.toolName !== "question_withdraw") return undefined;
+  const id = args.message_id;
+  return typeof id === "string" && id.length > 0 && id.trim() === id ? id : undefined;
+}
