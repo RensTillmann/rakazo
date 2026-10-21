@@ -150,9 +150,18 @@ Only active runs matching the exact account, space, bot and thread can be cancel
 a lost cancellation does not modify the task or source dependencies. Invalidation
 failure propagates before the external-message reservation is abandoned.
 
-This is not complete lifecycle fencing: legacy-row reconciliation, other cancellation
-or replacement paths, and dependent-card UI refresh remain to be implemented. The
-reference is not a human answer or an authorization grant.
+Execution claims also recover the source from exact persisted route-bound direct
+and MCP catalog withdrawal envelopes that predate the source column. They use the
+same ownership checks and source locks, invalidate unavailable sources, and persist
+the recovered binding only when the execution CAS wins. Terminal history is never
+rebound. Plain argument objects, unbound catalog requests, malformed envelopes and
+other tools do not establish source identity; their existing replay guards remain.
+This claim-time recovery is not a background backfill or automatic UI refresh for
+legacy pending cards.
+
+This is not complete lifecycle fencing: automatic legacy pending-card reconciliation,
+other cancellation or replacement paths, and dependent-card UI refresh remain to be
+implemented. The reference is not a human answer or an authorization grant.
 
 ## What a bot cannot do
 
