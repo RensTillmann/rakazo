@@ -13,6 +13,7 @@ import {
   inferAttachmentMimeType,
   isApprovalAskBlock,
   isSecretAskBlock,
+  retiredCardReason,
   selectedAskActionLabel,
 } from "@rakazo/core";
 import { Button, Input, Textarea } from "@rakazo/ui-web";
@@ -552,8 +553,8 @@ export function AskCard({
           <span className="font-medium">
             <Trans>No longer needed</Trans>
           </span>
-          {block.retiredReason ? (
-            <p className="mt-1 whitespace-pre-wrap">{block.retiredReason}</p>
+          {retiredCardReason(block.retiredReason) ? (
+            <p className="mt-1 whitespace-pre-wrap">{retiredCardReason(block.retiredReason)}</p>
           ) : null}
         </div>
       ) : !canAnswer ? (

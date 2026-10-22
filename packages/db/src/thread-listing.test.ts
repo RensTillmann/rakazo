@@ -29,6 +29,11 @@ describe("previewFromBlocks", () => {
       ]),
     ).toBe("No longer needed · Withdrawn: Case 401 closed");
     expect(previewFromBlocks([{ ...card, status: "retired" }])).toBe("No longer needed");
+    expect(
+      previewFromBlocks([
+        { ...card, status: "retired", retiredReason: "No longer needed: its question ended" },
+      ]),
+    ).toBe("No longer needed · its question ended");
     expect(previewFromBlocks([{ ...card, status: "pending" }])).toBe("Case 401 · Renew the plan?");
   });
 

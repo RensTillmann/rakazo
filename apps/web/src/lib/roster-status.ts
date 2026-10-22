@@ -7,8 +7,11 @@ export function rosterHasUndismissedRunError(
   return Boolean(runErrorId && !dismissedRunErrorIds.has(runErrorId));
 }
 
-/** Short sidebar label while a bot is queued, starting, or running. Null keeps the message preview. */
-export function rosterWorkStatusLabel(status: string): string | null {
+/**
+ * Short sidebar label while a bot is queued, starting, or running. Null keeps the message preview.
+ * A run the pause holds at a checkpoint says how many steps it kept.
+ */
+export function rosterWorkStatusLabel(status: string, pausedAfterSteps?: number): string | null {
   switch (status) {
     case "queued":
       return t`Waiting in line…`;
@@ -17,7 +20,11 @@ export function rosterWorkStatusLabel(status: string): string | null {
     case "running":
       return t`Working…`;
     case "maintenance_paused":
-      return t`Paused`;
+      return pausedAfterSteps === undefined
+        ? t`Paused`
+        : pausedAfterSteps === 1
+          ? t`Paused after 1 step`
+          : t`Paused after ${pausedAfterSteps} steps`;
     default:
       return null;
   }
@@ -50,9 +57,14 @@ export function groupRosterStatus(members: ReadonlyArray<{ status?: string | nul
 }
 
 /** Compact rows keep actionable status visible in place of the message preview. */
-export function compactRosterStatusLabel(status: string, pendingDecisionCount = 0): string | null {
+export function compactRosterStatusLabel(
+  status: string,
+  pendingDecisionCount = 0,
+  pausedAfterSteps?: number,
+): string | null {
   const workStatus =
-    rosterNeedsAnswerLabel(status, pendingDecisionCount) ?? rosterWorkStatusLabel(status);
+    rosterNeedsAnswerLabel(status, pendingDecisionCount) ??
+    rosterWorkStatusLabel(status, pausedAfterSteps);
   if (workStatus) return workStatus;
   switch (status) {
     case "failed":

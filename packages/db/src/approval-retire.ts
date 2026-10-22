@@ -5,9 +5,12 @@ import { invalidateRunSourceApprovalEffects } from "./approval-invalidation.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { appendEventInTransaction } from "./events.js";
 
-/** What every client shows on a retired approval card when the effect gives no reason. */
+/**
+ * Why an approval card was retired when the effect gives no reason. Clients show it after the
+ * "No longer needed" phrase, so the reason never repeats it.
+ */
 export const RETIRED_APPROVAL_REASON =
-  "No longer needed: the question this request depended on was answered, withdrawn or stopped.";
+  "The question this request depended on was answered, withdrawn or stopped.";
 
 export type RetiredApprovalCard = {
   messageId: string;
@@ -23,9 +26,7 @@ function retiredReason(result: unknown): string {
     result && typeof result === "object" && "error" in result
       ? (result as { error?: unknown }).error
       : undefined;
-  return typeof error === "string" && error.trim()
-    ? `No longer needed: ${error.trim()}`
-    : RETIRED_APPROVAL_REASON;
+  return typeof error === "string" && error.trim() ? error.trim() : RETIRED_APPROVAL_REASON;
 }
 
 /**

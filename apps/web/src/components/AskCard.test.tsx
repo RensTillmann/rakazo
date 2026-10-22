@@ -753,6 +753,24 @@ describe("AskCard reply context and who acts", () => {
     expect(card.querySelector('[data-testid="ask-who-acts"]')).toBeNull();
   });
 
+  it("says 'No longer needed' once, even for a reason stored with the phrase", () => {
+    const card = (retiredReason: string) =>
+      text(
+        render({
+          kind: "ask",
+          text: "Allow the deploy?",
+          actions: [{ id: "allow", label: "Allow" }],
+          status: "retired",
+          retiredReason,
+        } as AskBlock),
+      ).querySelector('[role="status"]')?.textContent;
+    const reason =
+      "This approval no longer applies because its source question is no longer pending.";
+    expect(card(reason)).toBe(`No longer needed${reason}`);
+    // Cards retired before the reason dropped the phrase do not repeat it.
+    expect(card(`No longer needed: ${reason}`)).toBe(`No longer needed${reason}`);
+  });
+
   const whoActs = (html: string) =>
     text(html).querySelector('[data-testid="ask-who-acts"]')?.textContent;
 

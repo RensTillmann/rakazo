@@ -4287,6 +4287,14 @@ msgstr "Pause new Fleet work while active runs reach a safe checkpoint. Resume i
 msgid "Paused"
 msgstr "Paused"
 
+#: src/lib/roster-status.ts
+msgid "Paused after {pausedAfterSteps} steps"
+msgstr "Paused after {pausedAfterSteps} steps"
+
+#: src/lib/roster-status.ts
+msgid "Paused after 1 step"
+msgstr "Paused after 1 step"
+
 #: src/components/FleetPauseControls.tsx
 msgid "Pausing"
 msgstr "Pausing"

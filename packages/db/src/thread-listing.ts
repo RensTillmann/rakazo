@@ -1,4 +1,10 @@
-import { ACTIVE_RUN_STATUSES, BACKGROUND_RUN_TRIGGERS, plainTextFromMarkdown } from "@rakazo/core";
+import {
+  ACTIVE_RUN_STATUSES,
+  BACKGROUND_RUN_TRIGGERS,
+  plainTextFromMarkdown,
+  RETIRED_CARD_PHRASE,
+  retiredCardReason,
+} from "@rakazo/core";
 
 export const activeRunStatuses = [...ACTIVE_RUN_STATUSES];
 const backgroundRunTriggers = [...BACKGROUND_RUN_TRIGGERS];
@@ -32,8 +38,10 @@ export function previewFromBlocks(blocks: unknown): string {
   for (const block of rows) {
     // A withdrawn or ended card previews as what it is now, not as the question it asked.
     if (block && typeof block === "object" && block.kind === "ask" && block.status === "retired") {
-      const reason = typeof block.retiredReason === "string" ? block.retiredReason.trim() : "";
-      return reason ? `No longer needed · ${reason}` : "No longer needed";
+      const reason = retiredCardReason(
+        typeof block.retiredReason === "string" ? block.retiredReason : null,
+      );
+      return reason ? `${RETIRED_CARD_PHRASE} · ${reason}` : RETIRED_CARD_PHRASE;
     }
     if (
       block &&

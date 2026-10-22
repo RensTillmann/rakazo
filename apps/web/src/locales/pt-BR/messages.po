@@ -4287,6 +4287,14 @@ msgstr ""
 msgid "Paused"
 msgstr ""
 
+#: src/lib/roster-status.ts
+msgid "Paused after {pausedAfterSteps} steps"
+msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Paused after 1 step"
+msgstr ""
+
 #: src/components/FleetPauseControls.tsx
 msgid "Pausing"
 msgstr ""

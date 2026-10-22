@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The approval to send a Zendesk reply showed the customer context as unavailable, because the Fleet now sends it in a new shape. The review shows the customer's full inquiry again and says when a newer customer message arrived since the approved version.
 - A to-do's release message was hidden when its automatic check verified it, because it was filed under the hidden check run; it now shows in the chat like a manual confirmation. A withdrawn or ended card no longer previews in the sidebar as its question, but as "No longer needed".
 - Answering a card with the to-do option showed its to-dos only after up to a minute; the To-dos panel and the card's checklist now update at once.
+- A retired approval card read "No longer needed" twice. It now shows the phrase once, followed by the reason, on web, mobile and in the sidebar.
 - An approval that ended because its question was withdrawn or stopped kept Fleet control in "Needs attention", held paused work from resuming, and could not be cleared from Unfinished operations. Such approvals now count as finished everywhere.
 - A bot retiring the last open to-do of a card was told to "continue the work" by a release message, even when the case had ended. Retiring a to-do now wakes nothing; the bot decides itself.
 - "Done – check now" on a to-do started an ordinary chat run with every tool. It now starts the same short, read-only check as the hourly sweep, run by the case coordinator, and during a pause it waits until resume.
@@ -41,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Bots must give every to-do a reason, numbered steps and the tracker case it belongs to; a to-do request without them is refused with what to fix.
+- A bot whose run the Fleet pause holds shows "Paused after N steps" in the sidebar, so the progress it kept is visible.
 - Unfinished operations in Fleet control show the case, who follows up, and whether you need to act. A Fleet service operation says how to settle it in the Fleet service, and work a Fleet wake started shows its case from that wake, or "Case unknown".
 - A card's to-do option lists the items it adds, with "Show steps" for each item's reason and steps. A check held by the Fleet pause says "waiting — Fleet paused", and an item you confirmed says "Confirmed by you".
 - Message bubbles in the web/PWA transcript use more of a wide window's width (70%/74% caps raised to 84%/88%, still leaving room for the hover-actions gutter), instead of leaving a quarter to a third of a long message's row empty.

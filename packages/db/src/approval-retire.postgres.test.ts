@@ -190,7 +190,8 @@ postgres("retiring approval cards whose source question ended (PostgreSQL)", () 
     expect(await f.card()).toMatchObject({
       kind: "ask",
       status: "retired",
-      retiredReason: expect.stringContaining("No longer needed"),
+      // The reason says why; clients show "No longer needed" before it, once.
+      retiredReason: expect.stringMatching(/^This approval no longer applies/),
     });
     expect((await f.card()).answer).toBeUndefined();
     expect((await f.prisma.run.findUniqueOrThrow({ where: { id: f.dependent.id } })).status).toBe(

@@ -28,6 +28,13 @@ describe("rosterWorkStatusLabel", () => {
     expect(rosterWorkStatusLabel("maintenance_paused")).toBe("Paused");
   });
 
+  it("says how much progress a run held at a checkpoint kept", () => {
+    expect(rosterWorkStatusLabel("maintenance_paused", 3)).toBe("Paused after 3 steps");
+    expect(rosterWorkStatusLabel("maintenance_paused", 1)).toBe("Paused after 1 step");
+    expect(rosterWorkStatusLabel("maintenance_paused", 0)).toBe("Paused after 0 steps");
+    expect(compactRosterStatusLabel("maintenance_paused", 0, 2)).toBe("Paused after 2 steps");
+  });
+
   it("leaves other statuses to the message preview", () => {
     expect(rosterWorkStatusLabel("idle")).toBeNull();
     expect(rosterWorkStatusLabel("waiting_input")).toBeNull();
@@ -59,7 +66,15 @@ describe("rosterNeedsAnswer", () => {
   it("flags only runs that wait for the user, never working runs", () => {
     expect(rosterNeedsAnswer("waiting_input")).toBe(true);
     expect(rosterNeedsAnswer("waiting_takeover")).toBe(true);
-    for (const status of ["queued", "leased", "running", "maintenance_paused", "idle", "completed", "failed"]) {
+    for (const status of [
+      "queued",
+      "leased",
+      "running",
+      "maintenance_paused",
+      "idle",
+      "completed",
+      "failed",
+    ]) {
       expect(rosterNeedsAnswer(status)).toBe(false);
     }
     expect(rosterNeedsAnswerLabel("waiting_input")).toBe("Needs your answer");

@@ -50,6 +50,7 @@ import {
   replyAttachment,
   resolveComposerSendPlan,
   resolvePersonaColorDef,
+  retiredCardReason,
   selectedAskActionLabel,
   summarizeOpenAsk,
   threadWindowMessages,
@@ -3978,7 +3979,9 @@ const MessageBubble = memo(function MessageBubble({
                   {...actionProps}
                   style={{ color: tokens.mutedForeground, marginTop: 12, fontSize: 13.5 }}
                 >
-                  {askBlock.retiredReason ?? t("No longer needed")}
+                  {retiredCardReason(askBlock.retiredReason)
+                    ? `${t("No longer needed")}: ${retiredCardReason(askBlock.retiredReason)}`
+                    : t("No longer needed")}
                 </Text>
               ) : canAnswer && onAnswer ? (
                 <AskActions

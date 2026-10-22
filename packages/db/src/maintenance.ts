@@ -87,6 +87,37 @@ export type MaintenanceContinuation = {
 /** Call only after the worker reached a safe boundary and drained its own work.
  * Retains the existing run checkpoint (approval/takeover state) independently.
  */
+/**
+ * Progress the pause kept: for each thread whose run the pause holds at a checkpoint, how many
+ * tool calls that run completed before it was held. Threads without such a run are absent.
+ */
+export async function pausedStepsByThread(
+  prisma: Pick<Prisma.TransactionClient, "run" | "event">,
+  threadIds: readonly string[],
+): Promise<Map<string, number>> {
+  const steps = new Map<string, number>();
+  if (threadIds.length === 0) return steps;
+  const held = await prisma.run.findMany({
+    where: {
+      threadId: { in: [...threadIds] },
+      status: "maintenance_paused",
+      maintenanceCheckpoint: { not: null },
+    },
+    select: { id: true, threadId: true },
+  });
+  if (held.length === 0) return steps;
+  const done = await prisma.event.groupBy({
+    by: ["runId"],
+    where: { runId: { in: held.map((run) => run.id) }, type: "agent.tool.completed" },
+    _count: { _all: true },
+  });
+  for (const run of held) {
+    const count = done.find((row) => row.runId === run.id)?._count._all ?? 0;
+    steps.set(run.threadId, (steps.get(run.threadId) ?? 0) + count);
+  }
+  return steps;
+}
+
 export async function checkpointMaintenanceRun(
   tx: Pick<Prisma.TransactionClient, "$queryRaw" | "run" | "attempt">,
   input: MaintenanceContinuation & { leaseOwner: string; observedRevision?: number },

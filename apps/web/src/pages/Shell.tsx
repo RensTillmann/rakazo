@@ -3708,7 +3708,9 @@ function SpaceShell() {
                           item.kind === "bot"
                             ? item.chat.status
                             : groupRosterStatus(item.chat.members);
-                        const workStatusLabel = rosterWorkStatusLabel(rowStatus);
+                        const pausedAfterSteps =
+                          item.kind === "bot" ? item.chat.pausedAfterSteps : undefined;
+                        const workStatusLabel = rosterWorkStatusLabel(rowStatus, pausedAfterSteps);
                         const pendingDecisions = item.chat.pendingDecisionCount ?? 0;
                         const needsAnswer = rosterNeedsAnswer(rowStatus, pendingDecisions);
                         const attentionDot = needsAnswer || item.chat.unread;
@@ -3722,7 +3724,11 @@ function SpaceShell() {
                         const compactStatusLabel = compact
                           ? rowError
                             ? t`Error`
-                            : compactRosterStatusLabel(rowStatus, pendingDecisions)
+                            : compactRosterStatusLabel(
+                                rowStatus,
+                                pendingDecisions,
+                                pausedAfterSteps,
+                              )
                           : null;
                         const rosterLine = compact
                           ? compactStatusLabel

@@ -237,6 +237,7 @@ import {
   newestVoiceCredentialOrder,
   Prisma,
   parseComputerMode,
+  pausedStepsByThread,
   pendingDecisionCountsByThread,
   pushSessionExpiresAt,
   releaseSpaceDeletionClaim,
@@ -6719,10 +6720,19 @@ async function spaceNavigationDto(
     ...currentBots.map((bot) => bot.threadId),
     ...currentGroups.map((group) => group.threadId),
   ]);
-  const currentBotsWithDecisions = currentBots.map((bot) => ({
-    ...bot,
-    pendingDecisionCount: decisionCounts.get(bot.threadId) ?? 0,
-  }));
+  // Fleet: a run the pause holds at a checkpoint shows the progress it kept.
+  const pausedSteps = await pausedStepsByThread(
+    deps.prisma,
+    currentBots.map((bot) => bot.threadId),
+  );
+  const currentBotsWithDecisions = currentBots.map((bot) => {
+    const steps = pausedSteps.get(bot.threadId);
+    return {
+      ...bot,
+      pendingDecisionCount: decisionCounts.get(bot.threadId) ?? 0,
+      ...(steps === undefined ? {} : { pausedAfterSteps: steps }),
+    };
+  });
   const currentGroupsWithDecisions = currentGroups.map((group) => ({
     ...group,
     pendingDecisionCount: decisionCounts.get(group.threadId) ?? 0,

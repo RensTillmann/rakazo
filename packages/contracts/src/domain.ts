@@ -99,6 +99,8 @@ export const BotSchema = z.object({
   runErrorId: Id.nullable().default(null),
   /** Fleet: cards in this bot's own chat waiting for the user while their run is paused. */
   pendingDecisionCount: z.number().int().nonnegative().optional(),
+  /** Fleet: the pause holds this bot's run at a checkpoint after this many completed tool calls. */
+  pausedAfterSteps: z.number().int().nonnegative().optional(),
   computerMode: ComputerModeSchema,
   updatedAt: z.string(),
   /** Fleet patch: newest message time, null for a chat without messages. Drives roster recency. */
@@ -242,6 +244,7 @@ export const SpaceBotSchema = BotSchema.pick({
   preview: true,
   previewRoutineName: true,
   pendingDecisionCount: true,
+  pausedAfterSteps: true,
   status: true,
   runErrorId: true,
   updatedAt: true,
