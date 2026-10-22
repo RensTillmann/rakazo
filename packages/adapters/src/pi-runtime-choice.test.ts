@@ -198,6 +198,19 @@ describe("Pi choice asks", () => {
       }
     });
 
+    it("refuses a case card that asks to type unless its text lists the fixes", async () => {
+      const options = ["Explain the bulk update", "Restore the licences"];
+      const bare = await ask("Case 311 · reply: what should change? Type it here.", options);
+      expect(bare.asked).toBe(false);
+      expect(bare.refusal).toMatch(/^ask_user refused \(rule D6, case decision cards\): /);
+      expect(bare.refusal).toContain('The question says "what should change"');
+      const listed = await ask(
+        "Case 311 · reply: what should change?\n- Explain the 1 Oct bulk update\n- Restore the licences",
+        options,
+      );
+      expect(listed).toEqual({ refusal: "", asked: true });
+    });
+
     it("leaves a to-do card with one option plus the to-do option alone", async () => {
       const { refusal, asked } = await ask(
         "Case 383 · access: who opens the Seoul office account?",

@@ -46,7 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Bots must give every to-do a reason, numbered steps and the tracker case it belongs to; a to-do request without them is refused with what to fix.
-- A bot asking about a tracker case ("Case <n> · …") must offer at least two concrete choices; a card with none, one, or only "type it here" is refused with the rule to follow. To-do and secret cards are unchanged.
+- A bot asking about a tracker case ("Case <n> …") must offer at least two concrete choices; a card with none, one, or only "type it here" is refused with the rule to follow, and so is a question that asks you to type what should change without listing the concrete fixes. To-do and secret cards are unchanged.
 - A bot whose run the Fleet pause holds shows "Paused after N steps" in the sidebar, so the progress it kept is visible.
 - Unfinished operations in Fleet control show the case, who follows up, and whether you need to act. A Fleet service operation says how to settle it in the Fleet service, and work a Fleet wake started shows its case from that wake, or "Case unknown".
 - A card's to-do option says how many to-dos it adds and, when the bot gave one, about how long they take; the steps show after you choose. A check held by the Fleet pause says "waiting — Fleet paused", and an item you confirmed says "Confirmed by you".

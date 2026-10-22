@@ -112,14 +112,19 @@ without such an envelope is never given a guessed source.
 A question whose head names a case (`Case <n>`, any letter case, also after `URGENT · `, e.g.
 "Case 311 · …" or "case 311: …", read by the same `askCaseRef` card dedupe uses) is a decision card for
 that tracker case. It must offer at least two concrete options; an option that only invites typing
-does not count: exactly "None of these" or "Free text", or a label starting with "Type", "Other",
-"Something else", "Let me" or "I'll describe" (the documented heuristic, `FREE_TEXT_OPTION`; a short
-concrete option such as "Explain the delay" counts). `ask_user` refuses such a card before it is
-stored, naming the rule (D6) and what was given, so a bot can never put an open "what should change?"
-question to the owner about a case: for a reply change it offers the draft, the customer's asks and 2–3
-concrete fixes. The one rule is `caseCardOptionsRefusal` in `packages/contracts/src/events.ts`; the Pi
-runtime applies it ahead of the general two-to-four-options check. To-do cards (`prerequisites`) are
-unaffected, and secret cards come from `request_secret`, which this rule never sees.
+does not count: a label made only of words such as type, here, please, it, other, something, else,
+let, me, describe, explain, specify, tell, chat ("Type it here", "Please type it here", "Other",
+"Something else", "Let me explain", "Tell you in chat", "Specify…", "None of these"; the documented
+word list `FREE_TEXT_WORDS`); one other word makes it concrete ("Explain the delay", "Specify SPF").
+A question whose text asks the user to type ("type it here", "type your answer", "what should
+change", any letter case) is allowed only with two concrete options and the fixes listed in the text
+(at least two lines starting with "- " or a number). `ask_user` refuses otherwise, before the card is
+stored, naming the rule (D6), what was given and the phrase, so a bot can never put an open "what
+should change?" question to the owner about a case: for a reply change it offers the draft, the
+customer's asks and 2–3 concrete fixes. The one rule is `caseCardOptionsRefusal` in
+`packages/contracts/src/events.ts`; the Pi runtime applies it ahead of the general two-to-four-options
+check. To-do cards (`prerequisites`) are unaffected, and secret cards come from `request_secret`, which
+this rule never sees.
 
 ## Cards end with their run
 
