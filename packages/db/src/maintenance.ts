@@ -1,6 +1,7 @@
 import type { MaintenanceState, MaintenanceSnapshot, MaintenanceCommand, MaintenanceChange } from "@rakazo/contracts";
 import { MaintenanceCommandSchema } from "@rakazo/contracts";
 import type { MaintenancePauseSpan } from "@rakazo/core";
+import { IN_PROGRESS_EFFECT_STATUSES, SETTLED_EFFECT_STATUSES } from "@rakazo/core";
 import type { Pool } from "pg";
 import type { Prisma } from "./client.js";
 
@@ -180,8 +181,7 @@ export function createMaintenanceStore(pool: Pick<Pool, "connect" | "query">) {
               OR EXISTS (SELECT 1 FROM "attempts" a
                 WHERE a."runId" = r."id" AND a."status" = 'running')) AS "activeRuns",
           ((SELECT count(*) FROM "external_effects"
-            WHERE "status" NOT IN ('intended', 'approved', 'denied', 'completed', 'failed',
-              'cancelled', 'media_completed', 'media_failed'))
+            WHERE "status" <> ALL($1::text[]))
             + (SELECT count(*) FROM "cloud_agents" WHERE "status" = 'running'
               AND ("launchDispatched" OR ("remoteId" IS NOT NULL
                 AND ("followup" IS NULL OR "followupDispatching"))))
@@ -196,11 +196,10 @@ export function createMaintenanceStore(pool: Pick<Pool, "connect" | "query">) {
             WHERE "status" IN ('queued', 'maintenance_paused')) AS "pendingRuns",
           array_remove(ARRAY[
             CASE WHEN EXISTS (SELECT 1 FROM "external_effects"
-              WHERE "status" NOT IN ('intended', 'approved', 'denied', 'completed', 'failed',
-                'cancelled', 'executing', 'media_submitting', 'media_pending', 'media_polling',
-                'media_completed', 'media_failed')) THEN 'uncertain-effects' END,
+              WHERE "status" <> ALL($1::text[]) AND "status" <> ALL($2::text[]))
+              THEN 'uncertain-effects' END,
             CASE WHEN EXISTS (SELECT 1 FROM "external_effects"
-              WHERE "status" IN ('executing', 'media_submitting', 'media_pending', 'media_polling')
+              WHERE "status" = ANY($2::text[])
                 AND "updatedAt" < CURRENT_TIMESTAMP - interval '10 minutes')
               THEN 'unsettled-effects' END,
             CASE WHEN EXISTS (SELECT 1 FROM "messaging_outbound"
@@ -239,6 +238,7 @@ export function createMaintenanceStore(pool: Pick<Pool, "connect" | "query">) {
          FROM "deployment_settings" d
          LEFT JOIN "maintenance_state" m ON m."id" = 'default'
          WHERE d."id" = 'default'`,
+        [SETTLED_EFFECT_STATUSES, IN_PROGRESS_EFFECT_STATUSES],
       );
       const row = result.rows[0];
       if (!operatorId || !row?.ownerUserId || row.ownerUserId !== operatorId) {
@@ -310,10 +310,8 @@ export function createMaintenanceStore(pool: Pick<Pool, "connect" | "query">) {
            AND NOT EXISTS (SELECT 1 FROM "attempts" a
              WHERE a."runId" = r."id" AND a."status" = 'running')
            AND NOT EXISTS (SELECT 1 FROM "external_effects" e
-             WHERE e."runId" = r."id" AND e."status" NOT IN
-               ('intended', 'approved', 'denied', 'completed', 'failed', 'cancelled',
-                'media_completed', 'media_failed'))
-         RETURNING r."id"`, [runId, leaseFence],
+             WHERE e."runId" = r."id" AND e."status" <> ALL($3::text[]))
+         RETURNING r."id"`, [runId, leaseFence, SETTLED_EFFECT_STATUSES],
       );
       return result.rows.length === 1;
     },
@@ -382,9 +380,8 @@ export function createMaintenanceStore(pool: Pick<Pool, "connect" | "query">) {
                  OR EXISTS (SELECT 1 FROM "attempts" a
                    WHERE a."runId" = "runs"."id" AND a."status" = 'running')
                  OR EXISTS (SELECT 1 FROM "external_effects" e
-                   WHERE e."runId" = "runs"."id" AND e."status" NOT IN
-                     ('intended', 'approved', 'denied', 'completed', 'failed', 'cancelled',
-                      'media_completed', 'media_failed')))`,
+                   WHERE e."runId" = "runs"."id" AND e."status" <> ALL($1::text[])))`,
+            [SETTLED_EFFECT_STATUSES],
           );
           await client.query(
             `UPDATE "cloud_agents" SET "cancelRequested" = true,

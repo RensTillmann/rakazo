@@ -11,7 +11,8 @@ const databaseUrl = process.env.MAINTENANCE_TEST_DATABASE_URL;
 const suite = databaseUrl ? describe.sequential : describe.skip;
 
 suite("maintenance recovery against PostgreSQL", () => {
-  const schema = `recovery_test_${randomUUID().replaceAll("-", "")}`;
+  // Its own database, so it can hold a Fleet ledger (`fleet.service_effects`) of its own.
+  const database = `recovery_test_${randomUUID().replaceAll("-", "")}`;
   let admin: Pool;
   let pool: Pool;
 
@@ -21,9 +22,15 @@ suite("maintenance recovery against PostgreSQL", () => {
       throw new Error("Recovery tests require a disposable local database");
     }
     admin = new Pool({ connectionString: databaseUrl });
-    await admin.query(`CREATE SCHEMA "${schema}"`);
-    pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}`, max: 4 });
+    await admin.query(`CREATE DATABASE "${database}"`);
+    url.pathname = `/${database}`;
+    pool = new Pool({ connectionString: url.toString(), max: 4 });
     await pool.query(`
+      CREATE SCHEMA fleet;
+      CREATE TABLE fleet.service_effects (
+        id text PRIMARY KEY, kind text NOT NULL, status text NOT NULL, result jsonb,
+        created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+      );
       CREATE TABLE "deployment_settings" ("id" TEXT PRIMARY KEY, "ownerUserId" TEXT);
       INSERT INTO "deployment_settings" VALUES ('default', 'operator');
       CREATE TABLE "bots" (
@@ -78,7 +85,7 @@ suite("maintenance recovery against PostgreSQL", () => {
     await pool.query(`
       TRUNCATE "bots", "runs", "attempts", "external_effects", "events", "maintenance_recovery",
         "cloud_agents", "external_messages", "messaging_outbound", "routines", "computers",
-        "messages", "user_todos";
+        "messages", "user_todos", fleet.service_effects;
       INSERT INTO "bots" ("id", "name") VALUES
         ('isabella', 'Isabella'), ('riona', 'Riona'), ('jill', 'Jill'), ('josy', 'Josy'),
         ('elena', 'Elena');
@@ -87,7 +94,7 @@ suite("maintenance recovery against PostgreSQL", () => {
 
   afterAll(async () => {
     await pool?.end();
-    await admin?.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await admin?.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
     await admin?.end();
   });
 
@@ -179,6 +186,80 @@ suite("maintenance recovery against PostgreSQL", () => {
     // Repeated observations describe the same operations, one item each.
     expect([...(await byId()).keys()]).toEqual([...items.keys()]);
     await expect(byId("outsider")).rejects.toThrow("owner required");
+  });
+
+  it("lists no approval that ended invalidated: it is final, not unfinished work", async () => {
+    await pool.query(`
+      INSERT INTO "runs" ("id", "botId", "status") VALUES ('withdrawn', 'jill', 'cancelled');
+      INSERT INTO "external_effects" ("id", "runId", "kind", "status", "request", "createdAt", "updatedAt") VALUES
+        ('stale-approval', 'withdrawn', 'shell', 'invalidated', '{"command": "deploy"}',
+          '2026-10-21 05:00:00', '2026-10-21 05:00:00');
+    `);
+    expect((await byId()).has("stale-approval")).toBe(false);
+  });
+
+  it("names the Fleet coordinator for a Fleet service effect and how to settle it there", async () => {
+    await pool.query(`
+      INSERT INTO fleet.service_effects (id, kind, status, updated_at) VALUES
+        ('fx-1', 'tracker.set_body', 'uncertain', now()),
+        ('fx-2', 'tracker.comment', 'executing', now());
+    `);
+    const coordination: CaseCoordination = {
+      caseCoordinators: ["Josy"],
+      fleetCoordinator: "elena",
+    };
+    const items = await byId("operator", coordination);
+    expect(items.get("fx-1")).toMatchObject({
+      kind: "fleet-effect",
+      state: "unresolved",
+      caseRef: null,
+      coordinator: "Elena",
+      missing:
+        "Settle it in the Fleet service: `python -m fleet settle fx-1 --result ok|failed --evidence <link>`.",
+    });
+    // Still executing and recent: it finishes on its own; nothing to settle yet.
+    expect(items.get("fx-2")).toMatchObject({
+      state: "draining",
+      missing: null,
+      coordinator: "Elena",
+    });
+  });
+
+  it("takes a run's case from the Fleet wake that started it, and never guesses one", async () => {
+    await pool.query(`
+      INSERT INTO "runs" ("id", "botId", "status", "leaseExpiresAt") VALUES
+        ('service-wake', 'riona', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour'),
+        ('gate-wake', 'riona', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour'),
+        ('job-only', 'jill', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour'),
+        ('chat', 'jill', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour');
+      INSERT INTO "events" ("runId", "seq", "type", "payload", "createdAt") VALUES
+        ('service-wake', 1, 'thread.message.created',
+          '{"inboundDelivery": {"source": "webhook", "payload": {"source": "fleet-service", "event": "tracker", "case": 412, "facts": {}}}}', now()),
+        ('gate-wake', 1, 'thread.message.created',
+          '{"inboundDelivery": {"source": "webhook", "payload": {"source": "fleet-gate", "event": "tracker", "job": "tracker", "items": [{"n": 501, "case": 400}, {"n": 502, "case": 400}]}}}', now()),
+        ('job-only', 1, 'thread.message.created',
+          '{"inboundDelivery": {"source": "webhook", "payload": {"source": "fleet-gate", "event": "tracker", "job": "tracker", "items": [{"n": 503, "title": "Fix SPF"}]}}}', now()),
+        ('chat', 1, 'thread.message.created', '{"messageId": "m"}', now());
+    `);
+    const coordination: CaseCoordination = {
+      caseCoordinators: ["Josy"],
+      fleetCoordinator: "Elena",
+    };
+    const items = await byId("operator", coordination);
+    expect(items.get("service-wake")).toMatchObject({ caseRef: 412, caseUnknown: false });
+    expect(items.get("gate-wake")).toMatchObject({ caseRef: 400, caseUnknown: false });
+    // A job number is not a case: the case is unknown and the Fleet coordinator answers, not Josy.
+    expect(items.get("job-only")).toMatchObject({
+      caseRef: null,
+      caseUnknown: true,
+      coordinator: "Elena",
+    });
+    // Not a Fleet wake: internal work, with no claim about a case.
+    expect(items.get("chat")).toMatchObject({
+      caseRef: null,
+      caseUnknown: false,
+      coordinator: "Elena",
+    });
   });
 
   it("names the case, its coordinator and whether only the user can settle each item (Q21)", async () => {

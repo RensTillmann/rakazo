@@ -116,10 +116,14 @@ export function FleetRecoveryList({
               {item.bot ? <> · {item.bot}</> : null} · {item.status} ·{" "}
               <span>{stateLabel(item)}</span>
             </p>
-            {item.caseRef || item.coordinator || item.userActionNeeded ? (
+            {item.caseRef || item.caseUnknown || item.coordinator || item.userActionNeeded ? (
               <p className="text-xs" data-testid="recovery-accountable">
                 {[
-                  item.caseRef ? t`Case ${item.caseRef}` : null,
+                  item.caseRef
+                    ? t`Case ${item.caseRef}`
+                    : item.caseUnknown
+                      ? t`Case unknown`
+                      : null,
                   item.coordinator ? t`Follow-up: ${item.coordinator}` : null,
                   item.userActionNeeded ? t`Needs you` : null,
                 ]

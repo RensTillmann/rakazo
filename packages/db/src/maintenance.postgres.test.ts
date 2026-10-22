@@ -147,6 +147,25 @@ suite("maintenance state PostgreSQL persistence and contention", () => {
     }
   });
 
+  it("treats an approval that ended invalidated as settled: no attention, no held cancellation", async () => {
+    const store = createMaintenanceStore(pool);
+    await pool.query(`
+      INSERT INTO "runs" ("id", "status") VALUES ('withdrawn', 'cancelled');
+      INSERT INTO "external_effects" ("id", "runId", "status")
+      VALUES ('stale-approval', 'withdrawn', 'invalidated');
+    `);
+    await store.change("operator", { requestId: "enter", action: "enter", expectedRevision: 0 });
+    const quiet = { phase: "paused", activeRuns: 0, activeEffects: 0, pendingRuns: 0, issues: [] };
+    expect((await store.statusForOperator("operator")).status).toEqual(quiet);
+    // Force stop does not target its ended run for it.
+    await store.change("operator", { requestId: "stop", action: "force-stop", expectedRevision: 1 });
+    expect(await store.cancellationTargets()).toEqual([]);
+    // A teardown already requested for that run is acknowledged; the approval does not hold it.
+    await pool.query(`UPDATE "runs" SET "maintenanceCancelRequestedAt" = CURRENT_TIMESTAMP`);
+    expect(await store.acknowledgeCancellation("withdrawn", 1)).toBe(true);
+    expect((await store.statusForOperator("operator")).status).toEqual(quiet);
+  });
+
   it("reports busy, pending and uncertain work without equating active pause with quiescence", async () => {
     const store = createMaintenanceStore(pool);
     await pool.query(`

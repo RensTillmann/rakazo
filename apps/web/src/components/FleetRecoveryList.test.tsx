@@ -33,6 +33,7 @@ function item(overrides: Partial<MaintenanceRecoveryItem>): MaintenanceRecoveryI
     missing: null,
     ownerVerifiable: true,
     caseRef: 383,
+    caseUnknown: false,
     coordinator: "Josy",
     userActionNeeded: true,
     ...overrides,
@@ -75,6 +76,16 @@ describe("FleetRecoveryList", () => {
           ownerVerifiable: false,
           userActionNeeded: false,
         }),
+        item({
+          id: "run-4",
+          kind: "run",
+          state: "unresolved",
+          caseRef: null,
+          caseUnknown: true,
+          coordinator: "Elena",
+          ownerVerifiable: false,
+          userActionNeeded: false,
+        }),
       ],
     });
     await act(async () => {
@@ -84,7 +95,12 @@ describe("FleetRecoveryList", () => {
       (line) => line.textContent,
     );
     // Nothing to say, nothing shown: no line for an item no one needs to act on.
-    expect(lines).toEqual(["Case 383 · Follow-up: Josy · Needs you", "Follow-up: Elena"]);
-    expect(container.querySelectorAll("li")).toHaveLength(3);
+    // A Fleet wake that named no case says so instead of guessing one.
+    expect(lines).toEqual([
+      "Case 383 · Follow-up: Josy · Needs you",
+      "Follow-up: Elena",
+      "Case unknown · Follow-up: Elena",
+    ]);
+    expect(container.querySelectorAll("li")).toHaveLength(4);
   });
 });

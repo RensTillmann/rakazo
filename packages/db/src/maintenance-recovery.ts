@@ -5,6 +5,7 @@ import type {
   MaintenanceRecoveryResult,
 } from "@rakazo/contracts";
 import { MaintenanceRecoveryCommandSchema } from "@rakazo/contracts";
+import { SETTLED_EFFECT_STATUSES } from "@rakazo/core";
 import type { Pool, PoolClient } from "pg";
 import type { CaseCoordination } from "./case-coordinators.js";
 import { caseCoordinatorOf, fleetCoordinatorOf } from "./case-coordinators.js";
@@ -19,17 +20,6 @@ export interface MaintenanceRecoveryStore {
   ): Promise<MaintenanceRecoveryResult>;
 }
 
-/** Effect statuses that no longer count as unfinished work. */
-const SETTLED_EFFECT_STATUSES = [
-  "intended",
-  "approved",
-  "denied",
-  "completed",
-  "failed",
-  "cancelled",
-  "media_completed",
-  "media_failed",
-];
 const TERMINAL_RUN_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 type Queryable = Pick<PoolClient, "query">;
@@ -209,6 +199,28 @@ async function newerFinishedAttempt(
   return result.rows[0] ?? null;
 }
 
+function caseNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+/**
+ * The case a Fleet wake body names: the service's `case`, or the one `case` all of the gate's
+ * items share. Job numbers (`items[].n`) are jobs, not cases, and are never taken for one.
+ */
+export function fleetWakeCase(wake: unknown): number | null {
+  if (!wake || typeof wake !== "object") return null;
+  const direct = "case" in wake ? caseNumber(wake.case) : null;
+  if (direct !== null) return direct;
+  if (!("items" in wake) || !Array.isArray(wake.items)) return null;
+  const itemCases = new Set(
+    wake.items.map((item: unknown) =>
+      item && typeof item === "object" && "case" in item ? caseNumber(item.case) : null,
+    ),
+  );
+  const [only] = itemCases;
+  return itemCases.size === 1 && only !== undefined ? only : null;
+}
+
 /**
  * Q21: who answers for each item, and whether only the user can settle it. The case comes from the
  * run's to-dos' case link or its own card heads (`askCaseRef`), never from free text. A case item
@@ -223,6 +235,8 @@ async function accountFor(
 ): Promise<void> {
   const runIds = [...new Set(items.flatMap((item) => (item.runId ? [item.runId] : [])))];
   const cases = new Map<string, number>();
+  /** Runs a Fleet wake started; a case the wake does not name stays unknown, never guessed. */
+  const fleetWoken = new Set<string>();
   const runBots = new Map<string, string>();
   if (runIds.length) {
     const runs = await client.query<{ id: string; botId: string | null }>(
@@ -235,6 +249,18 @@ async function accountFor(
       [runIds],
     );
     for (const row of todos.rows) cases.set(row.runId, row.caseRef);
+    // The Fleet gate's and service's wake bodies are stored with the run's inbound message.
+    const wakes = await client.query<{ runId: string; wake: unknown }>(
+      `SELECT "runId", "payload"->'inboundDelivery'->'payload' AS "wake" FROM "events"
+        WHERE "runId" = ANY($1) AND "type" = 'thread.message.created'
+          AND "payload"->'inboundDelivery'->'payload'->>'source' IN ('fleet-gate', 'fleet-service')`,
+      [runIds],
+    );
+    for (const row of wakes.rows) {
+      fleetWoken.add(row.runId);
+      const caseRef = fleetWakeCase(row.wake);
+      if (caseRef !== null && !cases.has(row.runId)) cases.set(row.runId, caseRef);
+    }
     const cards = await client.query<{ runId: string; text: string | null }>(
       `SELECT m."runId", b->>'text' AS "text"
          FROM "messages" m, jsonb_array_elements(m."blocks") b
@@ -258,10 +284,12 @@ async function accountFor(
     const caseRef = item.runId ? (cases.get(item.runId) ?? null) : null;
     const asker = item.runId ? (runBots.get(item.runId) ?? null) : null;
     item.caseRef = caseRef;
+    // A Fleet wake whose case is unknown belongs to the Fleet coordinator, like internal work.
     item.coordinator =
       caseRef === null
         ? internal
         : (caseCoordinatorOf(bots, coordination, asker)?.name ?? item.bot);
+    item.caseUnknown = caseRef === null && item.runId !== null && fleetWoken.has(item.runId);
     // The recovery commands are the owner's: applying recorded evidence and recording a checked
     // outcome. Draining items settle themselves; other unknowns are the coordinator's to chase.
     item.userActionNeeded = item.state === "settleable" || item.ownerVerifiable;
@@ -285,6 +313,7 @@ export function createMaintenanceRecoveryStore(
           missing: null,
           ownerVerifiable: false,
           caseRef: null,
+          caseUnknown: false,
           coordinator: null,
           userActionNeeded: false,
         } satisfies Partial<MaintenanceRecoveryItem>;
@@ -443,8 +472,9 @@ export function createMaintenanceRecoveryStore(
               lastEvidenceAt: effect.updatedAt,
               state: unresolved ? "unresolved" : "draining",
               evidence: "Fleet service operation.",
+              // Only the Fleet service holds its receipt; its coordinator settles it there.
               missing: unresolved
-                ? "The Fleet service must reconcile it from its own receipt."
+                ? `Settle it in the Fleet service: \`python -m fleet settle ${effect.id} --result ok|failed --evidence <link>\`.`
                 : null,
             });
           }

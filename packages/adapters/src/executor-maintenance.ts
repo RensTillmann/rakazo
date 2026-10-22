@@ -1,6 +1,6 @@
 import type { AdapterContext } from "@rakazo/adapter-kit";
 import { runContinueJob } from "@rakazo/adapter-kit";
-import { isOneShotRoutineCrons } from "@rakazo/core";
+import { isOneShotRoutineCrons, isSettledEffectStatus } from "@rakazo/core";
 import { stableJsonValue } from "@rakazo/core/node/approval-effect-key";
 import type { Prisma, Run } from "@rakazo/db";
 import { cancelRunsInTransaction, checkpointMaintenanceRun, expireComputerExecutionLeases,
@@ -174,8 +174,7 @@ async function validateAuthority(
   if (!reason && continuation && run.leaseFence !== continuation.leaseFence) reason = "continuation-already-consumed";
   await tx.$queryRaw`SELECT id FROM external_effects WHERE "runId" = ${run.id} FOR SHARE`;
   const effects = await tx.externalEffect.findMany({ where: { runId: run.id } });
-  if (!reason && effects.some((effect) => !["intended", "approved", "denied", "completed", "failed",
-    "cancelled", "media_completed", "media_failed"].includes(effect.status))) reason = "unsettled-effects";
+  if (!reason && effects.some((effect) => !isSettledEffectStatus(effect.status))) reason = "unsettled-effects";
   for (const approved of continuation?.approvals ?? []) {
     const effect = effects.find((row) => row.id === approved.id);
     if (!effect || effect.status !== "approved" || effect.kind !== approved.kind ||

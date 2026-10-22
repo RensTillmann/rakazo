@@ -366,6 +366,17 @@ describe("queued authority after maintenance", () => {
     expect(f.effects[0]!.request).toEqual({ exact: 1 });
   });
 
+  it("does not hold a continuation for an approval that ended invalidated", async () => {
+    const f = harness();
+    await f.checkpoint();
+    Object.assign(f.state, { active: false, revision: 2 });
+    await f.maintenance.reconcile(async () => undefined);
+    f.effects.push({ id: "gone", runId: "run", kind: "tool.write", status: "invalidated", request: { exact: 2 } });
+    await f.executor.continueRun(f.run.id, "worker");
+    expect(maintenanceAttentionReason(f.run.error)).not.toBe("unsettled-effects");
+    expect(f.run.status).not.toBe("maintenance_paused");
+  });
+
   it("checks unsettled effects again when leasing a previously validated continuation", async () => {
     const f = harness();
     await f.checkpoint();

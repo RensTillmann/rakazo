@@ -1186,6 +1186,10 @@ msgstr "Case {0}"
 msgid "Case {caseRef}"
 msgstr "Case {caseRef}"
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Case unknown"
+msgstr "Case unknown"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Change password"
 msgstr "Change password"

@@ -66,6 +66,8 @@ export const MaintenanceRecoveryItemSchema = z.object({
   ownerVerifiable: z.boolean(),
   /** The tracker case the operation's run worked on, when its cards or to-dos name one. */
   caseRef: z.number().int().positive().nullable(),
+  /** A Fleet wake started the run but named no case: the case is unknown, not guessed. */
+  caseUnknown: z.boolean(),
   /** The bot accountable for following it up: the case coordinator, else the Fleet coordinator. */
   coordinator: z.string().nullable(),
   /** Only the user can settle it (record an outcome or a checked result); otherwise the system or the coordinator acts. */
