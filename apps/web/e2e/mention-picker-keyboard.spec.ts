@@ -48,22 +48,20 @@ test("mention picker completes with Enter and Tab", async ({ page }, testInfo) =
   );
   await composer.press("Enter");
   await expect(page.getByTestId("mention-picker")).toHaveCount(0);
-  await expect(
-    page.getByTestId("mention-chip").filter({ hasText: "Research Writer" }),
-  ).toBeVisible();
+  await expect(composer).toHaveValue("@Research Writer ");
   await expect(composer).toBeFocused();
   await expect(composer).toHaveAttribute("aria-expanded", "false");
   await captureScreenshot(page, testInfo, "mention-picker-keyboard-completed");
 
-  await page.getByRole("button", { name: "Remove mention Research Writer" }).click();
+  await composer.fill("");
   await composer.fill("@Res");
   await expect(page.getByTestId("mention-picker")).toBeVisible();
   await composer.press("Tab");
   await expect(page.getByTestId("mention-picker")).toHaveCount(0);
-  await expect(page.getByTestId("mention-chip").filter({ hasText: "Researcher" })).toBeVisible();
+  await expect(composer).toHaveValue("@Researcher ");
   await expect(composer).toBeFocused();
 
-  await page.getByRole("button", { name: "Remove mention Researcher" }).click();
+  await composer.fill("");
   await composer.fill("@Res");
   await expect(page.getByTestId("mention-picker")).toBeVisible();
   await composer.press("Escape");
@@ -71,6 +69,24 @@ test("mention picker completes with Enter and Tab", async ({ page }, testInfo) =
   await expect(composer).toHaveValue("@Res");
   await expect(page.getByTestId("mention-chip")).toHaveCount(0);
   await expect(composer).toBeFocused();
+
+  // Retain two picker-selected occurrences through a draft reload and send.
+  await composer.fill("É🙂 Ask @Res");
+  await page.getByRole("option", { name: "@Researcher", exact: true }).click();
+  await composer.fill(`${await composer.inputValue()}here; again @Res`);
+  await page.getByRole("option", { name: "@Researcher", exact: true }).click();
+  const inline = "É🙂 Ask @Researcher here; again @Researcher ";
+  await expect(composer).toHaveValue(inline);
+  await page.reload();
+  await expect(composer).toHaveValue(inline);
+  const request = page.waitForRequest("**/rpc/threads/send");
+  await composer.press("Enter");
+  const sent = (await request).postDataJSON().json;
+  expect(sent.text).toBe(inline.trimEnd());
+  expect(sent.mentions).toEqual([{ kind: "bot", id: researcherId }]);
+  await expect(page.getByTestId("transcript")).toContainText(inline.trimEnd());
+  await page.reload();
+  await expect(page.getByTestId("transcript")).toContainText(inline.trimEnd());
 
   await composer.fill("hello without a picker");
   await composer.press("Enter");

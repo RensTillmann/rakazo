@@ -2,7 +2,7 @@
 
 import { i18n } from "@lingui/core";
 import type { AgentSkillCatalogEntry, ThreadMessage } from "@rakazo/contracts";
-import type { ComposerMention } from "@rakazo/core";
+import { type ComposerMention, resolveGroupTargetBotIds } from "@rakazo/core";
 import type { ComponentProps, ReactNode } from "react";
 import { act, createRef } from "react";
 import type { Root } from "react-dom/client";
@@ -158,7 +158,7 @@ describe("Composer", () => {
       });
       pressEnter(textarea);
 
-      expect(container?.querySelector('[data-testid="mention-chip"]')?.textContent).toBe("Bob");
+      expect(textarea.value).toBe("@Bob ");
       expect(container?.querySelector('[data-testid="mention-picker"]')).toBeNull();
     },
   );
@@ -174,7 +174,7 @@ describe("Composer", () => {
     rerenderComposer({ mentionTargets: [alice] });
     pressEnter(textarea);
 
-    expect(container?.querySelector('[data-testid="mention-chip"]')?.textContent).toBe("Alice");
+    expect(textarea.value).toBe("@Alice ");
   });
 
   it("clears the draft once the message is sent", async () => {
@@ -208,7 +208,7 @@ describe("Composer", () => {
 
   it("restores the draft and its mentions when the send fails", async () => {
     let finishSend = (_sent: boolean) => {};
-    const onSend = vi.fn(
+    const onSend = vi.fn<ComponentProps<typeof Composer>["onSend"]>(
       () =>
         new Promise<boolean>((resolve) => {
           finishSend = resolve;
@@ -221,19 +221,21 @@ describe("Composer", () => {
       );
     type(textarea, "@Bo");
     pressEnter(textarea);
-    type(textarea, "hello");
+    type(textarea, "@Bob hello");
     pressEnter(textarea);
     expect(onSend).toHaveBeenCalledWith("@Bob hello", [bob], expect.any(String));
     expect(textarea.value).toBe("");
     expect(mentionChips()).toEqual([]);
     await act(async () => finishSend(false));
-    expect(textarea.value).toBe("hello");
-    expect(mentionChips()).toEqual(["Bob"]);
+    expect(textarea.value).toBe("@Bob hello");
+    expect(mentionChips()).toEqual([]);
+    pressEnter(textarea);
+    expect(onSend.mock.calls[1]?.[1]).toEqual([bob]);
   });
 
   it("restores the chosen skill when the send fails", async () => {
     let finishSend = (_sent: boolean) => {};
-    const onSend = vi.fn(
+    const onSend = vi.fn<ComponentProps<typeof Composer>["onSend"]>(
       () =>
         new Promise<boolean>((resolve) => {
           finishSend = resolve;
@@ -446,7 +448,7 @@ it.each([true, false])(
   "keeps a pending draft recoverable across unmount (accepted: %s)",
   async (accepted) => {
     let finishSend = (_accepted: boolean) => {};
-    const onSend = vi.fn(
+    const onSend = vi.fn<ComponentProps<typeof Composer>["onSend"]>(
       () =>
         new Promise<boolean>((resolve) => {
           finishSend = resolve;
@@ -600,4 +602,127 @@ describe("Composer and waiting cards", () => {
     expect(container?.querySelector('[data-testid="composer-answer-confirm"]')).toBeNull();
     expect(onSend).toHaveBeenCalledWith("I'll send it myself", [], expect.any(String));
   });
+});
+
+describe("inline mention integration", () => {
+  it("completes at a Unicode caret, preserves repeats and routes once", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const textarea = renderComposer(onSend);
+    type(textarea, "É🙂 Ask @Bo; then continue.");
+    act(() => {
+      textarea.focus();
+      textarea.setSelectionRange("É🙂 Ask @Bo".length, "É🙂 Ask @Bo".length);
+      document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
+    });
+    pressEnter(textarea);
+    expect(textarea.value).toBe("É🙂 Ask @Bob; then continue.");
+    type(textarea, `${textarea.value} Again @Bo`);
+    pressEnter(textarea);
+    expect(textarea.value).toBe("É🙂 Ask @Bob; then continue. Again @Bob ");
+    pressEnter(textarea);
+    await act(async () => {});
+    expect(onSend).toHaveBeenCalledWith(
+      "É🙂 Ask @Bob; then continue. Again @Bob",
+      [bob],
+      expect.any(String),
+    );
+  });
+
+  it("restores occurrence identities across remount, then drops edited mentions", async () => {
+    const draftKey = "group:inline-reload";
+    const first = renderComposer(vi.fn(), { draftKey });
+    type(first, "Ask @Bo");
+    pressEnter(first);
+    type(first, `${first.value}here`);
+    act(() => root?.unmount());
+    container?.remove();
+    const onSend = vi.fn().mockResolvedValue(false);
+    const restored = renderComposer(onSend, { draftKey });
+    expect(restored.value).toBe("Ask @Bob here");
+    pressEnter(restored);
+    await act(async () => {});
+    expect(onSend.mock.calls[0]?.[1]).toEqual([{ kind: "bot", id: bob.id, name: bob.name }]);
+    type(restored, "Ask @Other here");
+    pressEnter(restored);
+    await act(async () => {});
+    expect(onSend.mock.calls[1]?.[1]).toEqual([]);
+  });
+
+  it("keeps action-only selections as chips and avoids prefixing inline bot text", async () => {
+    const routine: ComposerMention = {
+      kind: "routine",
+      id: "routine-a",
+      name: "digest",
+      botId: "bot-1",
+    };
+    const onSend = vi.fn().mockResolvedValue(true);
+    const textarea = renderComposer(onSend, { mentionTargets: [bob, routine] });
+    type(textarea, "@di");
+    pressEnter(textarea);
+    expect(textarea.value).toBe("");
+    expect(container?.querySelector('[data-testid="mention-chip"]')?.textContent).toBe("digest");
+    type(textarea, "Ask @Bo");
+    pressEnter(textarea);
+    pressEnter(textarea);
+    await act(async () => {});
+    expect(onSend).toHaveBeenCalledWith("@digest Ask @Bob", [bob, routine], expect.any(String));
+  });
+});
+
+it("drops an extended mention across reload and failed-send retry", async () => {
+  const draftKey = "group:boundary";
+  const first = renderComposer(vi.fn(), { draftKey });
+  type(first, "Ask @Bo");
+  pressEnter(first);
+  expect(first.value).toBe("Ask @Bob ");
+  type(first, "Ask @Bobby ");
+  act(() => root?.unmount());
+  container?.remove();
+  const onSend = vi.fn().mockResolvedValue(false);
+  const restored = renderComposer(onSend, { draftKey });
+  expect(restored.value).toBe("Ask @Bobby ");
+  pressEnter(restored);
+  await act(async () => {});
+  expect(onSend.mock.calls[0]?.[0]).toBe("Ask @Bobby");
+  expect(onSend.mock.calls[0]?.[1]).toEqual([]);
+  expect(restored.value).toBe("Ask @Bobby ");
+  pressEnter(restored);
+  await act(async () => {});
+  expect(onSend.mock.calls[1]?.[1]).toEqual([]);
+});
+
+it("retains the picker recipient before a hyphen through reload and failed-send retry", async () => {
+  const draftKey = "group:hyphen-completion";
+  const first = renderComposer(vi.fn(), { draftKey });
+  type(first, "Ask @Bo-next");
+  act(() => {
+    first.focus();
+    first.setSelectionRange(7, 7);
+    document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
+  });
+  pressEnter(first);
+  expect(first.value).toBe("Ask @Bob -next");
+  act(() => root?.unmount());
+  container?.remove();
+  const onSend = vi.fn().mockResolvedValue(false);
+  const restored = renderComposer(onSend, { draftKey });
+  expect(restored.value).toBe("Ask @Bob -next");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    pressEnter(restored);
+    await act(async () => {});
+    const [text, mentions] = onSend.mock.calls[attempt]!;
+    expect(text).toBe("Ask @Bob -next");
+    expect(mentions).toEqual([bob]);
+    expect(
+      resolveGroupTargetBotIds({
+        text,
+        members: [
+          { id: "bot-1", name: "Alice" },
+          { id: bob.id, name: bob.name },
+        ],
+        explicitMentions: mentions.map((mention: ComposerMention) => mention.id),
+      }),
+    ).toEqual([bob.id]);
+    expect(restored.value).toBe("Ask @Bob -next");
+  }
 });

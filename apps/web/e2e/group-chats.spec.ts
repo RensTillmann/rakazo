@@ -137,12 +137,12 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   await composer.fill("@Res");
   await captureScreenshot(page, testInfo, "group-mention-picker");
   await page.getByRole("option", { name: "@Research Writer", exact: true }).click();
-  await expect(
-    page.getByTestId("mention-chip").filter({ hasText: "Research Writer" }),
-  ).toBeVisible();
-  await composer.fill("turn the sources into a draft. @Res");
+  await expect(composer).toHaveValue("@Research Writer ");
+  await composer.fill(`${await composer.inputValue()}turn the sources into a draft. @Res`);
   await page.getByRole("option", { name: "@Researcher", exact: true }).click();
-  await expect(page.getByTestId("mention-chip").filter({ hasText: "Researcher" })).toBeVisible();
+  await expect(composer).toHaveValue(
+    "@Research Writer turn the sources into a draft. @Researcher ",
+  );
   await composer.fill(`${await composer.inputValue()}gather sources.`);
   await composer.press("Enter");
 
@@ -169,10 +169,8 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
 
   await composer.fill("@Res");
   await page.getByRole("option", { name: "@Research Writer", exact: true }).click();
-  await expect(
-    page.getByTestId("mention-chip").filter({ hasText: "Research Writer" }),
-  ).toBeVisible();
-  await composer.fill("ask me which city to use");
+  await expect(composer).toHaveValue("@Research Writer ");
+  await composer.fill(`${await composer.inputValue()}ask me which city to use`);
   await composer.press("Enter");
   // threads/get can observe waiting_input before the shell realtime feed paints the ask card.
   await expect

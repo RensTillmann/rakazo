@@ -40,19 +40,28 @@ import {
   MESSAGE_REACTIONS,
   normalizeCreateBotProfile,
 } from "@rakazo/contracts";
-import type { ComposerMention, FoldedTranscript, SlashActionId } from "@rakazo/core";
+import type {
+  ComposerMention,
+  ComposerMentionOccurrence,
+  FoldedTranscript,
+  SlashActionId,
+} from "@rakazo/core";
 import {
   answerableAskMessageIds,
   attachmentsForThread,
   botMentionTextColors,
   buildComposerMentionOptions,
   clampMentionHighlightIndex,
+  composerMentionQuery,
+  composerOccurrenceMentions,
   cronFromPreset,
+  editComposerOccurrences,
   expandPeerReplies,
   foldPeerReplies,
   formatMessageTime,
   groupVoiceChats,
   inferAttachmentMimeType,
+  insertComposerOccurrence,
   isActive,
   isPeerReceiptBlocks,
   isRunTerminalEvent,
@@ -236,9 +245,11 @@ import { newClientId } from "../lib/client-id";
 import {
   beginComposerDraftSubmission,
   readComposerDraft,
+  readComposerDraftOccurrences,
   settleComposerDraftSubmission,
   subscribeComposerDraftAccepted,
   writeComposerDraft,
+  writeComposerDraftState,
 } from "../lib/composer-draft";
 import {
   getComposerEnterToSend,
@@ -6518,9 +6529,11 @@ export const Composer = memo(function Composer({
 }) {
   const { t } = useLingui();
   const [draft, setDraft] = useState(() => readComposerDraft(draftKey));
+  const [mentionOccurrences, setMentionOccurrences] = useState<ComposerMentionOccurrence[]>(() =>
+    readComposerDraftOccurrences(draftKey),
+  );
   const [mentionQuery, setMentionQuery] = useState<string | null>(() => {
-    const mentionMatch = /(?:^|\s)@([\w-]*)$/.exec(draft);
-    return mentionMatch ? (mentionMatch[1] ?? "") : null;
+    return composerMentionQuery(draft, draft.length)?.query ?? null;
   });
   const [mentionHighlightKey, setMentionHighlightKey] = useState<string | null>(null);
   const [slashQuery, setSlashQuery] = useState<string | null>(() => {
@@ -6547,6 +6560,7 @@ export const Composer = memo(function Composer({
     () =>
       subscribeComposerDraftAccepted(draftKey, (text) => {
         setDraft((current) => (current === text ? "" : current));
+        setMentionOccurrences([]);
         setMentionQuery(null);
         setSlashQuery(null);
       }),
@@ -6564,6 +6578,15 @@ export const Composer = memo(function Composer({
     }
   }, [replyId, quote]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pendingMentionCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (pendingMentionCaret.current === null) return;
+    const caret = pendingMentionCaret.current;
+    pendingMentionCaret.current = null;
+    textareaRef.current?.focus();
+    textareaRef.current?.setSelectionRange(caret, caret);
+    setMentionQuery(null);
+  }, [draft, mentionOccurrences, selectedMentions]);
   const [composerExpanded, setComposerExpanded] = useState(false);
   const attachButtonRef = useRef<HTMLButtonElement>(null);
   const composerActionsRef = useRef<HTMLDivElement>(null);
@@ -6684,12 +6707,13 @@ export const Composer = memo(function Composer({
     if (onAttachmentPick(files)) markEdited();
   }
 
-  function updateDraft(value: string) {
+  function updateDraft(value: string, caret = value.length) {
     markEdited();
-    writeComposerDraft(draftKey, value);
+    const occurrences = editComposerOccurrences(draft, value, mentionOccurrences);
+    writeComposerDraftState(draftKey, value, occurrences);
+    setMentionOccurrences(occurrences);
     setDraft(value);
-    const mentionMatch = /(?:^|\s)@([\w-]*)$/.exec(value);
-    setMentionQuery(mentionMatch ? (mentionMatch[1] ?? "") : null);
+    setMentionQuery(composerMentionQuery(value, caret)?.query ?? null);
     // `/` only at the start of the draft so forced skills expand (`Use skill:` / `/Name` prefix).
     const slashMatch = selectedSkill === null ? /^\/([^\n]*)$/.exec(value) : null;
     const nextSlash = slashMatch ? (slashMatch[1] ?? "") : null;
@@ -6697,29 +6721,42 @@ export const Composer = memo(function Composer({
     setSlashQuery(nextSlash);
   }
 
-  function focusComposer() {
-    textareaRef.current?.focus();
-  }
-
   function insertMention(mention: ComposerMention) {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? start;
+    const inserted = insertComposerOccurrence(draft, start, end, mention, mentionOccurrences);
+    if (!inserted) return;
     markEdited();
-    const next = draft.replace(/@([\w-]*)$/, "");
-    writeComposerDraft(draftKey, next);
+    const inline = mention.kind === "bot" || mention.kind === "everyone";
+    // Action-only chips retain their existing UI/routing semantics; only bot text is inline.
+    const next = inline
+      ? inserted.text
+      : draft.slice(0, composerMentionQuery(draft, start)!.start) + draft.slice(end);
+    const occurrences = inline
+      ? inserted.occurrences
+      : editComposerOccurrences(draft, next, mentionOccurrences);
+    writeComposerDraftState(draftKey, next, occurrences);
     setDraft(next);
+    setMentionOccurrences(occurrences);
     setMentionQuery(null);
     setMentionHighlightKey(null);
-    setSelectedMentions((current) =>
-      current.some((selected) => mentionChipKey(selected) === mentionChipKey(mention))
-        ? current
-        : [...current, mention],
-    );
-    focusComposer();
+    if (!inline)
+      setSelectedMentions((current) =>
+        current.some((selected) => mentionChipKey(selected) === mentionChipKey(mention))
+          ? current
+          : [...current, mention],
+      );
+    pendingMentionCaret.current = inline
+      ? inserted.caret
+      : composerMentionQuery(draft, start)!.start;
   }
 
   function insertSkill(skill: AgentSkillCatalogEntry) {
     markEdited();
     setSelectedSkill(skill);
     writeComposerDraft(draftKey, "");
+    setMentionOccurrences([]);
     setDraft("");
     setSlashQuery(null);
   }
@@ -6727,6 +6764,7 @@ export const Composer = memo(function Composer({
   function runSlashAction(action: SlashActionId) {
     markEdited();
     writeComposerDraft(draftKey, "");
+    setMentionOccurrences([]);
     setDraft("");
     setSlashQuery(null);
     onSlashAction?.(action);
@@ -6794,14 +6832,15 @@ export const Composer = memo(function Composer({
     const clientNonce = retryNonce.current ?? newClientNonce();
     retryNonce.current = null;
     const text = serializeComposerPrompt(draft, selectedSkill, selectedMentions);
-    const submission = beginComposerDraftSubmission(draftKey, draft);
+    const submission = beginComposerDraftSubmission(draftKey, draft, mentionOccurrences);
     setDraft("");
     setMentionQuery(null);
     setMentionHighlightKey(null);
     setSlashQuery(null);
     setSelectedSkill(null);
-    const mentions = selectedMentions;
+    const mentions = [...composerOccurrenceMentions(mentionOccurrences), ...selectedMentions];
     setSelectedMentions([]);
+    setMentionOccurrences([]);
     try {
       const accepted = (await onSend(text, mentions, clientNonce)) !== false;
       settleComposerDraftSubmission(draftKey, submission, accepted);
@@ -6816,7 +6855,8 @@ export const Composer = memo(function Composer({
     retryNonce.current = clientNonce;
     setDraft(draft);
     setSelectedSkill(selectedSkill);
-    setSelectedMentions(mentions);
+    setSelectedMentions(selectedMentions);
+    setMentionOccurrences(mentionOccurrences);
   }
 
   function handleDragEnter(event: DragEvent<HTMLFieldSetElement>) {
@@ -7256,7 +7296,16 @@ export const Composer = memo(function Composer({
             ref={textareaRef}
             hidden={talk.recording !== null}
             value={draft}
-            onChange={(event) => updateDraft(event.target.value)}
+            onChange={(event) => updateDraft(event.target.value, event.target.selectionStart)}
+            onSelect={(event) => {
+              const caret = event.currentTarget.selectionStart;
+              const inOccurrence = mentionOccurrences.some(
+                ({ start, end }) => caret > start && caret <= end,
+              );
+              setMentionQuery(
+                inOccurrence ? null : (composerMentionQuery(draft, caret)?.query ?? null),
+              );
+            }}
             onPaste={handlePaste}
             onKeyDown={(event) => {
               if (

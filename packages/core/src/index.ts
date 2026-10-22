@@ -18,6 +18,7 @@ export * from "./cloud-agent.js";
 export * from "./compose-update.js";
 export * from "./composer-mention-picker.js";
 export * from "./composer-mentions.js";
+export * from "./composer-occurrences.js";
 export * from "./composer-slash.js";
 export * from "./computer-updates.js";
 export * from "./cron.js";

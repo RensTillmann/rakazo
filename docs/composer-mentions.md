@@ -1,0 +1,9 @@
+# Web composer mentions
+
+Bot and everyone picker selections are inserted into the draft at the caret. Repeated selections remain visible at each insertion point. A separate occurrence list retains routing identities; it is deduplicated only when constructing the send metadata, not in the displayed text.
+
+Occurrence offsets use UTF-16 units, matching textarea selection offsets. Ordinary edits shift unaffected occurrences and discard identities whose selected text was changed or removed. Edits joining a Unicode letter, number, underscore or hyphen at either boundary invalidate the occurrence, matching group recipient token boundaries; punctuation remains a delimiter. Restored sidecars undergo the same boundary validation. The draft sidecar is bound to the exact saved text and validated on restore. Plain-string drafts from earlier builds still load without structured identities. Clearing the draft clears its sidecar; an unchanged failed send restores the same text and identities.
+
+Group, routine and connector selections remain action chips. Skills retain their existing expansion behaviour. The legacy mobile composer is unchanged. Direct-chat recipient selection and server-side group membership rules are unchanged; inline text does not override authorisation.
+
+Developer checks: run the core occurrence, composer-mentions and composer-slash suites, web composer-draft tests and Shell component tests. The web mention-picker-keyboard and group-chats browser scenarios cover the corresponding text-based UI expectations; run those in an isolated environment for runtime acceptance, including persisted message text after reload. Also exercise direct chats, mouse and keyboard completion, selected-range replacement, multiline Unicode, deletion, failed-send retry and group recipient dispatch. Browser acceptance is separate from component tests.
