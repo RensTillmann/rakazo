@@ -237,6 +237,8 @@ async function accountFor(
   const cases = new Map<string, number>();
   /** Runs a Fleet wake started; a case the wake does not name stays unknown, never guessed. */
   const fleetWoken = new Set<string>();
+  /** The wake's top-level `fleet` flag: whether the case is a fleet case; absent when not said. */
+  const fleetCase = new Map<string, boolean>();
   const runBots = new Map<string, string>();
   if (runIds.length) {
     const runs = await client.query<{ id: string; botId: string | null }>(
@@ -258,6 +260,9 @@ async function accountFor(
     );
     for (const row of wakes.rows) {
       fleetWoken.add(row.runId);
+      if (row.wake && typeof row.wake === "object" && "fleet" in row.wake) {
+        if (typeof row.wake.fleet === "boolean") fleetCase.set(row.runId, row.wake.fleet);
+      }
       const caseRef = fleetWakeCase(row.wake);
       if (caseRef !== null && !cases.has(row.runId)) cases.set(row.runId, caseRef);
     }
@@ -284,15 +289,26 @@ async function accountFor(
     const caseRef = item.runId ? (cases.get(item.runId) ?? null) : null;
     const asker = item.runId ? (runBots.get(item.runId) ?? null) : null;
     item.caseRef = caseRef;
-    // A Fleet wake whose case is unknown belongs to the Fleet coordinator, like internal work.
+    // A Fleet wake says whether its case is a fleet case: then the Fleet coordinator answers,
+    // otherwise the default case coordinator. Without that word, a case item goes to its case's
+    // coordinator and anything else (a Fleet wake with no case included) to the Fleet coordinator.
+    const fleet = item.runId ? fleetCase.get(item.runId) : undefined;
     item.coordinator =
-      caseRef === null
+      fleet === true
         ? internal
-        : (caseCoordinatorOf(bots, coordination, asker)?.name ?? item.bot);
+        : fleet === false
+          ? (caseCoordinatorOf(bots, coordination, null)?.name ?? item.bot)
+          : caseRef === null
+            ? internal
+            : (caseCoordinatorOf(bots, coordination, asker)?.name ?? item.bot);
     item.caseUnknown = caseRef === null && item.runId !== null && fleetWoken.has(item.runId);
     // The recovery commands are the owner's: applying recorded evidence and recording a checked
-    // outcome. Draining items settle themselves; other unknowns are the coordinator's to chase.
-    item.userActionNeeded = item.state === "settleable" || item.ownerVerifiable;
+    // outcome; an unresolved Fleet service effect only the operator settles, with `fleet settle`.
+    // Draining items settle themselves; other unknowns are the coordinator's to chase.
+    item.userActionNeeded =
+      item.state === "settleable" ||
+      item.ownerVerifiable ||
+      (item.kind === "fleet-effect" && item.state === "unresolved");
   }
 }
 

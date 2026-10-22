@@ -214,6 +214,8 @@ suite("maintenance recovery against PostgreSQL", () => {
       state: "unresolved",
       caseRef: null,
       coordinator: "Elena",
+      // Only the operator can run the settle command: it needs them, and says what to run.
+      userActionNeeded: true,
       missing:
         "Settle it in the Fleet service: `python -m fleet settle fx-1 --result ok|failed --evidence <link>`.",
     });
@@ -222,6 +224,7 @@ suite("maintenance recovery against PostgreSQL", () => {
       state: "draining",
       missing: null,
       coordinator: "Elena",
+      userActionNeeded: false,
     });
   });
 
@@ -231,7 +234,9 @@ suite("maintenance recovery against PostgreSQL", () => {
         ('service-wake', 'riona', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour'),
         ('gate-wake', 'riona', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour'),
         ('job-only', 'jill', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour'),
-        ('chat', 'jill', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour');
+        ('chat', 'jill', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour'),
+        ('fleet-case', 'riona', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour'),
+        ('other-case', 'elena', 'running', (now() AT TIME ZONE 'UTC') - interval '1 hour');
       INSERT INTO "events" ("runId", "seq", "type", "payload", "createdAt") VALUES
         ('service-wake', 1, 'thread.message.created',
           '{"inboundDelivery": {"source": "webhook", "payload": {"source": "fleet-service", "event": "tracker", "case": 412, "facts": {}}}}', now()),
@@ -239,7 +244,11 @@ suite("maintenance recovery against PostgreSQL", () => {
           '{"inboundDelivery": {"source": "webhook", "payload": {"source": "fleet-gate", "event": "tracker", "job": "tracker", "items": [{"n": 501, "case": 400}, {"n": 502, "case": 400}]}}}', now()),
         ('job-only', 1, 'thread.message.created',
           '{"inboundDelivery": {"source": "webhook", "payload": {"source": "fleet-gate", "event": "tracker", "job": "tracker", "items": [{"n": 503, "title": "Fix SPF"}]}}}', now()),
-        ('chat', 1, 'thread.message.created', '{"messageId": "m"}', now());
+        ('chat', 1, 'thread.message.created', '{"messageId": "m"}', now()),
+        ('fleet-case', 1, 'thread.message.created',
+          '{"inboundDelivery": {"source": "webhook", "payload": {"source": "fleet-gate", "event": "tracker", "job": "tracker", "fleet": true, "items": [{"n": 504, "case": 77}]}}}', now()),
+        ('other-case', 1, 'thread.message.created',
+          '{"inboundDelivery": {"source": "webhook", "payload": {"source": "fleet-gate", "event": "tracker", "job": "tracker", "fleet": false, "items": [{"n": 505}]}}}', now());
     `);
     const coordination: CaseCoordination = {
       caseCoordinators: ["Josy"],
@@ -259,6 +268,14 @@ suite("maintenance recovery against PostgreSQL", () => {
       caseRef: null,
       caseUnknown: false,
       coordinator: "Elena",
+    });
+    // The wake says it is a fleet case: the Fleet coordinator answers, never Josy.
+    expect(items.get("fleet-case")).toMatchObject({ caseRef: 77, coordinator: "Elena" });
+    // Not a fleet case: the default case coordinator, even when the case number is unknown.
+    expect(items.get("other-case")).toMatchObject({
+      caseRef: null,
+      caseUnknown: true,
+      coordinator: "Josy",
     });
   });
 

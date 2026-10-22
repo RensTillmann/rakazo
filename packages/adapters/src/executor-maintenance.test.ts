@@ -373,8 +373,8 @@ describe("queued authority after maintenance", () => {
     await f.maintenance.reconcile(async () => undefined);
     f.effects.push({ id: "gone", runId: "run", kind: "tool.write", status: "invalidated", request: { exact: 2 } });
     await f.executor.continueRun(f.run.id, "worker");
-    expect(maintenanceAttentionReason(f.run.error)).not.toBe("unsettled-effects");
-    expect(f.run.status).not.toBe("maintenance_paused");
+    expect(f.run.status).toBe("queued");
+    expect(f.run.error).toBeNull();
   });
 
   it("checks unsettled effects again when leasing a previously validated continuation", async () => {

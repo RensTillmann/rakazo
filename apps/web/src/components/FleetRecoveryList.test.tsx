@@ -101,6 +101,14 @@ describe("FleetRecoveryList", () => {
       "Follow-up: Elena",
       "Case unknown · Follow-up: Elena",
     ]);
-    expect(container.querySelectorAll("li")).toHaveLength(4);
+    // Every item is listed, the one with nothing to say included.
+    expect(
+      [...container.querySelectorAll("li")].map((li) => li.querySelector("p")?.textContent),
+    ).toEqual([
+      "shell · Jill · uncertain · Outcome unknown",
+      "shell · Jill · uncertain · Finishing on its own",
+      "shell · Jill · uncertain · Finishing on its own",
+      "shell · Jill · uncertain · Outcome unknown",
+    ]);
   });
 });
