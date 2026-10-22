@@ -38,7 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Bots must give every to-do a reason and numbered steps; a to-do request without them is refused with what to fix.
+- Bots must give every to-do a reason, numbered steps and the tracker case it belongs to; a to-do request without them is refused with what to fix.
 - Unfinished operations in Fleet control show the case, who follows up, and whether you need to act.
 - A card's to-do option lists the items it adds, with "Show steps" for each item's reason and steps. A check held by the Fleet pause says "waiting — Fleet paused", and an item you confirmed says "Confirmed by you".
 - Message bubbles in the web/PWA transcript use more of a wide window's width (70%/74% caps raised to 84%/88%, still leaving room for the hover-actions gutter), instead of leaving a quarter to a third of a long message's row empty.

@@ -1658,7 +1658,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                       return `item "${key}"${part === undefined ? "" : ` ${String(part)}`}: ${issue.message}`;
                     });
                     throw new Error(
-                      `ask_user prerequisites refused: ${problems.join("; ")}. Each item needs a unique key (≤200), title (≤300), why (≤600), numbered steps (≤4000), verification automatic|manual and optional blocks (≤10, text or {issue}); also option, release each|all, priority p0–p3 and caseRef (tracker issue number). Secrets go into this bot's Credentials, never the chat.`,
+                      `ask_user prerequisites refused: ${problems.join("; ")}. Each item needs a unique key (≤200), title (≤300), why (≤600), numbered steps (≤4000), verification automatic|manual and optional blocks (≤10, text or {issue}); also option, caseRef (required: the tracker issue number of the case these to-dos belong to), release each|all and priority p0–p3. Secrets go into this bot's Credentials, never the chat.`,
                     );
                   }
                   todo = parsed.data;
@@ -1683,7 +1683,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                           items: todo.prerequisites,
                           release: todo.release,
                           ...(todo.priority ? { priority: todo.priority } : {}),
-                          ...(todo.caseRef ? { caseRef: todo.caseRef } : {}),
+                          caseRef: todo.caseRef,
                         },
                       }
                     : {}),
@@ -2265,7 +2265,7 @@ function builtinParameters(tool: ConnectorTool) {
             key: Type.String({ minLength: 1, maxLength: 200 }),
             title: Type.String({ minLength: 1, maxLength: 300 }),
             steps: Type.String({ minLength: 1, maxLength: 4000 }),
-            why: Type.Optional(Type.String({ minLength: 1, maxLength: 600 })),
+            why: Type.String({ minLength: 1, maxLength: 600 }),
             blocks: Type.Optional(
               Type.Array(
                 Type.Union([

@@ -139,6 +139,11 @@ export async function resumeMaintenanceRun(
   return resumed.count === 1;
 }
 
+/** The pause state; a missing row throws and is never read as resumed. */
+export interface MaintenanceStatusStore {
+  status(): Promise<MaintenanceState>;
+}
+
 /** Trusted server-side store; operatorId MUST come from the authenticated session.
  * No tool/model caller may supply operatorId or invoke this as an approval bypass.
  * Caller must still enforce its existing authentication and CSRF protections.

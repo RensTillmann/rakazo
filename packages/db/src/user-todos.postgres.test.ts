@@ -8,7 +8,7 @@ import {
   type UserTodo,
 } from "@rakazo/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { NO_CASE_COORDINATION } from "./case-coordinators.js";
+import { caseCoordinationFromEnv } from "./case-coordinators.js";
 import type { Pool, PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
 import { answerRunInput } from "./events.js";
@@ -24,6 +24,9 @@ import {
   UserTodoConflictError,
 } from "./user-todo-actions.js";
 import { listUserTodos, listUserTodosForCase } from "./user-todos.js";
+
+/** No coordinators configured: to-do checks go to the bot that asked. */
+const noCoordinators = caseCoordinationFromEnv({});
 
 // Fully migrated disposable local database only (VERIFY_DATABASE + DATABASE_URL).
 const enabled = process.env.VERIFY_DATABASE && process.env.DATABASE_URL;
@@ -224,7 +227,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         prisma,
         actor,
         { todoId: todo.id, revision: todo.revision },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       );
       return succeeded(
         await reportUserTodo(
@@ -236,7 +239,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
             outcome: "verified",
             evidence: "elena-bot has Write on acme/site",
           },
-          NO_CASE_COORDINATION,
+          noCoordinators,
         ),
       );
     }
@@ -304,7 +307,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         todoId: first.id,
         revision: first.revision,
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     const reported = await reportUserTodo(
       f.prisma,
@@ -316,7 +319,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         evidence: "elena-bot is not a collaborator yet",
         remainingStep: "Invite elena-bot with Write role",
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     expect(reported).toMatchObject({ todo: { status: "remaining" } });
     expect(checking.todo.status).toBe("checking");
@@ -344,7 +347,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       f.prisma,
       f.actor,
       { todoId: first.id, revision: first.revision },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     await reportUserTodo(
       f.prisma,
@@ -355,7 +358,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         outcome: "verified",
         evidence: "elena-bot has Write on acme/site",
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
 
     const changed = await f.chooseTodo({
@@ -381,13 +384,13 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         f.prisma,
         f.actor,
         { todoId: todo.id, revision: todo.revision },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
       requestUserTodoCheck(
         f.prisma,
         f.actor,
         { todoId: todo.id, revision: todo.revision },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
     ]);
     const fulfilled = results.filter((result) => result.status === "fulfilled");
@@ -430,7 +433,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
           todoId: todo.id,
           revision: todo.revision,
         },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       );
       expect(checking.status).toBe("checking");
       const [run] = await f.prisma.run.findMany({
@@ -444,7 +447,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       // The hourly sweep does not stack a second check on the held one, even after resume.
       await f.prisma.$executeRaw`UPDATE maintenance_state SET active = false WHERE id = 'default'`;
       expect(
-        await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+        await sweepUserTodoChecks(f.prisma, noCoordinators, {
           spaceId: f.id,
           now: inHours(5),
         }),
@@ -502,7 +505,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         todoId: todo.id,
         revision: todo.revision,
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
 
     expect(
@@ -515,7 +518,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
           outcome: "verified",
           evidence: "looks fine",
         },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
     ).toHaveProperty("error");
     expect(
@@ -529,7 +532,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
           evidence: "looks fine",
           expectedRevision: todo.revision,
         },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
     ).toHaveProperty("error");
     expect((await f.prisma.userTodo.findUniqueOrThrow({ where: { id: todo.id } })).status).toBe(
@@ -546,7 +549,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         evidence: "elena-bot has Write on acme/site",
         expectedRevision: checking.revision,
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     expect(accepted).toMatchObject({
       todo: { status: "verified", evidence: "elena-bot has Write on acme/site" },
@@ -560,7 +563,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       f.prisma,
       f.actor,
       { todoId: todo.id, revision: todo.revision },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     const unavailable = await reportUserTodo(
       f.prisma,
@@ -571,7 +574,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         outcome: "unavailable",
         evidence: "GitHub API timed out",
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     expect(unavailable).toMatchObject({
       todo: { status: "unavailable", statusDetail: "GitHub API timed out" },
@@ -585,7 +588,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         todoId: todo.id,
         revision: succeeded(unavailable).todo.revision,
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     const remaining = await reportUserTodo(
       f.prisma,
@@ -597,7 +600,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         evidence: "elena-bot has Read, not Write",
         remainingStep: "Change elena-bot's role to Write",
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     expect(again.todo.status).toBe("checking");
     expect(remaining).toMatchObject({
@@ -625,7 +628,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         f.prisma,
         f.actor,
         { todoId: todo.id, revision: todo.revision },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
     ).rejects.toBeInstanceOf(UserTodoConflictError);
 
@@ -669,7 +672,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     });
     const revision = succeeded(retired).todo.revision;
     await expect(
-      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision }, NO_CASE_COORDINATION),
+      requestUserTodoCheck(f.prisma, f.actor, { todoId: todo.id, revision }, noCoordinators),
     ).rejects.toBeInstanceOf(UserTodoConflictError);
     expect(
       await reportUserTodo(
@@ -681,7 +684,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
           outcome: "verified",
           evidence: "done",
         },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
     ).toHaveProperty("error");
     expect(
@@ -702,7 +705,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       f.prisma,
       f.actor,
       { todoId: todo.id, revision: todo.revision },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     const report = () =>
       reportUserTodo(
@@ -714,7 +717,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
           outcome: "verified",
           evidence: "elena-bot has Write on acme/site",
         },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       );
     const results = await Promise.all([report(), report()]);
     expect(results.filter((result) => "todo" in result)).toHaveLength(1);
@@ -896,11 +899,9 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const f = await fixture();
     const { access, badge } = await f.chooseBoth("all");
     // Not an hour old yet: nothing is due.
-    expect(await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, { spaceId: f.id })).toEqual(
-      [],
-    );
+    expect(await sweepUserTodoChecks(f.prisma, noCoordinators, { spaceId: f.id })).toEqual([]);
 
-    const started = await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+    const started = await sweepUserTodoChecks(f.prisma, noCoordinators, {
       spaceId: f.id,
       now: inHours(1.1),
     });
@@ -924,7 +925,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     expect(run!.clientNonce).toBe(`todo-check:${access.id}:${checking.revision}`);
     // The same hour does not start a second check.
     expect(
-      await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+      await sweepUserTodoChecks(f.prisma, noCoordinators, {
         spaceId: f.id,
         now: inHours(1.2),
       }),
@@ -943,7 +944,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
           evidence: "Couldn't check: needs a command that may change something (gh api -X POST).",
           expectedRevision: checking.revision,
         },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
     ).toMatchObject({ todo: { status: "unavailable" } });
   });
@@ -952,12 +953,12 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
     const results = await Promise.allSettled([
-      sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, { spaceId: f.id, now: inHours(2) }),
+      sweepUserTodoChecks(f.prisma, noCoordinators, { spaceId: f.id, now: inHours(2) }),
       requestUserTodoCheck(
         f.prisma,
         f.actor,
         { todoId: todo.id, revision: todo.revision },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
     ]);
     const swept = results[0].status === "fulfilled" ? results[0].value.length : 0;
@@ -973,7 +974,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       f.prisma,
       f.actor,
       { todoId: todo.id, revision: row.revision },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     const report = () =>
       reportUserTodo(
@@ -985,7 +986,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
           outcome: "verified",
           evidence: "elena-bot has Write on acme/site",
         },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       );
     const reports = await Promise.all([report(), report()]);
     expect(reports.filter((result) => "todo" in result)).toHaveLength(1);
@@ -996,7 +997,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     const f = await fixture();
     const todo = await f.chooseTodo();
     expect(
-      await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+      await sweepUserTodoChecks(f.prisma, noCoordinators, {
         spaceId: f.id,
         now: inHours(1.5),
       }),
@@ -1009,7 +1010,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
       });
     await failRuns();
     expect(
-      await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, { spaceId: f.id, now: inHours(3) }),
+      await sweepUserTodoChecks(f.prisma, noCoordinators, { spaceId: f.id, now: inHours(3) }),
     ).toHaveLength(1);
     const unavailable = await reportUserTodo(
       f.prisma,
@@ -1020,7 +1021,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         outcome: "unavailable",
         evidence: "No GitHub read tool in this run",
       },
-      NO_CASE_COORDINATION,
+      noCoordinators,
     );
     expect(unavailable).toMatchObject({
       todo: { id: todo.id, status: "unavailable", statusDetail: "No GitHub read tool in this run" },
@@ -1028,7 +1029,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     });
     await failRuns();
     // Retried on the next hour, still the same to-do and still not done.
-    const retried = await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+    const retried = await sweepUserTodoChecks(f.prisma, noCoordinators, {
       spaceId: f.id,
       now: inHours(4.5),
     });
@@ -1044,7 +1045,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     await f.prisma.$executeRaw`UPDATE maintenance_state SET active = true WHERE id = 'default'`;
     try {
       expect(
-        await sweepUserTodoChecks(f.prisma, NO_CASE_COORDINATION, {
+        await sweepUserTodoChecks(f.prisma, noCoordinators, {
           spaceId: f.id,
           now: inHours(2),
         }),
@@ -1158,7 +1159,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         f.prisma,
         f.actor,
         { todoId: access.id, revision: access.revision },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
       retireUserTodosForCase(f.prisma, f.actor, { caseRef: 383, reason }),
     ]);
@@ -1179,7 +1180,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
           outcome: "verified",
           evidence: "elena-bot has Write",
         },
-        NO_CASE_COORDINATION,
+        noCoordinators,
       ),
     ).toHaveProperty("error");
     expect(await f.releases()).toHaveLength(0);

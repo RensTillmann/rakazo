@@ -185,6 +185,7 @@ import type {
   BoardEvents,
   Board as BoardRow,
   CaseCoordination,
+  MaintenanceStatusStore,
   PrismaClient,
   ThreadEvents,
   UserTodoActionResult,
@@ -232,7 +233,6 @@ import {
   listUserTodosForCase,
   lockOwnedGroup,
   modelCredentialProviderFilter,
-  NO_CASE_COORDINATION,
   newestModelCredentialOrder,
   newestVoiceCredentialOrder,
   Prisma,
@@ -259,7 +259,6 @@ import {
   touchGroupUpdatedAt,
   UserTodoConflictError,
   UserTodoNotFoundError,
-  userTodoChecksHeld,
 } from "@rakazo/db";
 import { enrichLogContext, getLogger } from "@rakazo/logging";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
@@ -599,6 +598,10 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  /** Fleet: who coordinates cases; runs Done — check now for case to-dos. */
+  caseCoordination: CaseCoordination;
+  /** The global pause's state; null without a database pool, which is never read as resumed. */
+  maintenance: MaintenanceStatusStore | null;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
   events: ThreadEvents;
@@ -664,8 +667,6 @@ export interface RouterDeps {
     mcpAllowPrivateEndpoint?: boolean;
     /** `RAKAZO_FLAG_BOT`: bot (name or id) that receives flagged messages; unset turns it off. */
     flagBot?: string;
-    /** Who coordinates cases: runs Done — check now for case to-dos. Unset: the asking bot. */
-    caseCoordination?: CaseCoordination;
     /** `RAKAZO_FLAG_LABEL`: menu label for flagging a message. */
     flagLabel?: string;
     /** `RAKAZO_CASE_LINK_URL`: URL with `{n}` that "case 174" in messages links to; unset = off. */
@@ -6491,7 +6492,13 @@ export function createRouter(deps: RouterDeps) {
     todos: {
       list: authed.todos.list.handler(async ({ context }) => ({
         todos: await listUserTodos(deps.prisma, context.actor),
-        checksHeld: await userTodoChecksHeld(deps.prisma),
+        // A missing or unreadable pause state is never treated as resumed.
+        checksHeld: deps.maintenance
+          ? await deps.maintenance.status().then(
+              (state) => state.active,
+              () => true,
+            )
+          : true,
       })),
       check: authed.todos.check.handler(({ context, input }) =>
         runUserTodoAction(deps, () =>
@@ -6499,7 +6506,7 @@ export function createRouter(deps: RouterDeps) {
             deps.prisma,
             context.actor,
             input,
-            deps.env.caseCoordination ?? NO_CASE_COORDINATION,
+            deps.caseCoordination,
           ),
         ),
       ),

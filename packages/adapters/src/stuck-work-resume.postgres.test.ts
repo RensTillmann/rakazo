@@ -4,7 +4,7 @@ import type { MessageBlock } from "@rakazo/contracts";
 import type { PrismaClient } from "@rakazo/db";
 import { createDb, createThreadMessage } from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { reconcileStuckWork } from "./stuck-work.js";
+import { databaseStuckWorkHolds, reconcileStuckWork } from "./stuck-work.js";
 
 // Fully migrated disposable local database only (VERIFY_DATABASE + DATABASE_URL).
 const describePostgres =
@@ -104,7 +104,14 @@ describePostgres("stuck-work expiry around a resume (PostgreSQL)", () => {
     enqueue: async () => undefined,
     cancel: async () => undefined,
   } as unknown as JobPublisher;
-  const sweep = () => reconcileStuckWork({ prisma, jobs, now: new Date(), batchSize: 1000 });
+  const sweep = () =>
+    reconcileStuckWork({
+      prisma,
+      jobs,
+      holds: databaseStuckWorkHolds(prisma),
+      now: new Date(),
+      batchSize: 1000,
+    });
   const status = async (id: string) =>
     (await prisma.run.findUniqueOrThrow({ where: { id } })).status;
 

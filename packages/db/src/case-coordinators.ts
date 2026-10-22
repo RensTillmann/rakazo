@@ -9,11 +9,6 @@ export interface CaseCoordination {
   fleetCoordinator: string | null;
 }
 
-export const NO_CASE_COORDINATION: CaseCoordination = {
-  caseCoordinators: [],
-  fleetCoordinator: null,
-};
-
 export function caseCoordinationFromEnv(env: Record<string, string | undefined>): CaseCoordination {
   return {
     caseCoordinators: (env.RAKAZO_CASE_COORDINATOR_BOTS ?? "")

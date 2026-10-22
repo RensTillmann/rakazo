@@ -147,7 +147,7 @@ A question card can hand manual steps to the user. `ask_user` takes `prerequisit
 `{ key, title, steps, why, blocks?, verification: "automatic" | "manual" }`, keys unique on the card;
 `why` at most 600 characters; `blocks` up to 10 other cases or jobs that truly depend on the item, such
 as "Case 142" or "#144", never the asking bot's own waiting work), `option` (the exact label of the
-option that means "I'll do it"), `release` (`each` or `all`, default `all`) and `priority` (`p0`–`p3`).
+option that means "I'll do it"), `release` (`each` or `all`, default `all`) and `priority` (`p0`–`p3`), and requires `caseRef` (below).
 An option that is not one of the card's options, or an invalid item, is refused before the card is
 stored. The card stores the items as `prerequisites` and marks that option `todo: true`.
 
@@ -218,8 +218,8 @@ the caller's space and own to-dos. Table `user_todos`, migration `20261021200000
 
 ### Link to the tracker case
 
-A card's to-dos belong to their tracker case by number: `ask_user` takes `caseRef` (the issue number)
-for the whole set, and each item's `blocks` may name tracker issues as `{ issue, label? }` (free text
+A card's to-dos belong to their tracker case by number: `ask_user` requires `caseRef` (the issue
+number) for every new to-do set, and refuses a set without it ("add caseRef: …"); each item's `blocks` may name tracker issues as `{ issue, label? }` (free text
 is kept for display only). `user_todos.caseRef` stores it; migration `20261022090000_user_todo_case_ref`
 backfilled it only where the card question started exactly "Case <n> · " or "URGENT · Case <n> · ",
 and left every other to-do unlinked (null), never guessed. The panel's "Case <n>" chip links to the
@@ -246,7 +246,14 @@ A due to-do goes to `checking` through the same compare-and-set as Done — chec
 (`RAKAZO_CASE_COORDINATOR_BOTS`, comma-separated names or ids, first is the default; read once at
 startup and matched by id, else by name, the same way for recovery items): the bot that
 asked when it is one of them (only Josy, or Elena for fleet cases, ask Rens cards), the default one
-for a case card another bot asked, and the asking bot when there is no case. The run is
+for a case card another bot asked, and the asking bot when there is no case.
+
+Known limit: Rakazo cannot see tracker labels, so it cannot tell a fleet case from any other. The rule
+"Elena for fleet cases" holds only because only the coordinators ask Rens cards: a to-do Elena asked
+is checked by Elena. If a worker bot ever asks a card for a fleet case, its to-do is checked by the
+default coordinator (Josy), not Elena.
+
+The run is
 context-bounded and quiet: its prompt carries only the to-do, why it is needed, its steps and its last
 result, never the conversation; it posts nothing in the chat
 and cannot ask, message or call the user. It is read-only: any action that would change something, or

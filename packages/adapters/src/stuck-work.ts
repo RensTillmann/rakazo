@@ -26,6 +26,22 @@ import { ExpoPushProvider, ExpoPushUncertainError, type ExpoPushDelivery } from 
 
 type StuckCursor = { at: Date; id: string };
 
+/** What keeps stuck work from expiring: the global pause's spans and the user's open cards. */
+export interface StuckWorkHolds {
+  /** Every stretch the global pause held work; that time is not stuck time. */
+  pauses(): Promise<MaintenancePauseSpan[]>;
+  /** Of these waiting runs, the ones whose card is still open. */
+  waitingOnOpenCards(runIds: string[]): Promise<Set<string>>;
+}
+
+/** The holds as the database records them: the maintenance audit and the runs' open cards. */
+export function databaseStuckWorkHolds(prisma: PrismaClient): StuckWorkHolds {
+  return {
+    pauses: () => loadMaintenancePauseSpans(prisma),
+    waitingOnOpenCards: (runIds) => runsWaitingOnOpenCards(prisma, runIds),
+  };
+}
+
 type StuckCandidate = {
   id: string;
   status: StuckWorkStatus;
@@ -60,6 +76,7 @@ export async function reconcileStuckWork(deps: {
   jobs: JobPublisher;
   events?: ThreadEvents;
   notifications?: NotificationProvider;
+  holds: StuckWorkHolds;
   now: Date;
   batchSize: number;
   cursor?: StuckCursor;
@@ -98,14 +115,13 @@ export async function reconcileStuckWork(deps: {
   });
 
   // Time the global pause held the work is not stuck time, so resuming never expires it at once.
-  const pauses = runs.length ? await loadMaintenancePauseSpans(deps.prisma) : [];
+  const pauses = runs.length ? await deps.holds.pauses() : [];
   const due = runs.flatMap((run) => {
     const candidate = readyStuckRun(run, deps.now, pauses);
     return candidate ? [candidate] : [];
   });
   // A run waiting on a card waits for the user's answer, however long: reminded, never expired.
-  const onCards = await runsWaitingOnOpenCards(
-    deps.prisma,
+  const onCards = await deps.holds.waitingOnOpenCards(
     due.filter((run) => run.status === "waiting_input").map((run) => run.id),
   );
   const notices = due.length
@@ -205,7 +221,6 @@ function pendingClaimFresh(payload: unknown, updatedAt: Date, now: Date): boolea
   const age = now.getTime() - claimedAt;
   return age >= 0 && age < STUCK_NOTICE_CLAIM_TTL_MS;
 }
-
 
 async function remindStuckRun(
   deps: {

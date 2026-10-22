@@ -3,8 +3,11 @@ import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CaseCoordination } from "./case-coordinators.js";
-import { NO_CASE_COORDINATION } from "./case-coordinators.js";
+import { caseCoordinationFromEnv } from "./case-coordinators.js";
 import { createMaintenanceRecoveryStore } from "./maintenance-recovery.js";
+
+/** No coordinators configured: to-do checks go to the bot that asked. */
+const noCoordinators = caseCoordinationFromEnv({});
 
 // Opt in only with a dedicated disposable LOCAL test database.
 const databaseUrl = process.env.MAINTENANCE_TEST_DATABASE_URL;
@@ -129,7 +132,7 @@ suite("maintenance recovery against PostgreSQL", () => {
     `);
   }
 
-  const byId = async (operatorId = "operator", coordination = NO_CASE_COORDINATION) =>
+  const byId = async (operatorId = "operator", coordination = noCoordinators) =>
     new Map(
       (
         await createMaintenanceRecoveryStore(pool, coordination).recoveryForOperator(operatorId)
@@ -229,7 +232,7 @@ suite("maintenance recovery against PostgreSQL", () => {
 
   it("settles from evidence once, records provenance, and replays the same request", async () => {
     await seedQ35Records();
-    const store = createMaintenanceRecoveryStore(pool, NO_CASE_COORDINATION);
+    const store = createMaintenanceRecoveryStore(pool, noCoordinators);
     const attempt = {
       requestId: "settle-attempt",
       basis: "evidence",
@@ -296,7 +299,7 @@ suite("maintenance recovery against PostgreSQL", () => {
 
   it("preserves a real outcome that lands first and lets only one competing settlement win", async () => {
     await seedQ35Records();
-    const store = createMaintenanceRecoveryStore(pool, NO_CASE_COORDINATION);
+    const store = createMaintenanceRecoveryStore(pool, noCoordinators);
     await pool.query(
       `UPDATE "external_effects" SET "status" = 'completed', "result" = '{"ok": true}' WHERE "id" = 'open-path'`,
     );
@@ -337,7 +340,7 @@ suite("maintenance recovery against PostgreSQL", () => {
       INSERT INTO "runs" ("id", "botId", "status", "leaseFence") VALUES ('expired', 'jill', 'failed', 1);
       INSERT INTO "attempts" ("id", "runId", "fence", "status") VALUES ('lonely', 'expired', 1, 'running');
     `);
-    const store = createMaintenanceRecoveryStore(pool, NO_CASE_COORDINATION);
+    const store = createMaintenanceRecoveryStore(pool, noCoordinators);
     expect((await byId()).get("lonely")).toMatchObject({ state: "unresolved", proposed: null });
     expect(
       await store.settleRecovery("operator", {

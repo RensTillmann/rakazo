@@ -1,6 +1,7 @@
 import type { BackgroundJob, JobPublisher } from "@rakazo/adapter-kit";
 import { stuckWorkStatusMessages } from "@rakazo/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
+import { caseCoordinationFromEnv } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import {
@@ -9,6 +10,9 @@ import {
   type ReconciliationLeadership,
 } from "./job-reconciler.js";
 import { loopGuardStopText } from "./tool-loop.js";
+
+/** No coordinators configured: to-do checks go to the bot that asked. */
+const noCoordinators = caseCoordinationFromEnv({});
 
 vi.mock("./bot-messages.js", () => ({ returnBotMessageOutcome: vi.fn() }));
 
@@ -25,7 +29,8 @@ function publisher() {
 function maintenanceTransaction(state = { active: false }) {
   return {
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({ $queryRaw: async () => [{ active: state.active, revision: 0 }] })),
+      fn({ $queryRaw: async () => [{ active: state.active, revision: 0 }] }),
+    ),
     externalEffect: {
       updateMany: vi.fn(async () => ({ count: 0 })),
       findMany: vi.fn(async () => []),
@@ -68,53 +73,80 @@ describe("createJobReconciler", () => {
     const prisma = fakePrisma(
       [{ id: "held-run", updatedAt: new Date() }],
       [{ id: "held-routine", nextRunAt: scheduledFor }],
-      [{
-        id: "computer-1", controlBotId: "bot-1", controlLeaseId: "lease-1",
-        controlLeaseExpiresAt: new Date(), updatedAt: new Date(),
-      }],
+      [
+        {
+          id: "computer-1",
+          controlBotId: "bot-1",
+          controlLeaseId: "lease-1",
+          controlLeaseExpiresAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
     );
     Object.assign(prisma, maintenanceTransaction(state));
     const { jobs, enqueue } = publisher();
     const reconcileMaintenanceRuns = vi.fn(async () => undefined);
     const reconcileCloudAgents = vi.fn(async () => undefined);
     await createJobReconciler({
-      prisma, jobs, reconcileMaintenanceRuns, reconcileCloudAgents,
+      caseCoordination: noCoordinators,
+      prisma,
+      jobs,
+      reconcileMaintenanceRuns,
+      reconcileCloudAgents,
     }).reconcileOnce();
-    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ name: "computer.control-expire" }));
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "computer.control-expire" }),
+    );
     expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "run.continue" }));
     expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "routine.wakeup" }));
-    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "messaging.deliver" }));
+    expect(enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: "messaging.deliver" }),
+    );
     expect(reconcileMaintenanceRuns).toHaveBeenCalledOnce();
     expect(reconcileCloudAgents).toHaveBeenCalledOnce();
     // A new reconciler represents a process restart; no local pause flag is needed.
     enqueue.mockClear();
-    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs }).reconcileOnce();
     expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ name: "run.continue" }));
     state.active = false;
-    await createJobReconciler({ prisma, jobs }).reconcileOnce();
-    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      name: "run.continue", payload: { runId: "held-run" }, keepExisting: true,
-    }));
-    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      name: "routine.wakeup",
-      payload: { routineId: "held-routine", scheduledFor: scheduledFor.toISOString() },
-    }));
+    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs }).reconcileOnce();
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "run.continue",
+        payload: { runId: "held-run" },
+        keepExisting: true,
+      }),
+    );
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "routine.wakeup",
+        payload: { routineId: "held-routine", scheduledFor: scheduledFor.toISOString() },
+      }),
+    );
   });
 
   it("does not create retry jobs for in-flight or uncertain routine checks", async () => {
     const due = new Date();
-    const prisma = fakePrisma([], [
-      ...["executing", "uncertain"].map((status) => ({
-        id: status, nextRunAt: due,
-        watchState: { maintenanceCheck: {
-          id: `${status}-check`, status, startedAt: new Date(0).toISOString(),
-          scheduledAt: due.toISOString(),
-        } },
-      })),
-      { id: "ordinary", nextRunAt: due },
-    ]);
+    const prisma = fakePrisma(
+      [],
+      [
+        ...["executing", "uncertain"].map((status) => ({
+          id: status,
+          nextRunAt: due,
+          watchState: {
+            maintenanceCheck: {
+              id: `${status}-check`,
+              status,
+              startedAt: new Date(0).toISOString(),
+              scheduledAt: due.toISOString(),
+            },
+          },
+        })),
+        { id: "ordinary", nextRunAt: due },
+      ],
+    );
     const { jobs, enqueue } = publisher();
-    const reconciler = createJobReconciler({ prisma, jobs });
+    const reconciler = createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs });
     await reconciler.reconcileOnce();
     await reconciler.reconcileOnce();
     expect(enqueue.mock.calls.map(([job]) => job.payload)).toEqual([
@@ -134,6 +166,7 @@ describe("createJobReconciler", () => {
     });
     const reconcileRoutineRetryNotices = vi.fn(async () => undefined);
     await createJobReconciler({
+      caseCoordination: noCoordinators,
       prisma,
       jobs,
       reconcileRoutineRetryNotices,
@@ -154,7 +187,7 @@ describe("createJobReconciler", () => {
     vi.mocked(prisma.messagingOutbound.findFirst).mockResolvedValue({ id: "outbound-1" } as never);
     const { jobs, enqueue } = publisher();
 
-    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs }).reconcileOnce();
 
     expect(prisma.messagingOutbound.findFirst).toHaveBeenCalledWith({
       where: {
@@ -178,7 +211,7 @@ describe("createJobReconciler", () => {
       .mockResolvedValueOnce([{ id: "run-unmirrored" }] as never);
     const { jobs, enqueue } = publisher();
 
-    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs }).reconcileOnce();
 
     expect(prisma.run.findMany).toHaveBeenCalledWith({
       where: { trigger: "messaging", status: "completed", messagingMirroredAt: null },
@@ -210,7 +243,7 @@ describe("createJobReconciler", () => {
       ],
     );
     const { jobs, enqueue } = publisher();
-    const reconciler = createJobReconciler({ prisma, jobs });
+    const reconciler = createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs });
 
     await reconciler.reconcileOnce();
 
@@ -267,7 +300,7 @@ describe("createJobReconciler", () => {
     );
     const { jobs, enqueue } = publisher();
 
-    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs }).reconcileOnce();
 
     expect(enqueue).toHaveBeenCalledWith({
       name: "computer.control-expire",
@@ -320,7 +353,10 @@ describe("createJobReconciler", () => {
       messagingOutbound: outboundModel(),
     } as unknown as PrismaClient;
     const { jobs, enqueue } = publisher();
-    const reconciler = createJobReconciler({ prisma, jobs }, { batchSize: 2 });
+    const reconciler = createJobReconciler(
+      { caseCoordination: noCoordinators, prisma, jobs },
+      { batchSize: 2 },
+    );
 
     await reconciler.reconcileOnce();
     await reconciler.reconcileOnce();
@@ -387,7 +423,10 @@ describe("createJobReconciler", () => {
       messagingOutbound: outboundModel(),
     } as unknown as PrismaClient;
     const { jobs, enqueue } = publisher();
-    const reconciler = createJobReconciler({ prisma, jobs }, { batchSize: 2 });
+    const reconciler = createJobReconciler(
+      { caseCoordination: noCoordinators, prisma, jobs },
+      { batchSize: 2 },
+    );
 
     await reconciler.reconcileOnce();
     await reconciler.reconcileOnce();
@@ -443,7 +482,12 @@ describe("createJobReconciler", () => {
       release: vi.fn(async () => undefined),
     };
     const { jobs, enqueue } = publisher();
-    const reconciler = createJobReconciler({ prisma, jobs, leadership });
+    const reconciler = createJobReconciler({
+      caseCoordination: noCoordinators,
+      prisma,
+      jobs,
+      leadership,
+    });
 
     await reconciler.reconcileOnce();
     await reconciler.stop();
@@ -493,7 +537,10 @@ describe("createJobReconciler", () => {
     const events = { notify: vi.fn() } as unknown as ThreadEvents;
     vi.mocked(returnBotMessageOutcome).mockResolvedValue(true).mockResolvedValueOnce(false);
 
-    const reconciler = createJobReconciler({ prisma, jobs, events }, { batchSize: 1 });
+    const reconciler = createJobReconciler(
+      { caseCoordination: noCoordinators, prisma, jobs, events },
+      { batchSize: 1 },
+    );
 
     await reconciler.reconcileOnce();
     await reconciler.reconcileOnce();
@@ -570,7 +617,10 @@ describe("createJobReconciler", () => {
     const events = { notify: vi.fn() } as unknown as ThreadEvents;
     vi.mocked(returnBotMessageOutcome).mockResolvedValue(true);
 
-    const reconciler = createJobReconciler({ prisma, jobs, events }, { batchSize: 1 });
+    const reconciler = createJobReconciler(
+      { caseCoordination: noCoordinators, prisma, jobs, events },
+      { batchSize: 1 },
+    );
     await reconciler.reconcileOnce();
 
     expect(returnBotMessageOutcome).toHaveBeenCalledWith(
@@ -618,7 +668,12 @@ describe("createJobReconciler", () => {
     const events = { notify: vi.fn() } as unknown as ThreadEvents;
     vi.mocked(returnBotMessageOutcome).mockResolvedValue(true);
 
-    await createJobReconciler({ prisma, jobs, events }).reconcileOnce();
+    await createJobReconciler({
+      caseCoordination: noCoordinators,
+      prisma,
+      jobs,
+      events,
+    }).reconcileOnce();
 
     expect(returnBotMessageOutcome).toHaveBeenCalledWith(
       { prisma, jobs, events },
@@ -670,7 +725,10 @@ describe("createJobReconciler", () => {
     const events = { notify: vi.fn() } as unknown as ThreadEvents;
     vi.mocked(returnBotMessageOutcome).mockResolvedValue(true);
 
-    const reconciler = createJobReconciler({ prisma, jobs, events }, { batchSize: 1 });
+    const reconciler = createJobReconciler(
+      { caseCoordination: noCoordinators, prisma, jobs, events },
+      { batchSize: 1 },
+    );
     await reconciler.reconcileOnce();
 
     expect(returnBotMessageOutcome).toHaveBeenCalledWith(
@@ -719,7 +777,10 @@ describe("createJobReconciler", () => {
     const events = { notify: vi.fn() } as unknown as ThreadEvents;
     vi.mocked(returnBotMessageOutcome).mockResolvedValue(true);
 
-    const reconciler = createJobReconciler({ prisma, jobs, events }, { batchSize: 1 });
+    const reconciler = createJobReconciler(
+      { caseCoordination: noCoordinators, prisma, jobs, events },
+      { batchSize: 1 },
+    );
     await reconciler.reconcileOnce();
 
     expect(returnBotMessageOutcome).toHaveBeenCalledWith(
@@ -761,7 +822,12 @@ describe("createJobReconciler", () => {
     const events = { notify: vi.fn() } as unknown as ThreadEvents;
     vi.mocked(returnBotMessageOutcome).mockResolvedValue(true);
 
-    await createJobReconciler({ prisma, jobs, events }).reconcileOnce();
+    await createJobReconciler({
+      caseCoordination: noCoordinators,
+      prisma,
+      jobs,
+      events,
+    }).reconcileOnce();
 
     expect(returnBotMessageOutcome).toHaveBeenCalledWith(
       { prisma, jobs, events },

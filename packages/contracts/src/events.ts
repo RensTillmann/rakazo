@@ -212,7 +212,10 @@ export const AskPrerequisitesInput = z.object({
   option: z.string().trim().min(1).max(80),
   release: PrerequisiteRelease.default("all"),
   priority: PrerequisitePriority.optional(),
-  caseRef: TrackerIssueNumber.optional(),
+  /** Required: Fleet to-dos always belong to a tracker case, whose end retires them (ADR Q12). */
+  caseRef: z
+    .number({ error: "add caseRef: the tracker case (issue number) these to-dos belong to" })
+    .pipe(TrackerIssueNumber),
 });
 export type AskPrerequisitesInput = z.infer<typeof AskPrerequisitesInput>;
 

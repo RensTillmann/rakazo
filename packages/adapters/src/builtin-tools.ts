@@ -560,7 +560,7 @@ export const builtinAgentTools: ConnectorTool[] = [
           type: "integer",
           minimum: 1,
           description:
-            "With `prerequisites`: the tracker case (issue number) these to-dos belong to. When the case ends, they are retired.",
+            "Required with `prerequisites`: the tracker case (issue number) these to-dos belong to; a to-do set without it is refused. When the case ends, they are retired.",
         },
       },
       required: ["question", "options"],

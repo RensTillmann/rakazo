@@ -4,7 +4,6 @@ import type { MessageBlock } from "@rakazo/contracts";
 import { stuckWorkStatusMessages } from "@rakazo/core";
 import type { CaseCoordination, Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
-  NO_CASE_COORDINATION,
   reconcileLegacySourceBindings,
   retireEndedRunCards,
   retireInvalidatedApprovalCards,
@@ -20,7 +19,7 @@ import { ExpoPushProvider } from "./expo-push.js";
 import { reconcileBackgroundEffects } from "./history-compaction.js";
 import { reconcileMessagingOutbound } from "./messaging-delivery.js";
 import { routineWatchCheckOutstanding } from "./routine-watch.js";
-import { reconcileStuckWork } from "./stuck-work.js";
+import { databaseStuckWorkHolds, reconcileStuckWork } from "./stuck-work.js";
 import { isLoopGuardStopText } from "./tool-loop.js";
 import { isUserProgressClientNonce } from "./user-progress.js";
 
@@ -85,12 +84,9 @@ export async function reconcileRetiredApprovalCards(deps: {
 export async function reconcileUserTodoChecks(deps: {
   prisma: PrismaClient;
   jobs: JobPublisher;
-  caseCoordination?: CaseCoordination;
+  caseCoordination: CaseCoordination;
 }): Promise<number> {
-  const runIds = await sweepUserTodoChecks(
-    deps.prisma,
-    deps.caseCoordination ?? NO_CASE_COORDINATION,
-  );
+  const runIds = await sweepUserTodoChecks(deps.prisma, deps.caseCoordination);
   for (const runId of runIds) {
     await deps.jobs.enqueue(runContinueJob(runId)).catch((error: unknown) =>
       getLogger().error("to-do check wake", error),
@@ -176,7 +172,7 @@ export function createJobReconciler(
     notifications?: NotificationProvider;
     leadership?: ReconciliationLeadership;
     /** Fleet: who coordinates cases; case to-do checks go to them. */
-    caseCoordination?: CaseCoordination;
+    caseCoordination: CaseCoordination;
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileRoutineRetryNotices?: () => Promise<void>;
@@ -233,6 +229,7 @@ export function createJobReconciler(
           jobs: deps.jobs,
           events: deps.events,
           notifications: deps.notifications,
+          holds: databaseStuckWorkHolds(deps.prisma),
           now,
           batchSize,
           cursor: stuckCursor,

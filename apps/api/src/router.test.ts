@@ -5949,6 +5949,48 @@ describe("routine watch creation boundaries", () => {
   });
 });
 
+describe("to-dos list while the Fleet may be paused", () => {
+  async function list(maintenance: RouterDeps["maintenance"]) {
+    const deps = {
+      prisma: { userTodo: { findMany: vi.fn().mockResolvedValue([]) } },
+      maintenance,
+      env: {
+        defaultProvider: "fake",
+        defaultModel: "fake-model",
+        webOrigin: "http://127.0.0.1:5173",
+        screenProxySecret: "fake-test-secret",
+        sandboxProvider: "fake",
+      },
+      dataDir: "/tmp/rakazo-router-test",
+    } as unknown as RouterDeps;
+    const actor = { spaceId: "workspace-1", userId: "user-1", email: "user@rakazo.test" };
+    const { response } = await new RPCHandler(createRouter(deps)).handle(
+      new Request("http://127.0.0.1/rpc/todos/list", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ json: null }),
+      }),
+      { prefix: "/rpc", context: { actor } },
+    );
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { json: { checksHeld: boolean } }).json.checksHeld;
+  }
+
+  it("says checks are held only when the pause state reads as open, never when it is missing", async () => {
+    expect(await list({ status: async () => ({ active: false, revision: 3 }) })).toBe(false);
+    expect(await list({ status: async () => ({ active: true, revision: 4 }) })).toBe(true);
+    // A missing row makes the store throw; that, and no store at all, is never read as resumed.
+    expect(
+      await list({
+        status: async () => {
+          throw new Error("Maintenance state unavailable");
+        },
+      }),
+    ).toBe(true);
+    expect(await list(null)).toBe(true);
+  });
+});
+
 describe("to-dos by tracker case", () => {
   async function call(path: string, json: unknown, isDeploymentOwner: boolean) {
     const findMany = vi.fn().mockResolvedValue([]);

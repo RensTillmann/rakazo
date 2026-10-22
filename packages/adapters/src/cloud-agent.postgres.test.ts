@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, BackgroundJob, JobPublisher } from "@rakazo/adapter-kit";
-import { clearThread, createDb, type PrismaClient } from "@rakazo/db";
+import { caseCoordinationFromEnv, clearThread, createDb, type PrismaClient } from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
@@ -8,6 +8,9 @@ import { executeCloudAgentTool, reconcileCloudAgents } from "./cloud-agent-servi
 import { CursorCloudAgentProvider } from "./cursor-cloud-agent.js";
 import { createJobReconciler } from "./job-reconciler.js";
 import { CursorCloudAgentEmulator } from "./testing/cursor-cloud-agent-emulator.js";
+
+/** No coordinators configured: to-do checks go to the bot that asked. */
+const noCoordinators = caseCoordinationFromEnv({});
 
 function deferred() {
   let resolve!: () => void;
@@ -212,7 +215,7 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
       expect(await h.wakes()).toHaveLength(1);
     });
     const [wake] = await h.wakes();
-    await createJobReconciler({ prisma, jobs: h.deps.jobs }).reconcileOnce();
+    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs: h.deps.jobs }).reconcileOnce();
     expect(h.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ name: "run.continue", payload: { runId: wake!.id } }),
     );
@@ -294,7 +297,7 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
     expect(wake?.status).toBe("queued");
     h.enqueue.mockResolvedValue(undefined);
     h.enqueue.mockClear();
-    await createJobReconciler({ prisma, jobs: h.deps.jobs }).reconcileOnce();
+    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs: h.deps.jobs }).reconcileOnce();
     expect(h.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ name: "run.continue", payload: { runId: wake!.id } }),
     );

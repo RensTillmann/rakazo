@@ -220,30 +220,30 @@ describe("Pi choice asks", () => {
     );
   });
 
-  it("rejects a case ref that is not a tracker issue number", async () => {
-    for (const caseRef of ["383", 0, 3.5]) {
+  it("refuses a to-do set without a case, or with one that is not a tracker issue number", async () => {
+    for (const caseRef of ["383", 0, 3.5, undefined]) {
       fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Seoul", caseRef };
       const runtime = new PiAgentRuntime();
       await expect(async () => {
         for await (const _event of runtime.run(runRequest, runContext));
-      }).rejects.toThrow("ask_user prerequisites refused: caseRef");
+      }).rejects.toThrow(/^ask_user prerequisites refused: caseRef: .*caseRef \(required/);
     }
   });
 
   it("releases all items together unless told otherwise", async () => {
-    fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Seoul" };
+    fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Seoul", caseRef: 383 };
     const runtime = new PiAgentRuntime();
     const events: AgentRuntimeEvent[] = [];
 
     for await (const event of runtime.run(runRequest, runContext)) events.push(event);
 
     expect(events).toContainEqual(
-      expect.objectContaining({ prerequisites: { items: [seoul], release: "all" } }),
+      expect.objectContaining({ prerequisites: { items: [seoul], release: "all", caseRef: 383 } }),
     );
   });
 
   it("rejects a to-do option that is not one of the options", async () => {
-    fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Paris" };
+    fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Paris", caseRef: 383 };
     const runtime = new PiAgentRuntime();
     const events: AgentRuntimeEvent[] = [];
 
@@ -275,6 +275,7 @@ describe("Pi choice asks", () => {
         { ...badge, steps: "Collect the badge at reception." },
       ],
       option: "Seoul",
+      caseRef: 383,
     });
     expect(asked).toBe(false);
     expect(refusal).toContain('item "city-access:seoul" why:');
@@ -284,10 +285,14 @@ describe("Pi choice asks", () => {
   });
 
   it("refuses a blank why and accepts the same item once it has one", async () => {
-    const blank = await attempt({ prerequisites: [{ ...seoul, why: "   " }], option: "Seoul" });
+    const blank = await attempt({
+      prerequisites: [{ ...seoul, why: "   " }],
+      option: "Seoul",
+      caseRef: 383,
+    });
     expect(blank.asked).toBe(false);
     expect(blank.refusal).toContain('item "city-access:seoul" why:');
-    expect(await attempt({ prerequisites: [seoul], option: "Seoul" })).toEqual({
+    expect(await attempt({ prerequisites: [seoul], option: "Seoul", caseRef: 383 })).toEqual({
       refusal: "",
       asked: true,
     });
@@ -298,7 +303,7 @@ describe("Pi choice asks", () => {
       [seoul, { ...badge, key: seoul.key }],
       [{ ...seoul, steps: "" }],
     ]) {
-      const { refusal, asked } = await attempt({ prerequisites, option: "Seoul" });
+      const { refusal, asked } = await attempt({ prerequisites, option: "Seoul", caseRef: 383 });
       expect(asked).toBe(false);
       expect(refusal).toMatch(/^ask_user prerequisites refused: /);
     }

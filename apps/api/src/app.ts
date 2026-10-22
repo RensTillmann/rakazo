@@ -555,6 +555,8 @@ export async function createApp(
   reconciler?.start();
 
   const router = createRouter({
+    caseCoordination: env.caseCoordination,
+    maintenance: maintenance ?? null,
     cloudAgent,
     codexCatalog,
     prisma,
@@ -604,7 +606,6 @@ export async function createApp(
       integrationsCatalogUrl: env.integrationsCatalogUrl,
       mcpAllowPrivateEndpoint: env.mcpAllowPrivateEndpoint,
       flagBot: env.flagBot,
-      caseCoordination: env.caseCoordination,
       flagLabel: env.flagLabel,
       caseLinkUrl: env.caseLinkUrl,
       zendeskLinkUrl: env.zendeskLinkUrl,

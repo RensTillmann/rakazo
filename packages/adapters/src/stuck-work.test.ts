@@ -4,10 +4,21 @@ import path from "node:path";
 import type { JobPublisher, NotificationProvider } from "@rakazo/adapter-kit";
 import { STUCK_WORK_NOTICE, stuckWorkStatusMessage } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+import { caseCoordinationFromEnv } from "@rakazo/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { deletePushToken, ExpoPushProvider, savePushToken } from "./expo-push.js";
 import { createJobReconciler } from "./job-reconciler.js";
+import type { StuckWorkHolds } from "./stuck-work.js";
 import { reconcileStuckWork, STUCK_NOTICE_CLAIM_TTL_MS } from "./stuck-work.js";
+
+/** No pause on record and no open card: nothing holds the work. */
+const holds: StuckWorkHolds = {
+  pauses: async () => [],
+  waitingOnOpenCards: async () => new Set(),
+};
+
+/** No coordinators configured: to-do checks go to the bot that asked. */
+const noCoordinators = caseCoordinationFromEnv({});
 
 const now = new Date("2026-09-28T16:00:00.000Z");
 const dirs: string[] = [];
@@ -55,8 +66,6 @@ describe("reconcileStuckWork", () => {
   it("ignores a young queue and a row the scan cannot classify", async () => {
     const eventFindMany = vi.fn(async () => []);
     const prisma = {
-      maintenanceAudit: { findMany: vi.fn(async () => []) },
-      message: { findMany: vi.fn(async () => []) },
       run: {
         findMany: vi.fn(async () => [
           candidate("queued", 1),
@@ -67,7 +76,7 @@ describe("reconcileStuckWork", () => {
     } as unknown as PrismaClient;
     const { jobs, enqueue } = publisher();
 
-    await reconcileStuckWork({ prisma, jobs, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, now, batchSize: 100 });
 
     expect(eventFindMany).not.toHaveBeenCalled();
     expect(enqueue).not.toHaveBeenCalled();
@@ -80,20 +89,8 @@ describe("reconcileStuckWork", () => {
     const { jobs } = publisher();
     const { provider, send } = notifications();
 
-    await reconcileStuckWork({
-      prisma,
-      jobs,
-      notifications: provider,
-      now,
-      batchSize: 100,
-    });
-    await reconcileStuckWork({
-      prisma,
-      jobs,
-      notifications: provider,
-      now,
-      batchSize: 100,
-    });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith(
@@ -118,23 +115,33 @@ describe("reconcileStuckWork", () => {
     ]);
   });
 
-  it.each([undefined, "delivered", "uncertain", "cancelled"])("does not retry a reminder with persisted state %s", async (state) => {
-    const run = candidate("waiting_input", 5);
-    const stamps = [
-      {
-        runId: run.id,
-        payload: { notice: STUCK_WORK_NOTICE, updatedAt: run.updatedAt.toISOString(), state },
-      },
-    ];
-    const prisma = noticePrisma(run, stamps);
-    const { jobs } = publisher();
-    const { provider, send } = notifications();
+  it.each([undefined, "delivered", "uncertain", "cancelled"])(
+    "does not retry a reminder with persisted state %s",
+    async (state) => {
+      const run = candidate("waiting_input", 5);
+      const stamps = [
+        {
+          runId: run.id,
+          payload: { notice: STUCK_WORK_NOTICE, updatedAt: run.updatedAt.toISOString(), state },
+        },
+      ];
+      const prisma = noticePrisma(run, stamps);
+      const { jobs } = publisher();
+      const { provider, send } = notifications();
 
-    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+      await reconcileStuckWork({
+        holds,
+        prisma,
+        jobs,
+        notifications: provider,
+        now,
+        batchSize: 100,
+      });
 
-    expect(send).not.toHaveBeenCalled();
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-  });
+      expect(send).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
 
   it("does not stamp a skipped reminder, so enabling notices later still sends", async () => {
     const run = candidate("queued", 5);
@@ -144,14 +151,14 @@ describe("reconcileStuckWork", () => {
     const { jobs } = publisher();
     const { provider, send } = notifications();
 
-    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
 
     expect(stamps).toHaveLength(0);
     expect(send).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
 
     run.bot.notifyOnFinish = true;
-    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(stamps).toHaveLength(1);
@@ -166,7 +173,7 @@ describe("reconcileStuckWork", () => {
     const { jobs } = publisher();
     const push = new ExpoPushProvider(dataDir, prisma);
 
-    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: push, now, batchSize: 100 });
 
     expect(stamps).toHaveLength(0);
 
@@ -175,7 +182,7 @@ describe("reconcileStuckWork", () => {
       "fetch",
       vi.fn(async () => Response.json({ data: { status: "ok", id: "ticket" } })),
     );
-    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: push, now, batchSize: 100 });
 
     expect(stamps).toEqual([
       expect.objectContaining({
@@ -207,14 +214,14 @@ describe("reconcileStuckWork", () => {
       return registered;
     };
 
-    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: push, now, batchSize: 100 });
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(stamps).toHaveLength(0);
 
     await savePushToken(dataDir, run.userId, "ExponentPushToken[later]");
     push.hasPushRecipient = hasPushRecipient;
-    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: push, now, batchSize: 100 });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(stamps).toEqual([
@@ -237,7 +244,7 @@ describe("reconcileStuckWork", () => {
     const fetchMock = vi.fn(async () => Response.json({ data: { status: "ok", id: "ticket" } }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: push, now, batchSize: 100 });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(stamps).toHaveLength(0);
     expect(await prisma.externalEffect.findMany()).toEqual([
@@ -245,7 +252,7 @@ describe("reconcileStuckWork", () => {
     ]);
     maintenance.paused = false;
     await push.reconcile(true);
-    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: push, now, batchSize: 100 });
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(stamps).toEqual([
       expect.objectContaining({ payload: expect.objectContaining({ state: "delivered" }) }),
@@ -261,16 +268,22 @@ describe("reconcileStuckWork", () => {
     const { jobs } = publisher();
     const push = new ExpoPushProvider(dataDir, prisma);
     await savePushToken(dataDir, run.userId, "ExponentPushToken[test]");
-    const fetchMock = vi.fn(async () => { throw new Error("unknown push outcome"); });
+    const fetchMock = vi.fn(async () => {
+      throw new Error("unknown push outcome");
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    await reconcileStuckWork({ prisma, jobs, notifications: push, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: push, now, batchSize: 100 });
     expect(stamps).toEqual([
       expect.objectContaining({ payload: expect.objectContaining({ state: "uncertain" }) }),
     ]);
     await reconcileStuckWork({
-      prisma, jobs, notifications: push,
-      now: new Date(now.getTime() + STUCK_NOTICE_CLAIM_TTL_MS * 2), batchSize: 100,
+      holds,
+      prisma,
+      jobs,
+      notifications: push,
+      now: new Date(now.getTime() + STUCK_NOTICE_CLAIM_TTL_MS * 2),
+      batchSize: 100,
     });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
@@ -304,7 +317,7 @@ describe("reconcileStuckWork", () => {
     const { jobs } = publisher();
     const { provider, send } = notifications();
 
-    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(stamps).toEqual([
@@ -335,7 +348,7 @@ describe("reconcileStuckWork", () => {
     const { jobs } = publisher();
     const { provider, send } = notifications();
 
-    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
 
     expect(send).not.toHaveBeenCalled();
     expect(stamps).toEqual([pending]);
@@ -349,12 +362,12 @@ describe("reconcileStuckWork", () => {
     const { provider, send } = notifications();
     send.mockRejectedValueOnce(new Error("push down"));
 
-    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(stamps).toHaveLength(0);
 
-    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
 
     expect(send).toHaveBeenCalledTimes(2);
     expect(stamps).toEqual([
@@ -377,7 +390,7 @@ describe("reconcileStuckWork", () => {
     const { jobs } = publisher();
     const { provider, send } = notifications();
 
-    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, notifications: provider, now, batchSize: 100 });
 
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "help", title: "Ada is still queued" }),
@@ -390,7 +403,7 @@ describe("reconcileStuckWork", () => {
     const prisma = noticePrisma(run, []);
     const { jobs } = publisher();
 
-    await reconcileStuckWork({ prisma, jobs, now, batchSize: 100 });
+    await reconcileStuckWork({ holds, prisma, jobs, now, batchSize: 100 });
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -403,6 +416,7 @@ describe("reconcileStuckWork", () => {
     const notify = vi.fn(async () => undefined);
 
     const cursor = await reconcileStuckWork({
+      holds,
       prisma: client as unknown as PrismaClient,
       jobs,
       events: { notify } as unknown as ThreadEvents,
@@ -445,6 +459,7 @@ describe("reconcileStuckWork", () => {
       const { provider, send } = notifications();
 
       await reconcileStuckWork({
+        holds,
         prisma: client as unknown as PrismaClient,
         jobs,
         events: { notify: vi.fn(async () => undefined) } as unknown as ThreadEvents,
@@ -464,6 +479,7 @@ describe("reconcileStuckWork", () => {
     const { provider, send } = notifications();
 
     await reconcileStuckWork({
+      holds,
       prisma: client as unknown as PrismaClient,
       jobs,
       notifications: provider,
@@ -480,8 +496,6 @@ describe("reconcileStuckWork", () => {
     const second = { ...candidate("waiting_input", 5), id: "run-next-page" };
     const seen: unknown[] = [];
     const prisma = {
-      maintenanceAudit: { findMany: vi.fn(async () => []) },
-      message: { findMany: vi.fn(async () => []) },
       run: {
         findMany: vi.fn(async (args: { where?: { AND?: unknown[] } }) => {
           seen.push(args.where);
@@ -506,6 +520,7 @@ describe("reconcileStuckWork", () => {
     const { provider, send } = notifications();
 
     const cursor = await reconcileStuckWork({
+      holds,
       prisma,
       jobs,
       notifications: provider,
@@ -514,6 +529,7 @@ describe("reconcileStuckWork", () => {
     });
     expect(cursor).toEqual({ at: first.updatedAt, id: first.id });
     await reconcileStuckWork({
+      holds,
       prisma,
       jobs,
       notifications: provider,
@@ -538,8 +554,6 @@ describe("reconcileStuckWork", () => {
 
   it("continues the other scans when the stuck query fails", async () => {
     const prisma = {
-      maintenanceAudit: { findMany: vi.fn(async () => []) },
-      message: { findMany: vi.fn(async () => []) },
       $queryRaw: vi.fn(async () => [{ active: false, revision: 0 }]),
       $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
       run: {
@@ -554,7 +568,7 @@ describe("reconcileStuckWork", () => {
     } as unknown as PrismaClient;
     const { jobs } = publisher();
 
-    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs }).reconcileOnce();
 
     expect(prisma.routine.findMany).toHaveBeenCalled();
   });
@@ -591,16 +605,21 @@ function stampMatchesDelete(stamp: NoticeStamp, where: NoticeDeleteWhere | undef
 }
 
 function noticePrisma(
-  run: ReturnType<typeof candidate>, stamps: NoticeStamp[], maintenance = { paused: false },
+  run: ReturnType<typeof candidate>,
+  stamps: NoticeStamp[],
+  maintenance = { paused: false },
 ) {
   let nextId = 0;
   const effects: Array<{
-    id: string; idempotencyKey: string; kind: string; status: string; request: unknown;
-    createdAt: Date; updatedAt: Date;
+    id: string;
+    idempotencyKey: string;
+    kind: string;
+    status: string;
+    request: unknown;
+    createdAt: Date;
+    updatedAt: Date;
   }> = [];
   const prisma = {
-    maintenanceAudit: { findMany: vi.fn(async () => []) },
-    message: { findMany: vi.fn(async () => []) },
     run: {
       findMany: vi.fn(async () => [run]),
       findFirst: vi.fn(async () => ({ ...run, routine: null })),
@@ -612,32 +631,53 @@ function noticePrisma(
     },
     spaceMember: { findUnique: vi.fn(async () => ({ id: "member" })) },
     externalEffect: {
-      upsert: vi.fn(async ({ create }: {
-        create: { idempotencyKey: string; kind: string; status: string; request: unknown };
-      }) => {
-        let effect = effects.find((row) => row.idempotencyKey === create.idempotencyKey);
-        if (!effect) {
-          effect = { ...create, id: `push-${effects.length}`, createdAt: new Date(), updatedAt: new Date() };
-          effects.push(effect);
-        }
-        return { ...effect };
-      }),
-      findMany: vi.fn(async () => effects.filter((row) => row.status === "intended").map((row) => ({ ...row }))),
-      updateMany: vi.fn(async ({ where, data }: {
-        where: { id?: string; status: string | { in: string[] }; updatedAt?: { lt: Date } };
-        data: { status: string };
-      }) => {
-        let count = 0;
-        for (const row of effects) {
-          if (where.id && row.id !== where.id) continue;
-          if (typeof where.status === "string" ? row.status !== where.status : !where.status.in.includes(row.status)) continue;
-          if (where.updatedAt && row.updatedAt >= where.updatedAt.lt) continue;
-          row.status = data.status;
-          row.updatedAt = new Date();
-          count++;
-        }
-        return { count };
-      }),
+      upsert: vi.fn(
+        async ({
+          create,
+        }: {
+          create: { idempotencyKey: string; kind: string; status: string; request: unknown };
+        }) => {
+          let effect = effects.find((row) => row.idempotencyKey === create.idempotencyKey);
+          if (!effect) {
+            effect = {
+              ...create,
+              id: `push-${effects.length}`,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            effects.push(effect);
+          }
+          return { ...effect };
+        },
+      ),
+      findMany: vi.fn(async () =>
+        effects.filter((row) => row.status === "intended").map((row) => ({ ...row })),
+      ),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id?: string; status: string | { in: string[] }; updatedAt?: { lt: Date } };
+          data: { status: string };
+        }) => {
+          let count = 0;
+          for (const row of effects) {
+            if (where.id && row.id !== where.id) continue;
+            if (
+              typeof where.status === "string"
+                ? row.status !== where.status
+                : !where.status.in.includes(row.status)
+            )
+              continue;
+            if (where.updatedAt && row.updatedAt >= where.updatedAt.lt) continue;
+            row.status = data.status;
+            row.updatedAt = new Date();
+            count++;
+          }
+          return { count };
+        },
+      ),
     },
     event: {
       findMany: vi.fn(async () => stamps.map((stamp) => stamp)),
@@ -676,7 +716,6 @@ function noticePrisma(
 
 function expireClient(run: ReturnType<typeof candidate>, options?: { cancelled?: number }) {
   const client = {
-    maintenanceAudit: { findMany: vi.fn(async () => []) },
     run: {
       findMany: vi.fn(async () => [run]),
       updateMany: vi.fn(async () => ({ count: options?.cancelled ?? 1 })),

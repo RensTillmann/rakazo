@@ -139,7 +139,6 @@ import {
   isTooManyDatabaseConnections,
   latestSubscriptionLimitReading,
   loadRunHistoryMessages,
-  NO_CASE_COORDINATION,
   Prisma,
   parseComputerMode,
   readHistory,
@@ -2873,7 +2872,7 @@ function runtimeFallbackModel(runtime: AgentRuntime) {
 
 export interface ExecutorDeps {
   /** Fleet: who coordinates cases; a case coordinator may report the to-do checks it runs. */
-  caseCoordination?: CaseCoordination;
+  caseCoordination: CaseCoordination;
   maxUploadSizeBytes?: number;
   contextStrategy?: AgentContextStrategy;
   prisma: PrismaClient;
@@ -6061,7 +6060,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       evidence: `Couldn't check: ${TODO_CHECK_SHELL_REASON} (${refused}).`,
                       expectedRevision: target.revision,
                     },
-                    deps.caseCoordination ?? NO_CASE_COORDINATION,
+                    deps.caseCoordination,
                   );
                 }
                 return finish({
@@ -6514,7 +6513,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                           ? { remainingStep: String(args.remaining_step) }
                           : {}),
                       },
-                      deps.caseCoordination ?? NO_CASE_COORDINATION,
+                      deps.caseCoordination,
                     )
                   : { error: "outcome must be verified, remaining or unavailable." };
             if ("error" in result) return finish(result);
