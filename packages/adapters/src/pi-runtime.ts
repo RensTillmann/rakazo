@@ -42,6 +42,7 @@ import {
   AskSource,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   canonicalPiProviderId,
+  caseCardOptionsRefusal,
   FLEET_TOOL_NAMES,
   usableModelId,
 } from "@rakazo/contracts";
@@ -1601,6 +1602,13 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                 const options = Array.isArray(args.options)
                   ? args.options.map((option) => String(option).trim())
                   : [];
+                // D6: a case decision card offers real choices; the one rule lives in contracts.
+                const caseRefusal = caseCardOptionsRefusal(
+                  String(args.question ?? ""),
+                  options,
+                  args.prerequisites !== undefined,
+                );
+                if (caseRefusal !== null) throw new Error(caseRefusal);
                 if (
                   options.length < 2 ||
                   options.length > 4 ||

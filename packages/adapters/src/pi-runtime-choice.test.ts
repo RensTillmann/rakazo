@@ -2,6 +2,7 @@ import type { AgentRuntimeEvent, ConnectorTool } from "@rakazo/adapter-kit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fakeAgentState = vi.hoisted(() => ({
+  question: "Which city should I use?",
   options: ["Berlin", "Seoul", "Toronto"],
   draft: undefined as unknown,
   todoArgs: undefined as Record<string, unknown> | undefined,
@@ -28,7 +29,7 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
       const askUser = this.tools.find((tool) => tool.name === "ask_user");
       if (!askUser) throw new Error("ask_user tool missing");
       const result = await askUser.execute("call-choice-1", {
-        question: "Which city should I use?",
+        question: fakeAgentState.question,
         options: fakeAgentState.options,
         ...(fakeAgentState.draft === undefined ? {} : { draft: fakeAgentState.draft }),
         ...fakeAgentState.todoArgs,
@@ -100,6 +101,7 @@ const runRequest = {
 describe("Pi choice asks", () => {
   beforeEach(() => {
     fakeAgentState.tools = [];
+    fakeAgentState.question = "Which city should I use?";
     fakeAgentState.options = ["Berlin", "Seoul", "Toronto"];
     fakeAgentState.draft = undefined;
     fakeAgentState.todoArgs = undefined;
@@ -135,6 +137,79 @@ describe("Pi choice asks", () => {
       for await (const event of runtime.run(runRequest, runContext)) events.push(event);
     }).rejects.toThrow("ask_user requires two to four unique, non-empty options");
     expect(events.some((event) => event.type === "ask")).toBe(false);
+  });
+
+  describe("case decision cards (D6)", () => {
+    /** Runs ask_user with the question and options; returns the refusal ("" when asked). */
+    async function ask(question: string, options: string[], todoArgs?: Record<string, unknown>) {
+      fakeAgentState.question = question;
+      fakeAgentState.options = options;
+      fakeAgentState.todoArgs = todoArgs;
+      const events: AgentRuntimeEvent[] = [];
+      let refusal = "";
+      try {
+        for await (const event of new PiAgentRuntime().run(runRequest, runContext)) {
+          events.push(event);
+        }
+      } catch (error) {
+        refusal = error instanceof Error ? error.message : String(error);
+      }
+      return { refusal, asked: events.some((event) => event.type === "ask") };
+    }
+
+    it("refuses a case card with no options, naming the rule", async () => {
+      const { refusal, asked } = await ask("Case 311 · what should change in the reply?", []);
+      expect(asked).toBe(false);
+      expect(refusal).toMatch(/^ask_user refused \(rule D6, case decision cards\): /);
+    });
+
+    it("refuses a case card with one option, also after URGENT and in lower case", async () => {
+      for (const question of [
+        "Case 311 · send the reply?",
+        "URGENT · case 311 · send the reply?",
+      ]) {
+        const { refusal, asked } = await ask(question, ["Send"]);
+        expect(asked).toBe(false);
+        expect(refusal).toMatch(/^ask_user refused \(rule D6, case decision cards\): /);
+      }
+    });
+
+    it("refuses a case card whose second option only invites typing", async () => {
+      const { refusal, asked } = await ask("Case 311 · what should change?", [
+        "Send as is",
+        "Type it here",
+      ]);
+      expect(asked).toBe(false);
+      expect(refusal).toMatch(/^ask_user refused \(rule D6, case decision cards\): /);
+      expect(refusal).toContain('"Type it here" only invites typing');
+    });
+
+    it("asks a case card with two concrete options", async () => {
+      const { refusal, asked } = await ask("Case 311 · reply: which fix?", [
+        "Explain the 1 Oct bulk update and restore the licences",
+        "Ask the customer which domain to restore",
+      ]);
+      expect({ refusal, asked }).toEqual({ refusal: "", asked: true });
+    });
+
+    it("leaves a to-do card with one option plus the to-do option alone", async () => {
+      const { refusal, asked } = await ask(
+        "Case 383 · access: who opens the Seoul office account?",
+        ["Jill opens it", "I'll do it myself"],
+        {
+          prerequisites: [seoul],
+          option: "I'll do it myself",
+          caseRef: 383,
+        },
+      );
+      expect({ refusal, asked }).toEqual({ refusal: "", asked: true });
+    });
+
+    it("leaves an ordinary question to the general option rule", async () => {
+      const { refusal, asked } = await ask("Which city should I use?", ["Berlin"]);
+      expect(asked).toBe(false);
+      expect(refusal).toBe("ask_user requires two to four unique, non-empty options");
+    });
   });
 
   it("offers an optional reply draft of at most 20,000 characters", () => {

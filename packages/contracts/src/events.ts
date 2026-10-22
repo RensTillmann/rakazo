@@ -219,6 +219,45 @@ export const AskPrerequisitesInput = z.object({
 });
 export type AskPrerequisitesInput = z.infer<typeof AskPrerequisitesInput>;
 
+/** Fleet: the head of a case decision card, `Case <n> ·` (any letter case, also after `URGENT · `). */
+export const CASE_CARD_HEAD = /^\s*(?:urgent\s*·\s*)?case\s+[1-9]\d*\s*·/i;
+
+/**
+ * An option that only invites a typed answer instead of offering one: "Type it here", "Other",
+ * "Something else", "Let me explain", "I'll describe it". A cheap heuristic on the whole label; a
+ * concrete choice that merely contains such a verb ("Explain the bulk update to the customer") passes.
+ */
+const FREE_TEXT_OPTION =
+  /^(?:(?:other|something else|none of (?:these|the above|them)|neither|free text|custom(?: answer)?)|(?:(?:i(?:'ll| will) |let me |please )?(?:type|write|describe|explain|specify|tell (?:you|me))(?: it| that| this| the \w+| what [\w ]+)?(?: here| below| myself| in(?: the)? chat| in text)?))[\s.…!?]*$/i;
+
+/**
+ * D6: a case decision card needs at least two concrete options to choose from; an option that only
+ * invites free text does not count. To-do cards (`prerequisites`) are unaffected: their options are the
+ * to-do option and whatever else the bot offers. Secret cards come from `request_secret`, not here.
+ * Returns the refusal, naming the rule, or null when the card may be asked.
+ */
+export function caseCardOptionsRefusal(
+  question: string,
+  options: readonly string[],
+  todo: boolean,
+): string | null {
+  if (todo || !CASE_CARD_HEAD.test(question)) return null;
+  const freeText = options.filter((option) => FREE_TEXT_OPTION.test(option));
+  const concrete = options.length - freeText.length;
+  if (concrete >= 2) return null;
+  const given =
+    options.length === 0
+      ? "none were given"
+      : `${concrete} ${concrete === 1 ? "was" : "were"} given${
+          freeText.length === 0
+            ? ""
+            : `; ${freeText.map((option) => `"${option}"`).join(", ")} only ${
+                freeText.length === 1 ? "invites" : "invite"
+              } typing`
+        }`;
+  return `ask_user refused (rule D6, case decision cards): a "Case <n> ·" card needs at least two concrete options to choose from, but ${given}. Offer the concrete choices (for a reply: the draft, the customer's asks and 2–3 concrete fixes), never "type it here" or an open question.`;
+}
+
 export const MessageBlock = z.discriminatedUnion("kind", [
   /** `narration`: text written mid-turn before a tool call; clients may hide it. */
   z.object({ kind: z.literal("text"), text: z.string(), narration: z.boolean().optional() }),

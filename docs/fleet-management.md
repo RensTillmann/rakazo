@@ -107,6 +107,18 @@ exact route-bound envelope only: an ended source invalidates the request (its ca
 live one gets its source recorded so a later answer, withdrawal or stop ends it at once. A request
 without such an envelope is never given a guessed source.
 
+## Case decision cards offer real choices
+
+A question whose text starts with `Case <n> ·` (any letter case, also after `URGENT · `) is a decision
+card for that tracker case. It must offer at least two concrete options; an option that only invites
+typing ("Type it here", "Other", "Something else", "Let me explain", judged on the whole label by a
+documented heuristic, `FREE_TEXT_OPTION`) does not count. `ask_user` refuses such a card before it is
+stored, naming the rule (D6) and what was given, so a bot can never put an open "what should change?"
+question to the owner about a case: for a reply change it offers the draft, the customer's asks and 2–3
+concrete fixes. The one rule is `caseCardOptionsRefusal` in `packages/contracts/src/events.ts`; the Pi
+runtime applies it ahead of the general two-to-four-options check. To-do cards (`prerequisites`) are
+unaffected, and secret cards come from `request_secret`, which this rule never sees.
+
 ## Cards end with their run
 
 A card never stays pending on a run that ended. Whenever runs are cancelled (Stop, withdrawal, thread
