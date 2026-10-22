@@ -168,7 +168,9 @@ export const DE_MESSAGES: Record<string, string> = {
   "Clear conversation?": "Unterhaltung leeren?",
   "Cloud agent": "Cloud-Agent",
   Code: "Code",
-  "Command variable": "Befehlsvariable",
+  "Saved encrypted for {bot}'s commands as {variable}; never shown in chat.":
+    "Verschlüsselt gespeichert für die Befehle von {bot} als {variable}; nie im Chat angezeigt.",
+  "the bot": "den Bot",
   Completed: "Abgeschlossen",
   Copy: "Kopieren",
   "Could not archive bot": "Bot konnte nicht archiviert werden",

@@ -1,7 +1,7 @@
 import type { BackgroundJob, JobPublisher } from "@rakazo/adapter-kit";
 import { stuckWorkStatusMessages } from "@rakazo/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@rakazo/db";
-import { caseCoordinationFromEnv } from "@rakazo/db";
+import { noCoordinators } from "@rakazo/db/testing";
 import { describe, expect, it, vi } from "vitest";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import {
@@ -10,9 +10,6 @@ import {
   type ReconciliationLeadership,
 } from "./job-reconciler.js";
 import { loopGuardStopText } from "./tool-loop.js";
-
-/** No coordinators configured: to-do checks go to the bot that asked. */
-const noCoordinators = caseCoordinationFromEnv({});
 
 vi.mock("./bot-messages.js", () => ({ returnBotMessageOutcome: vi.fn() }));
 

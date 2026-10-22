@@ -460,8 +460,10 @@ export async function reportUserTodo(
 }
 
 /**
- * `todo_retire`: the requesting bot withdraws a cancelled or superseded requirement. In an `all`
- * group, retiring the last unsatisfied item releases the rest.
+ * `todo_retire`: the requesting bot withdraws a cancelled or superseded requirement. It releases
+ * nothing, even when it was the last open item of an `all` group: the bot retiring it is the one
+ * running now and decides itself whether its case still needs the work (ADR Q12/Q22); a release
+ * telling it to continue could revive work for a case that has ended.
  */
 export async function retireUserTodo(
   prisma: PrismaClient,
@@ -483,7 +485,7 @@ export async function retireUserTodo(
       { status: "retired", statusDetail: reason },
     );
     if (!row) return { error: "Not retired: this to-do changed or is already retired." };
-    return { todo: userTodoDto(row), wake: await releaseSatisfied(tx, row) };
+    return { todo: userTodoDto(row), wake: null };
   });
 }
 

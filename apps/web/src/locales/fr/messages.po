@@ -4949,11 +4949,15 @@ msgid "Saved"
 msgstr "Enregistré"
 
 #: src/components/AskCard.tsx
-msgid "Saved encrypted for {bot} to use at {secretDestination}; never shown in chat."
+msgid "Saved encrypted for {bot} to use at {secretOrigin}; never shown in chat."
 msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Saved encrypted for {bot} to use; never shown in chat."
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Saved encrypted for {bot}'s commands as {commandVariable}; never shown in chat."
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx

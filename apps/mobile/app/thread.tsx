@@ -3552,6 +3552,7 @@ const MessageBubble = memo(function MessageBubble({
       <View style={{ gap: 8, width: "100%" }}>
         <AskBlock
           ask={ask}
+          botName={botName}
           actionProps={actionProps}
           canAnswer={canAnswer}
           onAnswer={(answer, username) => onAnswer(message, answer, username)}
@@ -4379,11 +4380,14 @@ function AgentEventLabel({
 
 function AskBlock({
   ask,
+  botName,
   canAnswer,
   onAnswer,
   actionProps,
 }: {
   ask: Extract<MobileMessage["blocks"][number], { kind: "ask" }>;
+  /** The bot that asked; named in a command credential's destination line. */
+  botName: string | undefined;
   canAnswer: boolean;
   onAnswer: (answer: string, username?: string) => Promise<void>;
   actionProps: MessageActionProps;
@@ -4447,7 +4451,7 @@ function AskBlock({
       </Text>
       {secretInput && ask.credential ? (
         <Text style={{ color: tokens.mutedForeground, fontSize: 13.5 }}>
-          {secretDestinationLabel(ask.credential)}
+          {secretDestinationLabel(ask.credential, botName)}
         </Text>
       ) : null}
       {ask.detail && !secretInput ? (

@@ -206,7 +206,10 @@ a compare-and-set on the to-do's revision: a stale tab gets `CONFLICT`, two clic
 Satisfied items release only the requesting bot's work, through an ordinary message in its thread (the
 same send path as a user message, so a global pause still holds the run): with `each`, every satisfied
 item wakes the bot once, naming it; with `all`, the last satisfied item of the card wakes it once,
-listing them all, and retiring the last open item releases the satisfied rest. A satisfaction never
+listing them all. Retiring an item (`todo_retire`) releases nothing, even when it was the last open item
+of its card: the bot retiring it is the one running and decides itself whether its case still needs
+the work (ADR Q12/Q22); a "continue" message could revive work for a case that has ended. A
+satisfaction never
 wakes the bot twice (`releasedRevision`). Releasing never grants an approval or clears the pause.
 The release message stays visible in the chat even when it waits behind the check run that verified
 the item: a message queued behind background work (`todo_check`, ticket runs) is not linked to that

@@ -3,11 +3,8 @@ import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CaseCoordination } from "./case-coordinators.js";
-import { caseCoordinationFromEnv } from "./case-coordinators.js";
 import { createMaintenanceRecoveryStore } from "./maintenance-recovery.js";
-
-/** No coordinators configured: to-do checks go to the bot that asked. */
-const noCoordinators = caseCoordinationFromEnv({});
+import { noCoordinators } from "./testing.js";
 
 // Opt in only with a dedicated disposable LOCAL test database.
 const databaseUrl = process.env.MAINTENANCE_TEST_DATABASE_URL;

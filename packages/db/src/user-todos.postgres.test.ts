@@ -8,12 +8,12 @@ import {
   type UserTodo,
 } from "@rakazo/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { caseCoordinationFromEnv } from "./case-coordinators.js";
 import type { Pool, PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
 import { answerRunInput } from "./events.js";
 import { lockMaintenanceAdmission } from "./maintenance.js";
 import { createThreadMessage } from "./messages.js";
+import { noCoordinators } from "./testing.js";
 import {
   confirmUserTodo,
   reportUserTodo,
@@ -24,9 +24,6 @@ import {
   UserTodoConflictError,
 } from "./user-todo-actions.js";
 import { listUserTodos, listUserTodosForCase } from "./user-todos.js";
-
-/** No coordinators configured: to-do checks go to the bot that asked. */
-const noCoordinators = caseCoordinationFromEnv({});
 
 // Fully migrated disposable local database only (VERIFY_DATABASE + DATABASE_URL).
 const enabled = process.env.VERIFY_DATABASE && process.env.DATABASE_URL;
@@ -800,7 +797,7 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
     expect(await f.releases()).toHaveLength(1);
   });
 
-  it("release 'all' with the last open item retired releases the satisfied rest once", async () => {
+  it("retiring the last open item of an 'all' card wakes nothing: the retiring bot decides", async () => {
     const f = await fixture();
     const { access, badge } = await f.chooseBoth("all");
     await f.verify(access);
@@ -812,10 +809,10 @@ postgres("manual prerequisite to-dos (PostgreSQL)", () => {
         reason: "Badge no longer needed",
       }),
     );
-    expect(retired.wake).not.toBeNull();
-    const releases = await f.releases();
-    expect(releases).toHaveLength(1);
-    expect(textOf(releases[0]!.blocks)).not.toContain(BADGE.title);
+    expect(retired.wake).toBeNull();
+    // No "continue the work" message: the case may have ended with the requirement.
+    expect(await f.releases()).toHaveLength(0);
+    expect(await f.prisma.run.count({ where: { spaceId: f.id, trigger: "follow_up" } })).toBe(0);
   });
 
   it("release 'each' wakes the bot once per satisfied item, naming it", async () => {

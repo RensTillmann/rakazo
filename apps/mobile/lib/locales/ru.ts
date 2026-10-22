@@ -110,7 +110,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "Updating {name}’s Computer": "Обновление компьютера {name}",
   "Workers and operations are stopped": "Воркеры и операции остановлены",
   "Cloud agent": "Облачный агент",
-  "Command variable": "Командная переменная",
+  "Saved encrypted for {bot}'s commands as {variable}; never shown in chat.":
+    "Сохранено в зашифрованном виде для команд {bot} как {variable}; никогда не показывается в чате.",
+  "the bot": "бота",
   "Pull request": "Запрос на слияние",
   running: "выполняется",
   finished: "завершено",

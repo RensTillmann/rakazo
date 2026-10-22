@@ -89,7 +89,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Set up Executor on your server in the web app.": "请在网页应用中为服务器设置 Executor。",
 
   "Cloud agent": "云端智能体",
-  "Command variable": "命令变量",
+  "Saved encrypted for {bot}'s commands as {variable}; never shown in chat.":
+    "已加密保存，供 {bot} 的命令以 {variable} 使用；绝不会在聊天中显示。",
+  "the bot": "机器人",
   "Pull request": "拉取请求",
   running: "运行中",
   finished: "已完成",

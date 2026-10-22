@@ -4,7 +4,7 @@ import path from "node:path";
 import type { JobPublisher, NotificationProvider } from "@rakazo/adapter-kit";
 import { STUCK_WORK_NOTICE, stuckWorkStatusMessage } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { caseCoordinationFromEnv } from "@rakazo/db";
+import { noCoordinators } from "@rakazo/db/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { deletePushToken, ExpoPushProvider, savePushToken } from "./expo-push.js";
 import { createJobReconciler } from "./job-reconciler.js";
@@ -16,9 +16,6 @@ const holds: StuckWorkHolds = {
   pauses: async () => [],
   waitingOnOpenCards: async () => new Set(),
 };
-
-/** No coordinators configured: to-do checks go to the bot that asked. */
-const noCoordinators = caseCoordinationFromEnv({});
 
 const now = new Date("2026-09-28T16:00:00.000Z");
 const dirs: string[] = [];

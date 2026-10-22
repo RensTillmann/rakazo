@@ -1035,7 +1035,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "todo_retire",
     description:
-      "Retire a to-do you asked the user for when its requirement was cancelled or superseded. The user then no longer sees it as something to do.",
+      "Retire a to-do you asked the user for when its requirement was cancelled or superseded. The user then no longer sees it as something to do. It wakes nothing, even if it was the last open item of its card: decide yourself whether the case still needs the work its other items allowed.",
     inputSchema: {
       type: "object",
       properties: {

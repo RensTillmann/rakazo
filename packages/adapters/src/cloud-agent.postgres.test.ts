@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, BackgroundJob, JobPublisher } from "@rakazo/adapter-kit";
-import { caseCoordinationFromEnv, clearThread, createDb, type PrismaClient } from "@rakazo/db";
+import { clearThread, createDb, type PrismaClient } from "@rakazo/db";
+import { noCoordinators } from "@rakazo/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
@@ -8,9 +9,6 @@ import { executeCloudAgentTool, reconcileCloudAgents } from "./cloud-agent-servi
 import { CursorCloudAgentProvider } from "./cursor-cloud-agent.js";
 import { createJobReconciler } from "./job-reconciler.js";
 import { CursorCloudAgentEmulator } from "./testing/cursor-cloud-agent-emulator.js";
-
-/** No coordinators configured: to-do checks go to the bot that asked. */
-const noCoordinators = caseCoordinationFromEnv({});
 
 function deferred() {
   let resolve!: () => void;
@@ -215,7 +213,11 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
       expect(await h.wakes()).toHaveLength(1);
     });
     const [wake] = await h.wakes();
-    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs: h.deps.jobs }).reconcileOnce();
+    await createJobReconciler({
+      caseCoordination: noCoordinators,
+      prisma,
+      jobs: h.deps.jobs,
+    }).reconcileOnce();
     expect(h.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ name: "run.continue", payload: { runId: wake!.id } }),
     );
@@ -235,13 +237,17 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
       expect(h.enqueue).not.toHaveBeenCalled();
       expect(h.wire.requests).toHaveLength(requests);
       expect(await h.state(id)).toMatchObject({
-        followup: { prompt: "Add tests" }, followupDispatching: false,
+        followup: { prompt: "Add tests" },
+        followupDispatching: false,
       });
     });
     await h.poll(id);
     await h.poll(id);
-    expect(h.wire.requests.filter((request) =>
-      request.method === "POST" && request.path.endsWith("/runs"))).toHaveLength(1);
+    expect(
+      h.wire.requests.filter(
+        (request) => request.method === "POST" && request.path.endsWith("/runs"),
+      ),
+    ).toHaveLength(1);
   });
 
   it("reconciles an ambiguous idempotent launch and consumes remote cancellation while paused", async () => {
@@ -297,7 +303,11 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
     expect(wake?.status).toBe("queued");
     h.enqueue.mockResolvedValue(undefined);
     h.enqueue.mockClear();
-    await createJobReconciler({ caseCoordination: noCoordinators, prisma, jobs: h.deps.jobs }).reconcileOnce();
+    await createJobReconciler({
+      caseCoordination: noCoordinators,
+      prisma,
+      jobs: h.deps.jobs,
+    }).reconcileOnce();
     expect(h.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ name: "run.continue", payload: { runId: wake!.id } }),
     );

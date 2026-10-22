@@ -833,6 +833,15 @@ describe("AskCard reply context and who acts", () => {
     expect(whoActs(render(secret))).toBe(
       "Saved encrypted for Josy to use at https://crm.example.com; never shown in chat.",
     );
+    // A command key has no site: it says the bot's commands get it, under its variable name.
+    const command = {
+      ...secret,
+      text: "Google Maps test key?",
+      credential: { name: "google-maps-test-key", origin: "", auth: { type: "command" } },
+    } as unknown as AskBlock;
+    expect(whoActs(render(command))).toBe(
+      "Saved encrypted for Josy's commands as $GOOGLE_MAPS_TEST_KEY; never shown in chat.",
+    );
   });
 
   it("says what the create-space buttons do", () => {

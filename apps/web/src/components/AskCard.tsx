@@ -249,18 +249,21 @@ export function AskCard({
   const bot = botName ?? t`the bot`;
   const sourceRef = block.source?.ref;
   const sourceVersion = block.source?.version;
-  const secretDestination =
+  const commandVariable =
     block.credential?.auth.type === "command"
       ? `$${commandVariableName(block.credential.name)}`
-      : block.credential?.origin;
+      : null;
+  const secretOrigin = block.credential?.origin;
   // Who acts, what a click does, and what it affects: one line under an open card's buttons.
   const whoActs =
     !canAnswer || block.status === "answered" || block.status === "retired"
       ? null
       : secretInput
-        ? secretDestination
-          ? t`Saved encrypted for ${bot} to use at ${secretDestination}; never shown in chat.`
-          : t`Saved encrypted for ${bot} to use; never shown in chat.`
+        ? commandVariable
+          ? t`Saved encrypted for ${bot}'s commands as ${commandVariable}; never shown in chat.`
+          : secretOrigin
+            ? t`Saved encrypted for ${bot} to use at ${secretOrigin}; never shown in chat.`
+            : t`Saved encrypted for ${bot} to use; never shown in chat.`
         : block.instructionUpdate
           ? editing
             ? null

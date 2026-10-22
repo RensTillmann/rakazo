@@ -9,7 +9,8 @@
       "development": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./maintenance": "./src/maintenance.ts"
+    "./maintenance": "./src/maintenance.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "generate": "prisma generate",

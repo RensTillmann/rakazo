@@ -220,13 +220,31 @@ describe("Pi choice asks", () => {
     );
   });
 
+  /** Runs ask_user with `todoArgs`; returns the refusal (empty when accepted) and whether it asked. */
+  async function attempt(todoArgs: Record<string, unknown>) {
+    fakeAgentState.todoArgs = todoArgs;
+    const events: AgentRuntimeEvent[] = [];
+    let refusal = "";
+    try {
+      for await (const event of new PiAgentRuntime().run(runRequest, runContext)) {
+        events.push(event);
+      }
+    } catch (error) {
+      refusal = error instanceof Error ? error.message : String(error);
+    }
+    return { refusal, asked: events.some((event) => event.type === "ask") };
+  }
+
   it("refuses a to-do set without a case, or with one that is not a tracker issue number", async () => {
     for (const caseRef of ["383", 0, 3.5, undefined]) {
-      fakeAgentState.todoArgs = { prerequisites: [seoul], option: "Seoul", caseRef };
-      const runtime = new PiAgentRuntime();
-      await expect(async () => {
-        for await (const _event of runtime.run(runRequest, runContext));
-      }).rejects.toThrow(/^ask_user prerequisites refused: caseRef: .*caseRef \(required/);
+      const { refusal, asked } = await attempt({
+        prerequisites: [seoul],
+        option: "Seoul",
+        caseRef,
+      });
+      expect(asked).toBe(false);
+      // Refused, naming the field to fix.
+      expect(refusal).toMatch(/^ask_user prerequisites refused: caseRef: /);
     }
   });
 
@@ -252,21 +270,6 @@ describe("Pi choice asks", () => {
     }).rejects.toThrow("ask_user option must be exactly one of the options");
     expect(events.some((event) => event.type === "ask")).toBe(false);
   });
-
-  /** Runs ask_user with `todoArgs`; returns the refusal (empty when accepted) and whether it asked. */
-  async function attempt(todoArgs: Record<string, unknown>) {
-    fakeAgentState.todoArgs = todoArgs;
-    const events: AgentRuntimeEvent[] = [];
-    let refusal = "";
-    try {
-      for await (const event of new PiAgentRuntime().run(runRequest, runContext)) {
-        events.push(event);
-      }
-    } catch (error) {
-      refusal = error instanceof Error ? error.message : String(error);
-    }
-    return { refusal, asked: events.some((event) => event.type === "ask") };
-  }
 
   it("refuses an item without why or numbered steps, naming each item and field to fix", async () => {
     const { refusal, asked } = await attempt({
