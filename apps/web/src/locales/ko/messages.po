@@ -72,6 +72,11 @@ msgstr ""
 msgid "{0} is calling you"
 msgstr ""
 
+#. placeholder {0}: others.length
+#: src/components/FleetPauseControls.tsx
+msgid "{0} issues"
+msgstr ""
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -300,6 +305,10 @@ msgstr "{provider}의 응답 시간이 초과되었습니다. 다시 시도하�
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "남은 시간 {remaining} · Bot은 화면만 보고 직접 조작하지 않습니다"
 
+#: src/components/FleetPauseControls.tsx
+msgid "{runs} runs need attention"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -348,6 +357,14 @@ msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "1 decision"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "1 issue"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "1 run needs attention"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -3010,6 +3027,10 @@ msgstr "샘플 듣기"
 msgid "Hi, this is how I'll sound when I read replies out loud."
 msgstr "안녕하세요. 답변을 소리 내어 읽을 때 이런 목소리로 들립니다."
 
+#: src/components/FleetPauseControls.tsx
+msgid "hide"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Hide bots"
 msgstr ""
@@ -5221,6 +5242,10 @@ msgstr "셸"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Shell command rule (regular expression)"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "show"
 msgstr ""
 
 #: src/components/AskCard.tsx

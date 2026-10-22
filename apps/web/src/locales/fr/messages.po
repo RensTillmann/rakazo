@@ -72,6 +72,11 @@ msgstr "Gestion de {0}"
 msgid "{0} is calling you"
 msgstr "{0} vous appelle"
 
+#. placeholder {0}: others.length
+#: src/components/FleetPauseControls.tsx
+msgid "{0} issues"
+msgstr ""
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -300,6 +305,10 @@ msgstr "{provider} a mis trop de temps à répondre. Réessayez."
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} restant · le bot observe, il n'agit pas"
 
+#: src/components/FleetPauseControls.tsx
+msgid "{runs} runs need attention"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr ""
@@ -348,6 +357,14 @@ msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "1 decision"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "1 issue"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "1 run needs attention"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -3010,6 +3027,10 @@ msgstr "Écouter un extrait"
 msgid "Hi, this is how I'll sound when I read replies out loud."
 msgstr "Bonjour, c'est ainsi que je sonnerai quand je lirai les réponses à voix haute."
 
+#: src/components/FleetPauseControls.tsx
+msgid "hide"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Hide bots"
 msgstr "Masquer les bots"
@@ -5221,6 +5242,10 @@ msgstr "Shell"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Shell command rule (regular expression)"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "show"
 msgstr ""
 
 #: src/components/AskCard.tsx

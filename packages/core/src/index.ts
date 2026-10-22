@@ -31,6 +31,7 @@ export * from "./group-mentions.js";
 export * from "./http-response.js";
 export * from "./inbound-delivery.js";
 export * from "./instruction-diff.js";
+export * from "./maintenance-attention.js";
 export * from "./markdown-plain.js";
 export * from "./mcp.js";
 export * from "./message-pages.js";

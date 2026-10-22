@@ -1,5 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { MaintenanceCommand } from "@rakazo/contracts";
+import { maintenanceAttentionSentence, maintenanceIssueCode } from "@rakazo/core";
 import {
   Button,
   Dialog,
@@ -16,6 +17,59 @@ import { useVisibleResource } from "../lib/use-visible-resource";
 import { FleetRecoveryList } from "./FleetRecoveryList";
 
 const MAINTENANCE_CHANGED_EVENT = "rakazo:maintenance-changed";
+
+/**
+ * What needs attention, folded under a count: held runs grouped by reason and the status's own
+ * issues, each code with its plain sentence.
+ */
+export function AttentionIssues({ issues }: { issues: readonly string[] }) {
+  const { t } = useLingui();
+  const [open, setOpen] = useState(false);
+  const parsed = issues.map(maintenanceIssueCode);
+  const runs = new Set(parsed.flatMap((issue) => (issue.runId ? [issue.runId] : []))).size;
+  // The generic "some runs" issue is said by the run count itself.
+  const others = parsed.filter(
+    (issue) => !issue.runId && !(runs > 0 && issue.code === "continuation-needs-attention"),
+  );
+  const counts = new Map<string, number>();
+  for (const issue of parsed) if (issue.runId) counts.set(issue.code, (counts.get(issue.code) ?? 0) + 1);
+  const rows = [
+    ...[...counts].map(([code, count]) => ({ code, count })),
+    ...others.map((issue) => ({ code: issue.code, count: 0 })),
+  ];
+  const summary = [
+    runs === 1 ? t`1 run needs attention` : runs > 1 ? t`${runs} runs need attention` : null,
+    others.length === 1
+      ? t`1 issue`
+      : others.length > 1
+        ? t`${others.length} issues`
+        : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="text-start underline-offset-2 hover:underline"
+      >
+        {summary} · {open ? t`hide` : t`show`}
+      </button>
+      {open ? (
+        <ul data-testid="fleet-attention-codes" className="mt-1 list-disc space-y-1 ps-5">
+          {rows.map(({ code, count }) => (
+            <li key={code}>
+              <code className="text-xs">{code}</code>
+              {count > 1 ? ` ×${count}` : ""}: {maintenanceAttentionSentence(code)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 /** Mount within the shell's user/space boundary; server authorization owns visibility. */
 export function FleetPauseControls({ spaceId }: { spaceId: string | null }) {
@@ -136,13 +190,18 @@ export function FleetPauseControls({ spaceId }: { spaceId: string | null }) {
             if (!next) setConfirmRevision(null);
           }
         }}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
             <DialogHeader>
               <DialogTitle><Trans>Fleet control</Trans></DialogTitle>
               <DialogDescription>
                 <Trans>Pause new Fleet work while active runs reach a safe checkpoint. Resume is always manual.</Trans>
               </DialogDescription>
             </DialogHeader>
+            {/* The body scrolls; the header and the action footer stay in view at any zoom. */}
+            <div
+              data-testid="fleet-control-body"
+              className="-mx-1 min-h-0 flex-1 space-y-3 overflow-y-auto px-1"
+            >
             <div role="status" aria-live="polite" className="space-y-2 text-sm">
               {resource.error ? (
                 <p className="text-warning"><Trans>Status unavailable. Last known state is stale; new actions are disabled.</Trans></p>
@@ -156,16 +215,14 @@ export function FleetPauseControls({ spaceId }: { spaceId: string | null }) {
                     <div><dt className="inline"><Trans>Queued/held runs:</Trans></dt> <dd className="inline">{snapshot.status.pendingRuns}</dd></div>
                   </dl>
                   {snapshot.status.issues.length ? (
-                    <ul className="list-disc space-y-1 ps-5">
-                      {snapshot.status.issues.map((issue, index) => <li key={`${index}:${issue}`}>{issue}</li>)}
-                    </ul>
+                    <AttentionIssues issues={snapshot.status.issues} />
                   ) : null}
                 </>
               ) : null}
             </div>
             {snapshot.status.activeRuns || snapshot.status.activeEffects ||
               snapshot.status.phase === "needs_attention" ? (
-              <div className="max-h-[50vh] overflow-y-auto text-sm">
+              <div className="text-sm">
                 <FleetRecoveryList
                   spaceId={spaceId}
                   version={recoveryVersion}
@@ -187,7 +244,8 @@ export function FleetPauseControls({ spaceId }: { spaceId: string | null }) {
                 </div>
               </div>
             ) : null}
-            <DialogFooter className="flex-wrap gap-2">
+            </div>
+            <DialogFooter className="shrink-0 flex-wrap gap-2">
               <Button variant="outline" disabled={busy} onClick={() => {
                 setRecoveryVersion((value) => value + 1);
                 void resource.refresh();

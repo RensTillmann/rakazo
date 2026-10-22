@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Run } from "@rakazo/db";
 import { maintenanceAttention, maintenanceAttentionReason } from "@rakazo/db";
 import { createRunExecutor, type ExecutorDeps } from "./executor.js";
-import { createExecutorMaintenance, readExecutorContinuation } from "./executor-maintenance.js";
+import { authorityRetry, createExecutorMaintenance, FLEET_AUTHORITY_RETRY_INTERVAL_MS,
+  FLEET_AUTHORITY_RETRY_WINDOW_MS, readExecutorContinuation } from "./executor-maintenance.js";
 
 function harness() {
   const state = { active: true, revision: 1 };
@@ -12,6 +13,7 @@ function harness() {
     leaseOwner: "worker" as string | null, leaseFence: 4, leaseExpiresAt: new Date(Date.now() + 60_000),
     checkpoint: null as string | null, maintenanceCheckpoint: null as string | null,
     maintenanceCancelRequestedAt: null as Date | null, error: null as string | null,
+    updatedAt: new Date(),
   };
   const bot = { id: "bot", userId: "owner", spaceId: "space", archivedAt: null,
     spawnKey: null as string | null, instructions: "Keep exact context", disabledBuiltinTools: [],
@@ -262,6 +264,65 @@ describe("trusted Fleet continuation authority", () => {
     Object.assign(f.state, { active: false, revision: 2 });
     return f;
   }
+
+  it("retries a Fleet check that did not answer on a schedule, and runs once it answers", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const f = await pausedFleet();
+      f.control.verify = async () => { throw new Error("The operation was aborted due to timeout"); };
+      await f.maintenance.reconcile(async () => undefined);
+      expect(maintenanceAttentionReason(f.run.error)).toBe("fleet-authority-verifier-unavailable");
+      expect(f.deps.connector.execute).toHaveBeenCalledTimes(1);
+      // The next pass a minute later does not call the Fleet again.
+      vi.setSystemTime(Date.now() + 60_000);
+      await f.maintenance.reconcile(async () => undefined);
+      expect(f.deps.connector.execute).toHaveBeenCalledTimes(1);
+      // Five minutes after the last try it is checked again, and now the Fleet answers.
+      vi.setSystemTime(Date.now() + FLEET_AUTHORITY_RETRY_INTERVAL_MS);
+      f.control.verify = async () => ({ allowed: true });
+      await f.maintenance.reconcile(async () => undefined);
+      expect(f.deps.connector.execute).toHaveBeenCalledTimes(2);
+      expect(f.run.status).toBe("queued");
+      expect(f.run.error).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops retrying after a day, and never retries a binding the Fleet reports invalid", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const stale = await pausedFleet();
+      stale.run.error = maintenanceAttention("fleet-authority-verifier-unavailable");
+      stale.run.updatedAt = new Date(Date.now() - FLEET_AUTHORITY_RETRY_WINDOW_MS - 60_000);
+      await stale.maintenance.reconcile(async () => undefined);
+      expect(stale.deps.connector.execute).not.toHaveBeenCalled();
+      expect(stale.run.status).toBe("maintenance_paused");
+
+      const binding = await pausedFleet();
+      binding.control.verify = async () => ({ allowed: false, reason: "fleet-authority-binding-invalid" });
+      await binding.maintenance.reconcile(async () => undefined);
+      expect(maintenanceAttentionReason(binding.run.error)).toBe("fleet-authority-binding-invalid");
+      vi.setSystemTime(Date.now() + 2 * FLEET_AUTHORITY_RETRY_INTERVAL_MS);
+      await binding.maintenance.reconcile(async () => undefined);
+      expect(binding.deps.connector.execute).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("decides retries from the hold's reason, its age and the last try", () => {
+    const now = Date.parse("2026-10-23T12:00:00Z");
+    const since = new Date(now - 60 * 60_000);
+    expect(authorityRetry(undefined, since, undefined, now)).toBe("now");
+    expect(authorityRetry("dependencies-changed", since, now, now)).toBe("now");
+    expect(authorityRetry("fleet-authority-verification-failed", since, undefined, now)).toBe("now");
+    expect(authorityRetry("fleet-authority-verifier-unavailable", since, now - 60_000, now)).toBe("later");
+    expect(authorityRetry("binding-unavailable", since, undefined, now)).toBe("never");
+    expect(authorityRetry("fleet-authority-binding-invalid", since, undefined, now)).toBe("never");
+    expect(authorityRetry("fleet-authority-verifier-unavailable",
+      new Date(now - FLEET_AUTHORITY_RETRY_WINDOW_MS - 1), undefined, now)).toBe("never");
+  });
 
   it("checks the exact run through the assigned private Fleet resource before native revalidation", async () => {
     const f = await pausedFleet();

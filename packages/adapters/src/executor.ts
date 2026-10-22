@@ -3860,6 +3860,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         // Revalidate all native authority after a pause; only Fleet bots acquire
         // Fleet's tracker/dependency/deadline authority checks.
         revalidateAdmission = Boolean(maintenanceContinuation) || admission.revision > 0;
+        // A run held because the Fleet's check did not answer is retried on a schedule, not on
+        // every wake; one held on a real evidence problem waits for the owner.
+        if (revalidateAdmission && !maintenance.mayValidate(run)) return;
         if (revalidateAdmission) checked = await maintenance.externalAuthority(run);
       } catch {
         await deps.prisma.run.updateMany({ where: {

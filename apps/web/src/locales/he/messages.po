@@ -72,6 +72,11 @@ msgstr "טיפול של {0}"
 msgid "{0} is calling you"
 msgstr ""
 
+#. placeholder {0}: others.length
+#: src/components/FleetPauseControls.tsx
+msgid "{0} issues"
+msgstr ""
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -300,6 +305,10 @@ msgstr "{provider} לא הגיב בזמן. אפשר לנסות שוב."
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "נותרו {remaining} · הבוט צופה ולא פועל"
 
+#: src/components/FleetPauseControls.tsx
+msgid "{runs} runs need attention"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "{seats, plural, one {# seat} other {# seats}}"
 msgstr "{seats, plural, one {# מושב} other {# מושבים}}"
@@ -348,6 +357,14 @@ msgstr ""
 
 #: src/components/DecisionDock.tsx
 msgid "1 decision"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "1 issue"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "1 run needs attention"
 msgstr ""
 
 #: src/components/UsageBars.tsx
@@ -3010,6 +3027,10 @@ msgstr "השמעת דוגמה"
 msgid "Hi, this is how I'll sound when I read replies out loud."
 msgstr "היי, כך אשמע כשאקריא תשובות בקול."
 
+#: src/components/FleetPauseControls.tsx
+msgid "hide"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Hide bots"
 msgstr "הסתרת הבוטים"
@@ -5221,6 +5242,10 @@ msgstr "Shell"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Shell command rule (regular expression)"
+msgstr ""
+
+#: src/components/FleetPauseControls.tsx
+msgid "show"
 msgstr ""
 
 #: src/components/AskCard.tsx

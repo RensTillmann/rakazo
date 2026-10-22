@@ -89,6 +89,38 @@ async function authority(tx: Prisma.TransactionClient, runId: string) {
 }
 
 export type FleetResumeAuthority = { reason?: string; resourceId?: string; resourceRevision?: number };
+/** How long the Fleet's maintenance_validate may take before the check counts as unavailable. */
+export const FLEET_AUTHORITY_TIMEOUT_MS = 90_000;
+/** A run held because the Fleet's check could not answer is checked again this often… */
+export const FLEET_AUTHORITY_RETRY_INTERVAL_MS = 5 * 60_000;
+/** …for this long after it was first held; then it waits for the owner. */
+export const FLEET_AUTHORITY_RETRY_WINDOW_MS = 24 * 60 * 60_000;
+/** The Fleet's check did not answer: a passing condition, retried automatically. */
+const RETRIED_AUTHORITY_REASONS: Record<string, true> = {
+  "fleet-authority-verifier-unavailable": true,
+  "fleet-authority-verification-failed": true,
+};
+
+/**
+ * Whether a run held for maintenance attention is validated again now. A Fleet check that did not
+ * answer is retried every FLEET_AUTHORITY_RETRY_INTERVAL_MS for FLEET_AUTHORITY_RETRY_WINDOW_MS
+ * from when it was first held (`heldSince`); a binding the Fleet reports unavailable or invalid
+ * is a real evidence problem and is never retried; any other hold is re-checked on every pass.
+ */
+export function authorityRetry(
+  reason: string | undefined,
+  heldSince: Date,
+  lastTried: number | undefined,
+  now: number,
+): "now" | "later" | "never" {
+  if (!reason) return "now";
+  if (/^(fleet-authority-)?binding-(unavailable|invalid)$/.test(reason)) return "never";
+  if (!RETRIED_AUTHORITY_REASONS[reason]) return "now";
+  if (now - heldSince.getTime() > FLEET_AUTHORITY_RETRY_WINDOW_MS) return "never";
+  return lastTried !== undefined && now - lastTried < FLEET_AUTHORITY_RETRY_INTERVAL_MS
+    ? "later"
+    : "now";
+}
 // The Fleet service's documented private deployment endpoint, not a model/tool-provided URL.
 const FLEET_AUTHORITY_ENDPOINT = "http://fleet-service:8790/mcp";
 
@@ -107,7 +139,7 @@ async function fleetAuthority(deps: ExecutorDeps, run: Run): Promise<FleetResume
   const resourceRevision = assigned.server.revision;
   const context: AdapterContext = { operationId: `maintenance-validate:${run.id}`,
     traceId: `maintenance-validate:${run.id}`, spaceId: run.spaceId, userId: run.userId,
-    botId: run.botId, runId: run.id, signal: AbortSignal.timeout(30_000) };
+    botId: run.botId, runId: run.id, signal: AbortSignal.timeout(FLEET_AUTHORITY_TIMEOUT_MS) };
   try {
     const discovered = await deps.connector.discoverTools(context);
     const candidates = discovered.filter((tool) => tool.route?.connectorId === "mcp" &&
@@ -196,12 +228,32 @@ async function* pages<T extends { id: string }>(load: (afterId?: string) => Prom
 }
 
 export function createExecutorMaintenance(deps: ExecutorDeps) {
+  /** When each held run's Fleet check was last tried in this process. */
+  const tried = new Map<string, number>();
+  /** Whether to validate a run now; records the attempt, so a failed check waits its interval. */
+  const mayValidate = (run: Run): boolean => {
+    const now = Date.now();
+    const decision = authorityRetry(
+      maintenanceAttentionReason(run.error),
+      run.updatedAt,
+      tried.get(run.id),
+      now,
+    );
+    if (decision !== "now") return false;
+    // Only the last interval matters; older entries are dropped so the map stays small.
+    if (tried.size > 1_000) {
+      for (const [id, at] of tried) if (now - at >= FLEET_AUTHORITY_RETRY_INTERVAL_MS) tried.delete(id);
+    }
+    tried.set(run.id, now);
+    return true;
+  };
   const checkpointEvent = (run: Run, status: "maintenance_paused" | "queued") => deps.events.append({
     spaceId: run.spaceId, threadId: run.threadId, botId: run.botId, runId: run.id,
     type: "run.checkpointed", payload: { status, trigger: run.trigger, taskId: run.taskId },
   });
   return {
     externalAuthority: (run: Run) => fleetAuthority(deps, run),
+    mayValidate,
     async validateLease(tx: Prisma.TransactionClient, run: Run, continuation: ExecutorContinuation | undefined,
       checked: FleetResumeAuthority) {
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;
@@ -214,9 +266,12 @@ export function createExecutorMaintenance(deps: ExecutorDeps) {
         reason = "continuation-verification-unavailable";
       }
       if (reason) {
-        await tx.run.updateMany({ where: { id: run.id, leaseFence: run.leaseFence, status: run.status },
-          data: { ...(continuation ? { status: "maintenance_paused", leaseOwner: null, leaseExpiresAt: null } : {}),
-            error: maintenanceAttention(reason) } });
+        // An unchanged hold is not rewritten, so `updatedAt` keeps when it was first held.
+        if (continuation || run.error !== maintenanceAttention(reason)) {
+          await tx.run.updateMany({ where: { id: run.id, leaseFence: run.leaseFence, status: run.status },
+            data: { ...(continuation ? { status: "maintenance_paused", leaseOwner: null, leaseExpiresAt: null } : {}),
+              error: maintenanceAttention(reason) } });
+        }
         return false;
       }
       return true;
@@ -317,6 +372,7 @@ export function createExecutorMaintenance(deps: ExecutorDeps) {
         ...(afterId ? { id: { gt: afterId } } : {}),
       }, orderBy: { id: "asc" }, take: 100 }))) {
         if (maintenanceAttentionReason(run.error)?.startsWith("runtime-")) continue;
+        if (!mayValidate(run)) continue;
         try {
           const continuation = readExecutorContinuation(run.maintenanceCheckpoint, run.id);
           if (!continuation) throw new Error("Exact continuation unavailable");
@@ -328,7 +384,10 @@ export function createExecutorMaintenance(deps: ExecutorDeps) {
             const reason = locked.leaseFence !== run.leaseFence || locked.checkpoint !== run.maintenanceCheckpoint
               ? "continuation-already-consumed" : await validateAuthority(tx, run, continuation, checked);
             if (reason) {
-              await tx.run.update({ where: { id: run.id }, data: { error: maintenanceAttention(reason) } });
+              // An unchanged hold is not rewritten, so `updatedAt` keeps when it was first held.
+              if (run.error !== maintenanceAttention(reason)) {
+                await tx.run.update({ where: { id: run.id }, data: { error: maintenanceAttention(reason) } });
+              }
               return false;
             }
             await tx.run.update({ where: { id: run.id }, data: { error: null } });
