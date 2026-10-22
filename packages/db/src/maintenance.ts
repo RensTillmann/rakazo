@@ -84,9 +84,6 @@ export type MaintenanceContinuation = {
   leaseFence: number;
 };
 
-/** Call only after the worker reached a safe boundary and drained its own work.
- * Retains the existing run checkpoint (approval/takeover state) independently.
- */
 /**
  * Progress the pause kept: for each thread whose run the pause holds at a checkpoint, how many
  * tool calls that run completed before it was held. Threads without such a run are absent.
@@ -118,6 +115,9 @@ export async function pausedStepsByThread(
   return steps;
 }
 
+/** Call only after the worker reached a safe boundary and drained its own work.
+ * Retains the existing run checkpoint (approval/takeover state) independently.
+ */
 export async function checkpointMaintenanceRun(
   tx: Pick<Prisma.TransactionClient, "$queryRaw" | "run" | "attempt">,
   input: MaintenanceContinuation & { leaseOwner: string; observedRevision?: number },
