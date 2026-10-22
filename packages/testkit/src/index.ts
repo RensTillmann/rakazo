@@ -1,4 +1,4 @@
-export { DestinationEmulator, McpEmulator } from "@rakazo/adapters";
+export { DestinationEmulator, FleetAuthorityStub, McpEmulator } from "@rakazo/adapters";
 
 export function sessionCookieHeader(response: Response) {
   const cookies = response.headers.getSetCookie?.() ?? [];

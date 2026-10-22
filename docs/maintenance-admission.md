@@ -57,6 +57,8 @@ Each settlement is one transaction: owner check, row lock, expected status, evid
 
 ## Resume authority and limits
 
+For a Fleet-spawned bot, resuming asks the Fleet service's `maintenance_validate` (90 s budget, `FLEET_AUTHORITY_TIMEOUT_MS`). A run held because that check did not answer (`fleet-authority-verifier-unavailable`, `fleet-authority-verification-failed`) is checked again automatically every 5 minutes for 24 hours from when it was first held; after that it waits for the owner. A binding the Fleet reports unavailable or invalid (`fleet-authority-binding-*`) is never retried. Fleet control folds the codes under a count ("9 runs need attention · show"), each with a plain sentence (`MAINTENANCE_ATTENTION_SENTENCES` in `@rakazo/core`); the dialog keeps its actions in view and scrolls its body. `FleetAuthorityStub` (`@rakazo/adapters`, re-exported by `@rakazo/testkit`) is a scripted `maintenance_validate` server with the real contract for tests.
+
 Native ownership, account/space membership, resource revisions, exact approval requests and unsettled effects are checked at continuation and lease boundaries. Applicable Fleet dispatch authority is read again rather than trusted from old message text. Independent routine and usage brakes remain in force.
 
 Fleet validates all persisted original and steering inputs using the actual notification category. Fresh mailbox/summary inspections and case-less coordinator notifications can resume without inventing a tracker job or claiming external content was verified; previously acted work still requires current continuation evidence.

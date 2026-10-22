@@ -124,7 +124,9 @@ export function authorityRetry(
 // The Fleet service's documented private deployment endpoint, not a model/tool-provided URL.
 const FLEET_AUTHORITY_ENDPOINT = "http://fleet-service:8790/mcp";
 
-async function fleetAuthority(deps: ExecutorDeps, run: Run): Promise<FleetResumeAuthority> {
+async function fleetAuthority(
+  deps: ExecutorDeps, run: Run, timeoutMs: number,
+): Promise<FleetResumeAuthority> {
   const bot = await deps.prisma.bot.findUnique({ where: { id: run.botId }, select: { spawnKey: true } });
   if (!bot?.spawnKey?.startsWith("fleet:")) return {};
   if (!deps.connector) return { reason: "fleet-authority-verifier-unavailable" };
@@ -139,7 +141,7 @@ async function fleetAuthority(deps: ExecutorDeps, run: Run): Promise<FleetResume
   const resourceRevision = assigned.server.revision;
   const context: AdapterContext = { operationId: `maintenance-validate:${run.id}`,
     traceId: `maintenance-validate:${run.id}`, spaceId: run.spaceId, userId: run.userId,
-    botId: run.botId, runId: run.id, signal: AbortSignal.timeout(FLEET_AUTHORITY_TIMEOUT_MS) };
+    botId: run.botId, runId: run.id, signal: AbortSignal.timeout(timeoutMs) };
   try {
     const discovered = await deps.connector.discoverTools(context);
     const candidates = discovered.filter((tool) => tool.route?.connectorId === "mcp" &&
@@ -150,7 +152,11 @@ async function fleetAuthority(deps: ExecutorDeps, run: Run): Promise<FleetResume
     const tool = candidates[0]!;
     for await (const event of deps.connector.execute({ tool: tool.name, args: { run_id: run.id },
       executionId: `maintenance-validate:${run.id}:${run.leaseFence}`, route: tool.route }, context)) {
-      if (event.type === "error") return { reason: "fleet-authority-verification-failed" };
+      // A check cut off by the time budget did not answer; one that answered with an error failed.
+      if (event.type === "error") {
+        return { reason: context.signal.aborted
+          ? "fleet-authority-verifier-unavailable" : "fleet-authority-verification-failed" };
+      }
       if (event.type !== "result") continue;
       if (!event.data || typeof event.data !== "object") return { reason: "fleet-authority-reply-invalid" };
       const result = event.data as { isError?: boolean; structuredContent?: unknown; content?: Array<{ type: string; text?: string }> };
@@ -227,7 +233,11 @@ async function* pages<T extends { id: string }>(load: (afterId?: string) => Prom
   }
 }
 
-export function createExecutorMaintenance(deps: ExecutorDeps) {
+export function createExecutorMaintenance(
+  deps: ExecutorDeps,
+  /** The Fleet check's time budget; tests shorten it. */
+  authorityTimeoutMs = FLEET_AUTHORITY_TIMEOUT_MS,
+) {
   /** When each held run's Fleet check was last tried in this process. */
   const tried = new Map<string, number>();
   /** Whether to validate a run now; records the attempt, so a failed check waits its interval. */
@@ -252,7 +262,7 @@ export function createExecutorMaintenance(deps: ExecutorDeps) {
     type: "run.checkpointed", payload: { status, trigger: run.trigger, taskId: run.taskId },
   });
   return {
-    externalAuthority: (run: Run) => fleetAuthority(deps, run),
+    externalAuthority: (run: Run) => fleetAuthority(deps, run, authorityTimeoutMs),
     mayValidate,
     async validateLease(tx: Prisma.TransactionClient, run: Run, continuation: ExecutorContinuation | undefined,
       checked: FleetResumeAuthority) {
@@ -376,7 +386,7 @@ export function createExecutorMaintenance(deps: ExecutorDeps) {
         try {
           const continuation = readExecutorContinuation(run.maintenanceCheckpoint, run.id);
           if (!continuation) throw new Error("Exact continuation unavailable");
-          const checked = await fleetAuthority(deps, run);
+          const checked = await fleetAuthority(deps, run, authorityTimeoutMs);
           const resumed = await deps.prisma.$transaction(async (tx) => {
             if (!(await lockMaintenanceAdmission(tx)).admitted) return false;
             await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;
