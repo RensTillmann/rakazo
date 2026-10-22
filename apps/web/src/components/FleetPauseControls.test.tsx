@@ -122,4 +122,33 @@ describe("Fleet control dialog", () => {
       `run-lease-expired: ${maintenanceAttentionSentence("run-lease-expired")}`,
     ]);
   });
+
+  it("counts runs waiting on a card answer apart from those needing attention", async () => {
+    const waiting = "fleet-current-card-wait-case-412";
+    vi.mocked(readFleetMaintenance).mockResolvedValue({
+      state: { active: true, revision: 4 },
+      status: {
+        phase: "paused",
+        activeRuns: 0,
+        activeEffects: 0,
+        pendingRuns: 2,
+        issues: [
+          `continuation:run-a:maintenance:attention:${waiting}`,
+          `continuation:run-b:maintenance:attention:${waiting}`,
+        ],
+      },
+    });
+    await act(async () => {
+      root.render(<FleetPauseControls spaceId={null} />);
+    });
+    await act(async () => button("Fleet: Paused")!.click());
+    const toggle = button("2 runs waiting on your answer")!;
+    expect(toggle.textContent).toBe("2 runs waiting on your answer · show");
+    await act(async () => toggle.click());
+    expect(
+      [...container.querySelectorAll('[data-testid="fleet-attention-codes"] li')].map(
+        (li) => li.textContent,
+      ),
+    ).toEqual([`${waiting} ×2: waiting on your answer to this case's card`]);
+  });
 });

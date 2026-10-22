@@ -1,6 +1,10 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { MaintenanceCommand } from "@rakazo/contracts";
-import { maintenanceAttentionSentence, maintenanceIssueCode } from "@rakazo/core";
+import {
+  isWaitingAuthorityReason,
+  maintenanceAttentionSentence,
+  maintenanceIssueCode,
+} from "@rakazo/core";
 import {
   Button,
   Dialog,
@@ -26,10 +30,19 @@ export function AttentionIssues({ issues }: { issues: readonly string[] }) {
   const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const parsed = issues.map(maintenanceIssueCode);
-  const runs = new Set(parsed.flatMap((issue) => (issue.runId ? [issue.runId] : []))).size;
+  const heldRuns = (waiting: boolean) =>
+    new Set(
+      parsed.flatMap((issue) =>
+        issue.runId && isWaitingAuthorityReason(issue.code) === waiting ? [issue.runId] : [],
+      ),
+    ).size;
+  // Waiting on the user's answer to a card is not attention: counted on its own.
+  const runs = heldRuns(false);
+  const waiting = heldRuns(true);
   // The generic "some runs" issue is said by the run count itself.
   const others = parsed.filter(
-    (issue) => !issue.runId && !(runs > 0 && issue.code === "continuation-needs-attention"),
+    (issue) =>
+      !issue.runId && !(runs + waiting > 0 && issue.code === "continuation-needs-attention"),
   );
   const counts = new Map<string, number>();
   for (const issue of parsed) if (issue.runId) counts.set(issue.code, (counts.get(issue.code) ?? 0) + 1);
@@ -39,6 +52,11 @@ export function AttentionIssues({ issues }: { issues: readonly string[] }) {
   ];
   const summary = [
     runs === 1 ? t`1 run needs attention` : runs > 1 ? t`${runs} runs need attention` : null,
+    waiting === 1
+      ? t`1 run waiting on your answer`
+      : waiting > 1
+        ? t`${waiting} runs waiting on your answer`
+        : null,
     others.length === 1
       ? t`1 issue`
       : others.length > 1

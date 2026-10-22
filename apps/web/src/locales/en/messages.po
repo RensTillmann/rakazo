@@ -342,6 +342,10 @@ msgstr "{tokens} tokens today · {runs} runs today"
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr "{toolCount, plural, one {# tool} other {# tools}}"
 
+#: src/components/FleetPauseControls.tsx
+msgid "{waiting} runs waiting on your answer"
+msgstr "{waiting} runs waiting on your answer"
+
 #: src/pages/Shell.tsx
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} is working"
@@ -367,6 +371,10 @@ msgstr "1 issue"
 msgid "1 run needs attention"
 msgstr "1 run needs attention"
 
+#: src/components/FleetPauseControls.tsx
+msgid "1 run waiting on your answer"
+msgstr "1 run waiting on your answer"
+
 #: src/components/UsageBars.tsx
 msgid "5 hours"
 msgstr "5 hours"
@@ -389,6 +397,23 @@ msgstr "A sign-in tab opened at <0>{0}</0>. Enter this code there — this windo
 #: src/pages/Onboarding.tsx
 msgid "A subscription credential is stored securely."
 msgstr "A subscription credential is stored securely."
+
+#. placeholder {0}: todoMinutes / 60
+#: src/components/AskCard.tsx
+msgid "about {0} hours"
+msgstr "about {0} hours"
+
+#: src/components/AskCard.tsx
+msgid "about {todoMinutes} minutes"
+msgstr "about {todoMinutes} minutes"
+
+#: src/components/AskCard.tsx
+msgid "about 1 hour"
+msgstr "about 1 hour"
+
+#: src/components/AskCard.tsx
+msgid "about 1 minute"
+msgstr "about 1 minute"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -5318,10 +5343,6 @@ msgstr "Show selected"
 #: src/pages/Shell.tsx
 msgid "Show settings"
 msgstr "Show settings"
-
-#: src/components/AskCard.tsx
-msgid "Show steps"
-msgstr "Show steps"
 
 #: src/pages/Shell.tsx
 msgid "Show thoughts"

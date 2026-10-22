@@ -8,6 +8,7 @@ import { MaintenanceRecoveryCommandSchema } from "@rakazo/contracts";
 import {
   isOwnerHeldAuthorityReason,
   isRetriedAuthorityReason,
+  isWaitingAuthorityReason,
   maintenanceAttentionSentence,
   OWNER_OVERRIDE_REASON,
   SETTLED_EFFECT_STATUSES,
@@ -390,7 +391,10 @@ export function createMaintenanceRecoveryStore(
         for (const run of held.rows) {
           const reason = maintenanceAttentionReason(run.error) ?? "";
           const ownerHeld = isOwnerHeldAuthorityReason(reason);
-          const settles = isRetriedAuthorityReason(reason) || reason === OWNER_OVERRIDE_REASON;
+          const settles =
+            isRetriedAuthorityReason(reason) ||
+            isWaitingAuthorityReason(reason) ||
+            reason === OWNER_OVERRIDE_REASON;
           items.push({
             ...base,
             kind: "run",

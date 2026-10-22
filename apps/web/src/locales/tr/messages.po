@@ -342,6 +342,10 @@ msgstr ""
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
 
+#: src/components/FleetPauseControls.tsx
+msgid "{waiting} runs waiting on your answer"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} çalışıyor"
@@ -367,6 +371,10 @@ msgstr ""
 msgid "1 run needs attention"
 msgstr ""
 
+#: src/components/FleetPauseControls.tsx
+msgid "1 run waiting on your answer"
+msgstr ""
+
 #: src/components/UsageBars.tsx
 msgid "5 hours"
 msgstr ""
@@ -389,6 +397,23 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "A subscription credential is stored securely."
 msgstr "Bir abonelik kimlik bilgisi güvenli şekilde saklanıyor."
+
+#. placeholder {0}: todoMinutes / 60
+#: src/components/AskCard.tsx
+msgid "about {0} hours"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "about {todoMinutes} minutes"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "about 1 hour"
+msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "about 1 minute"
+msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -5318,10 +5343,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Show settings"
 msgstr "Ayarları göster"
-
-#: src/components/AskCard.tsx
-msgid "Show steps"
-msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show thoughts"

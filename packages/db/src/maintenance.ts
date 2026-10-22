@@ -1,7 +1,12 @@
 import type { MaintenanceState, MaintenanceSnapshot, MaintenanceCommand, MaintenanceChange } from "@rakazo/contracts";
 import { MaintenanceCommandSchema } from "@rakazo/contracts";
 import type { MaintenancePauseSpan } from "@rakazo/core";
-import { IN_PROGRESS_EFFECT_STATUSES, SETTLED_EFFECT_STATUSES } from "@rakazo/core";
+import {
+  FLEET_CARD_WAIT_PREFIX,
+  IN_PROGRESS_EFFECT_STATUSES,
+  isWaitingIssue,
+  SETTLED_EFFECT_STATUSES,
+} from "@rakazo/core";
 import type { Pool } from "pg";
 import type { Prisma } from "./client.js";
 
@@ -254,7 +259,9 @@ export function createMaintenanceStore(pool: Pick<Pool, "connect" | "query">) {
               THEN 'unsettled-routine-checks' END,
             CASE WHEN EXISTS (SELECT 1 FROM "runs"
               WHERE "status" IN ('maintenance_paused', 'queued')
-                AND "error" LIKE '${MAINTENANCE_ATTENTION_PREFIX}%') THEN 'continuation-needs-attention' END,
+                AND "error" LIKE '${MAINTENANCE_ATTENTION_PREFIX}%'
+                AND "error" NOT LIKE '${MAINTENANCE_ATTENTION_PREFIX}${FLEET_CARD_WAIT_PREFIX}%')
+              THEN 'continuation-needs-attention' END,
             CASE WHEN EXISTS (SELECT 1 FROM "runs"
               WHERE "maintenanceCancelRequestedAt" IS NOT NULL) THEN 'cancellation-pending' END,
             CASE WHEN EXISTS (SELECT 1 FROM "runs"
@@ -300,7 +307,8 @@ export function createMaintenanceStore(pool: Pick<Pool, "connect" | "query">) {
       return {
         state: { active: row.active, revision: row.revision },
         status: {
-          phase: issues.length ? "needs_attention" : !row.active ? "running"
+          // A run waiting on the user's answer to a card is listed but needs no attention.
+          phase: issues.some((issue) => !isWaitingIssue(issue)) ? "needs_attention" : !row.active ? "running"
             : activeRuns || activeEffects ? "pausing" : "paused",
           activeRuns, activeEffects, pendingRuns, issues,
         },

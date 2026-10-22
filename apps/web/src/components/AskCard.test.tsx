@@ -133,39 +133,37 @@ describe("AskCard free-text option", () => {
     ).not.toContain("to-do");
   });
 
-  it("lists what the option commits to before choosing: titles, with why and steps folded", () => {
-    const container = document.createElement("div");
-    container.innerHTML = renderToStaticMarkup(
-      <AskCard
-        block={withPrerequisites([
-          {
-            ...dns,
-            why: "Mail is rejected without it.",
-            steps: "1. Open the registrar\n2. Add TXT",
-          },
-          { ...dns, key: "mx", title: "Add the MX record" },
-        ])}
-        canAnswer
-        onAnswer={async () => {}}
-      />,
-    );
-    expect(container.textContent).toContain("adds 2 to-dos");
-    const items = [...container.querySelectorAll('[data-testid="todo-preview"] > li')];
-    expect(items.map((item) => item.firstElementChild?.textContent)).toEqual([
-      "Add the DNS record",
-      "Add the MX record",
+  it("keeps the options a clean list before choosing: no item preview, the count and the time", () => {
+    const render = (items: (typeof dns)[]) => {
+      const container = document.createElement("div");
+      container.innerHTML = renderToStaticMarkup(
+        <AskCard block={withPrerequisites(items)} canAnswer onAnswer={async () => {}} />,
+      );
+      return container;
+    };
+    const timed = render([
+      { ...dns, why: "Mail is rejected without it; about 5 minutes.", steps: "1. Open the registrar\n2. Add TXT" },
+      { ...dns, key: "mx", title: "Add the MX record", steps: "1. Add MX (about 15 minutes)" },
     ]);
-    // Each item folds its why and numbered steps behind "Show steps", closed until opened.
-    const first = items[0]!.querySelector("details")!;
-    expect(first.open).toBe(false);
-    expect(first.querySelector("summary")?.textContent).toBe("Show steps");
-    expect(first.querySelector('[data-testid="todo-why"]')?.textContent).toBe(
-      "Mail is rejected without it.",
+    // Only the options: no titles, steps or "Show steps" between them before choosing.
+    expect(timed.querySelector('[data-testid="todo-preview"]')).toBeNull();
+    expect(timed.textContent).not.toContain("Show steps");
+    expect(timed.textContent).not.toContain("Add the MX record");
+    expect(timed.textContent).not.toContain("Open the registrar");
+    expect(timed.querySelector('[data-testid="todo-option-note"]')?.textContent).toBe(
+      "adds 2 to-dos · about 20 minutes",
     );
-    expect([...first.querySelectorAll("ol > li")].map((step) => step.textContent)).toEqual([
-      "Open the registrar",
-      "Add TXT",
-    ]);
+    // Without a time on every item, just the count.
+    expect(
+      render([{ ...dns, why: "about 5 minutes" }, { ...dns, key: "mx" }]).querySelector(
+        '[data-testid="todo-option-note"]',
+      )?.textContent,
+    ).toBe("adds 2 to-dos");
+    expect(
+      render([{ ...dns, steps: "1. Call the bank, about 1 hour" }]).querySelector(
+        '[data-testid="todo-option-note"]',
+      )?.textContent,
+    ).toBe("adds 1 to-do · about 1 hour");
   });
 
   it("shows the to-dos it handed over once answered, and not while pending", async () => {

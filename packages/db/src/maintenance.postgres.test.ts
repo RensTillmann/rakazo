@@ -166,6 +166,24 @@ suite("maintenance state PostgreSQL persistence and contention", () => {
     expect((await store.statusForOperator("operator")).status).toEqual(quiet);
   });
 
+  it("lists a run waiting on the user's card answer without raising attention", async () => {
+    const store = createMaintenanceStore(pool);
+    await pool.query(`
+      INSERT INTO "runs" ("id", "status", "error") VALUES
+        ('waiting', 'maintenance_paused', 'maintenance:attention:fleet-current-card-wait-case-412');
+    `);
+    await store.change("operator", { requestId: "enter", action: "enter", expectedRevision: 0 });
+    expect((await store.statusForOperator("operator")).status).toEqual({
+      phase: "paused", activeRuns: 0, activeEffects: 0, pendingRuns: 1,
+      issues: ["continuation:waiting:maintenance:attention:fleet-current-card-wait-case-412"],
+    });
+    await pool.query(`
+      INSERT INTO "runs" ("id", "status", "error") VALUES
+        ('bound', 'maintenance_paused', 'maintenance:attention:fleet-authority-binding-invalid');
+    `);
+    expect((await store.statusForOperator("operator")).status.phase).toBe("needs_attention");
+  });
+
   it("reports busy, pending and uncertain work without equating active pause with quiescence", async () => {
     const store = createMaintenanceStore(pool);
     await pool.query(`

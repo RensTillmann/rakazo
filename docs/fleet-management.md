@@ -159,9 +159,10 @@ next, about how long it takes, real URLs, exact menu names and values, the bot's
 the chat) as the place for a secret, how it is checked, and "(not checked)" after any step it has not
 verified. Cards already stored keep the stored shape and are not re-checked.
 
-While the card is open, the to-do option says "adds N to-dos" and lists the item titles under it;
-"Show steps" unfolds each item's why and numbered steps, so the user sees what they commit to before
-choosing.
+While the card is open its options stay a clean list: the to-do option's line says "adds N to-dos",
+followed by "· about <time>" when every item names its time ("about N minutes/hours" in why or
+steps). The items' steps are not shown between the options; they show after choosing, in the To-dos
+panel and the card's checklist.
 
 Answering with that option, inside the answer's transaction, creates one `UserTodo` per item, grouped
 by the card (`sourceMessageId`). An item whose `key` already has a to-do in the space keeps that to-do's

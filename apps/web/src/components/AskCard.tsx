@@ -15,11 +15,12 @@ import {
   isSecretAskBlock,
   retiredCardReason,
   selectedAskActionLabel,
+  todoTimeEstimateMinutes,
 } from "@rakazo/core";
 import { Button, Input, Textarea } from "@rakazo/ui-web";
 import { Paperclip, Plus, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { Fragment, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { answeredByDeviceLabel } from "../lib/answered-by-label";
 import {
   ATTACHMENT_ACCEPT,
@@ -32,7 +33,7 @@ import { errorText } from "../lib/user-error";
 import { ApprovalDetail } from "./ApprovalDetail";
 import { HoldToTalkControls, HoldToTalkStrip, useHoldToTalk } from "./composer/HoldToTalk";
 import { ReplyReview, useApprovalReview } from "./ReplyReview";
-import { TodoChecklist, TodoInstructions } from "./TodosControl";
+import { TodoChecklist } from "./TodosControl";
 
 /** `pendingAction` while a typed answer (with its files) is being sent; never an action id. */
 const TYPED_ANSWER_ACTION = "\u0000typed";
@@ -244,6 +245,7 @@ export function AskCard({
     : askActions;
   const prerequisiteItems = block.prerequisites?.items ?? [];
   const prerequisiteCount = prerequisiteItems.length;
+  const todoMinutes = todoTimeEstimateMinutes(prerequisiteItems);
   const secretInput = isSecretAskBlock(block);
   const loginInput = secretInput && block.credential?.auth.type === "login";
   const secretLabel = loginInput ? t`Password` : secretFieldLabel(block.purpose);
@@ -564,8 +566,8 @@ export function AskCard({
       ) : askActions?.length ? (
         <div className={approvalActions ? "mt-3.5 flex flex-wrap gap-2" : "mt-3.5 space-y-1.5"}>
           {displayActions?.map((action) => (
-            <Fragment key={action.id}>
               <Button
+                key={action.id}
                 title={approvalActions ? approvalActionTitle(action.id, action.outcome) : undefined}
                 variant={approvalActions && action.id === "allow" ? "default" : "outline"}
                 className={`h-auto min-w-0 whitespace-normal px-3.5 py-3 text-start font-normal ${approvalActions ? "" : "w-full justify-start"}`}
@@ -596,35 +598,27 @@ export function AskCard({
                 ) : "todo" in action && action.todo && prerequisiteCount ? (
                   <span className="flex min-w-0 flex-col items-start gap-1">
                     <span>{action.label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {prerequisiteCount === 1
-                        ? t`adds 1 to-do`
-                        : t`adds ${prerequisiteCount} to-dos`}
+                    <span data-testid="todo-option-note" className="text-xs text-muted-foreground">
+                      {[
+                        prerequisiteCount === 1 ? t`adds 1 to-do` : t`adds ${prerequisiteCount} to-dos`,
+                        todoMinutes === null
+                          ? null
+                          : todoMinutes >= 60 && todoMinutes % 60 === 0
+                            ? todoMinutes === 60
+                              ? t`about 1 hour`
+                              : t`about ${todoMinutes / 60} hours`
+                            : todoMinutes === 1
+                              ? t`about 1 minute`
+                              : t`about ${todoMinutes} minutes`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   </span>
                 ) : (
                   action.label
                 )}
               </Button>
-              {"todo" in action && action.todo && prerequisiteCount && !approvalActions ? (
-                // What choosing it commits the user to, before choosing.
-                <ul data-testid="todo-preview" className="space-y-1 ps-3.5 text-[13.5px]">
-                  {prerequisiteItems.map((item) => (
-                    <li key={item.key}>
-                      <span>{item.title}</span>
-                      <details className="text-xs">
-                        <summary className="cursor-pointer text-muted-foreground">
-                          <Trans>Show steps</Trans>
-                        </summary>
-                        <div className="mt-1 space-y-1">
-                          <TodoInstructions why={item.why} steps={item.steps} />
-                        </div>
-                      </details>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </Fragment>
           ))}
           {!approvalActions && !block.instructionUpdate
             ? typedAnswer(t`Or type your own answer…`)

@@ -46,7 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Bots must give every to-do a reason, numbered steps and the tracker case it belongs to; a to-do request without them is refused with what to fix.
 - A bot whose run the Fleet pause holds shows "Paused after N steps" in the sidebar, so the progress it kept is visible.
 - Unfinished operations in Fleet control show the case, who follows up, and whether you need to act. A Fleet service operation says how to settle it in the Fleet service, and work a Fleet wake started shows its case from that wake, or "Case unknown".
-- A card's to-do option lists the items it adds, with "Show steps" for each item's reason and steps. A check held by the Fleet pause says "waiting — Fleet paused", and an item you confirmed says "Confirmed by you".
+- A card's to-do option says how many to-dos it adds and, when the bot gave one, about how long they take; the steps show after you choose. A check held by the Fleet pause says "waiting — Fleet paused", and an item you confirmed says "Confirmed by you".
 - Message bubbles in the web/PWA transcript use more of a wide window's width (70%/74% caps raised to 84%/88%, still leaving room for the hover-actions gutter), instead of leaving a quarter to a third of a long message's row empty.
 - Every run's system instructions now state the current date and time (UTC), so bots judge deadlines, recency and scheduling from the real present instead of guessing it from training data or quoted timestamps.
 - Connect Slack, WhatsApp Business Cloud, or Telegram DMs to a bot from Messaging settings, alongside iMessage/SMS. Each app can use a different bot. Group conversations remain iMessage-only.

@@ -69,11 +69,26 @@ export function isOwnerHeldAuthorityReason(reason: string | undefined): boolean 
   return /^(fleet-authority-)?binding-(unavailable|invalid)$/.test(reason ?? "");
 }
 
+/** The Fleet's reasons for a run that waits on the user's answer to its case's card. */
+export const FLEET_CARD_WAIT_PREFIX = "fleet-current-card-wait-";
+
+/** Waiting on the user's answer to a card: waiting, not something needing attention. */
+export function isWaitingAuthorityReason(reason: string | undefined): boolean {
+  return (reason ?? "").startsWith(FLEET_CARD_WAIT_PREFIX);
+}
+
+/** A status issue that only says a run waits on the user's answer; it raises no attention. */
+export function isWaitingIssue(issue: string): boolean {
+  const { runId, code } = maintenanceIssueCode(issue);
+  return runId !== null && isWaitingAuthorityReason(code);
+}
+
 /** The owner let a held run continue: its next resume skips the Fleet's check, once. */
 export const OWNER_OVERRIDE_REASON = "owner-override";
 
 /** The plain sentence for one attention code. */
 export function maintenanceAttentionSentence(code: string): string {
+  if (isWaitingAuthorityReason(code)) return "waiting on your answer to this case's card";
   return (
     MAINTENANCE_ATTENTION_SENTENCES[code] ??
     (code.endsWith("-unavailable")

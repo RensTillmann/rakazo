@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isWaitingIssue,
   MAINTENANCE_ATTENTION_SENTENCES,
   maintenanceAttentionSentence,
   maintenanceIssueCode,
@@ -23,6 +24,16 @@ describe("maintenance attention sentences", () => {
       /could not be checked/,
     );
     expect(maintenanceAttentionSentence("something-new")).toMatch(/look at this/);
+  });
+
+  it("treats a run waiting on the user's card answer as waiting, not attention", () => {
+    const code = "fleet-current-card-wait-case-412";
+    expect(maintenanceAttentionSentence(code)).toBe("waiting on your answer to this case's card");
+    expect(isWaitingIssue(`continuation:run-1:maintenance:attention:${code}`)).toBe(true);
+    expect(
+      isWaitingIssue("continuation:run-1:maintenance:attention:fleet-authority-binding-invalid"),
+    ).toBe(false);
+    expect(isWaitingIssue("uncertain-effects")).toBe(false);
   });
 
   it("splits a held run's issue from status-wide codes", () => {
