@@ -15,7 +15,7 @@ export interface MaintenanceCancellationStore {
 }
 
 /** Stable storage discriminator, independent of operator-facing wording. */
-const MAINTENANCE_ATTENTION_PREFIX = "maintenance:attention:";
+export const MAINTENANCE_ATTENTION_PREFIX = "maintenance:attention:";
 export function maintenanceAttention(reason: string): string {
   if (!/^[a-z0-9-]+$/.test(reason)) throw new Error("Invalid maintenance attention reason");
   return `${MAINTENANCE_ATTENTION_PREFIX}${reason}`;

@@ -52,7 +52,25 @@ export const MAINTENANCE_ATTENTION_SENTENCES: Record<string, string> = {
   "teaching-held": "the bot is being taught a skill",
   "runtime-continuation-invalid": "its saved progress cannot be continued",
   "runtime-tool-binding-changed": "a tool it was using changed while it was held",
+  "owner-override": "you let it continue; it skips the Fleet's check once, when Fleet runs",
 };
+
+/** Held because the Fleet's check did not answer: retried automatically. */
+export function isRetriedAuthorityReason(reason: string | undefined): boolean {
+  return reason === "fleet-authority-verifier-unavailable" ||
+    reason === "fleet-authority-verification-failed";
+}
+
+/**
+ * Held because the Fleet reports the run's binding unavailable or invalid: a real evidence
+ * problem, never retried. Only the owner settles it: let it continue once, or stop it.
+ */
+export function isOwnerHeldAuthorityReason(reason: string | undefined): boolean {
+  return /^(fleet-authority-)?binding-(unavailable|invalid)$/.test(reason ?? "");
+}
+
+/** The owner let a held run continue: its next resume skips the Fleet's check, once. */
+export const OWNER_OVERRIDE_REASON = "owner-override";
 
 /** The plain sentence for one attention code. */
 export function maintenanceAttentionSentence(code: string): string {

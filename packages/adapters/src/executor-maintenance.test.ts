@@ -311,6 +311,27 @@ describe("trusted Fleet continuation authority", () => {
     }
   });
 
+  it("uses the owner's override once: resumes past the Fleet's check, then checks it again", async () => {
+    const f = await pausedFleet();
+    f.run.error = maintenanceAttention("owner-override");
+    await f.maintenance.reconcile(async () => undefined);
+    expect(f.deps.connector.execute).not.toHaveBeenCalled();
+    expect(f.run.status).toBe("queued");
+    expect(f.run.error).toBeNull();
+    // Consumed: the next check asks the Fleet again.
+    await f.maintenance.externalAuthority(f.run as unknown as Run);
+    expect(f.deps.connector.execute).toHaveBeenCalledTimes(1);
+
+    // Rakazo's own checks still apply; a refusal there replaces the override.
+    const held = await pausedFleet();
+    held.run.error = maintenanceAttention("owner-override");
+    held.control.teaching = true;
+    await held.maintenance.reconcile(async () => undefined);
+    expect(held.deps.connector.execute).not.toHaveBeenCalled();
+    expect(maintenanceAttentionReason(held.run.error)).toBe("teaching-held");
+    expect(held.run.status).toBe("maintenance_paused");
+  });
+
   it("decides retries from the hold's reason, its age and the last try", () => {
     const now = Date.parse("2026-10-23T12:00:00Z");
     const since = new Date(now - 60 * 60_000);

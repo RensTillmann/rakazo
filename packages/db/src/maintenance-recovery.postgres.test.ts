@@ -40,8 +40,11 @@ suite("maintenance recovery against PostgreSQL", () => {
       CREATE TABLE "runs" (
         "id" TEXT PRIMARY KEY, "botId" TEXT, "status" TEXT NOT NULL,
         "leaseFence" INTEGER NOT NULL DEFAULT 1, "leaseExpiresAt" TIMESTAMP(3),
-        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT (now() AT TIME ZONE 'UTC'),
+        "error" TEXT, "maintenanceCancelRequestedAt" TIMESTAMP(3)
       );
+      CREATE TABLE "maintenance_state" ("id" TEXT PRIMARY KEY, "active" BOOLEAN NOT NULL, "revision" INTEGER NOT NULL);
+      INSERT INTO "maintenance_state" VALUES ('default', true, 1);
       CREATE TABLE "attempts" (
         "id" TEXT PRIMARY KEY, "runId" TEXT NOT NULL, "fence" INTEGER NOT NULL,
         "status" TEXT NOT NULL, "error" TEXT,
@@ -74,6 +77,15 @@ suite("maintenance recovery against PostgreSQL", () => {
       await readFile(
         new URL(
           "../prisma/migrations/20261021160000_maintenance_recovery/migration.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await pool.query(
+      await readFile(
+        new URL(
+          "../prisma/migrations/20261023120000_maintenance_recovery_run_actions/migration.sql",
           import.meta.url,
         ),
         "utf8",
@@ -196,6 +208,92 @@ suite("maintenance recovery against PostgreSQL", () => {
           '2026-10-21 05:00:00', '2026-10-21 05:00:00');
     `);
     expect((await byId()).has("stale-approval")).toBe(false);
+  });
+
+  it("lets the owner continue or stop a run the Fleet holds for a binding problem, audited", async () => {
+    await pool.query(`
+      INSERT INTO "runs" ("id", "botId", "status", "error") VALUES
+        ('bound', 'riona', 'maintenance_paused', 'maintenance:attention:fleet-authority-binding-invalid'),
+        ('doomed', 'riona', 'queued', 'maintenance:attention:fleet-authority-binding-unavailable'),
+        ('retried', 'jill', 'maintenance_paused', 'maintenance:attention:fleet-authority-verifier-unavailable');
+    `);
+    const items = await byId();
+    expect(items.get("bound")).toMatchObject({
+      kind: "run",
+      state: "unresolved",
+      ownerActions: ["continue", "stop"],
+      userActionNeeded: true,
+    });
+    // Retried automatically: listed, nothing for the owner to do.
+    expect(items.get("retried")).toMatchObject({ state: "draining", ownerActions: [] });
+
+    const store = createMaintenanceRecoveryStore(pool, noCoordinators);
+    const run = (
+      id: string,
+      basis: "owner-override" | "owner-stop",
+      status = "maintenance_paused",
+    ) => ({ requestId: `${basis}:${id}`, basis, kind: "run", id, expectedStatus: status }) as const;
+    // Owner only.
+    await expect(store.settleRecovery("outsider", run("bound", "owner-override"))).rejects.toThrow(
+      "owner required",
+    );
+    // Not for a run the Fleet's check will retry by itself.
+    expect(await store.settleRecovery("operator", run("retried", "owner-override"))).toMatchObject({
+      outcome: "refused",
+    });
+
+    // While paused it is recorded and waits for Resume; the run is marked for one override.
+    expect(await store.settleRecovery("operator", run("bound", "owner-override"))).toEqual({
+      outcome: "settled",
+      status: "maintenance_paused",
+      reason: "Recorded. Fleet is paused: it continues when you resume Fleet.",
+    });
+    expect(
+      (await pool.query(`SELECT "error", "status" FROM "runs" WHERE "id" = 'bound'`)).rows[0],
+    ).toEqual({ error: "maintenance:attention:owner-override", status: "maintenance_paused" });
+    // Repeating the request replays; it is no longer binding-held, so a new one is refused.
+    expect(await store.settleRecovery("operator", run("bound", "owner-override"))).toMatchObject({
+      outcome: "replayed",
+    });
+
+    expect(await store.settleRecovery("operator", run("doomed", "owner-stop", "queued"))).toEqual({
+      outcome: "settled",
+      status: "stopping",
+    });
+    expect(
+      (
+        await pool.query(
+          `SELECT "maintenanceCancelRequestedAt" IS NOT NULL AS "requested" FROM "runs" WHERE "id" = 'doomed'`,
+        )
+      ).rows[0],
+    ).toEqual({ requested: true });
+
+    const audit = await pool.query(
+      `SELECT "operatorId", "targetKind", "targetId", "basis", "toStatus", "evidence"
+         FROM "maintenance_recovery" WHERE "targetKind" = 'run' ORDER BY "targetId"`,
+    );
+    expect(audit.rows).toEqual([
+      {
+        operatorId: "operator",
+        targetKind: "run",
+        targetId: "bound",
+        basis: "owner-override",
+        toStatus: "owner-override",
+        evidence: { reason: "owner override", heldFor: "fleet-authority-binding-invalid" },
+      },
+      {
+        operatorId: "operator",
+        targetKind: "run",
+        targetId: "doomed",
+        basis: "owner-stop",
+        toStatus: "stopping",
+        evidence: { reason: "owner stop", heldFor: "fleet-authority-binding-unavailable" },
+      },
+    ]);
+    // Being stopped, it leaves the held list; the overridden one waits for the next resume.
+    const after = await byId();
+    expect(after.has("doomed")).toBe(false);
+    expect(after.get("bound")).toMatchObject({ state: "draining", ownerActions: [] });
   });
 
   it("names the Fleet coordinator for a Fleet service effect and how to settle it there", async () => {

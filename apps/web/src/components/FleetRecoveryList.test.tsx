@@ -5,7 +5,7 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readFleetRecovery } from "../lib/rpc";
+import { readFleetRecovery, settleFleetRecovery } from "../lib/rpc";
 import { FleetRecoveryList } from "./FleetRecoveryList";
 
 vi.mock("@lingui/react/macro", () => ({
@@ -36,6 +36,7 @@ function item(overrides: Partial<MaintenanceRecoveryItem>): MaintenanceRecoveryI
     caseUnknown: false,
     coordinator: "Josy",
     userActionNeeded: true,
+    ownerActions: [],
     ...overrides,
   };
 }
@@ -110,5 +111,60 @@ describe("FleetRecoveryList", () => {
       "shell · Jill · uncertain · Finishing on its own",
       "shell · Jill · uncertain · Outcome unknown",
     ]);
+  });
+
+  it("offers let-it-continue and stop only for a run the Fleet holds for a binding problem", async () => {
+    const held = (
+      id: string,
+      reason: string,
+      ownerActions: MaintenanceRecoveryItem["ownerActions"],
+    ) =>
+      item({
+        kind: "run",
+        id,
+        status: "maintenance_paused",
+        runId: id,
+        runStatus: "maintenance_paused",
+        operation: "held run",
+        state: ownerActions.length ? "unresolved" : "draining",
+        evidence: reason,
+        ownerVerifiable: false,
+        ownerActions,
+      });
+    vi.mocked(readFleetRecovery).mockResolvedValue({
+      items: [
+        held("bound", "fleet-authority-binding-invalid", ["continue", "stop"]),
+        held("retried", "fleet-authority-verifier-unavailable", []),
+      ],
+    });
+    vi.mocked(settleFleetRecovery).mockResolvedValue({
+      outcome: "settled",
+      status: "maintenance_paused",
+    });
+    await act(async () => {
+      root.render(<FleetRecoveryList spaceId="space-1" version={0} onSettled={() => {}} />);
+    });
+    const row = (id: string) =>
+      [...container.querySelectorAll("li")].find((li) => li.textContent?.includes(`run ${id}`))!;
+    const buttons = (id: string) =>
+      [...row(id).querySelectorAll("button")].map((b) => b.textContent);
+    expect(buttons("bound")).toEqual(["Let it continue…", "Stop it…"]);
+    expect(buttons("retried")).toEqual([]);
+
+    // Each asks first; confirming sends the owner's override for that run only.
+    const click = async (id: string, text: string) => {
+      const button = [...row(id).querySelectorAll("button")].find((b) => b.textContent === text)!;
+      await act(async () => button.click());
+    };
+    await click("bound", "Let it continue…");
+    expect(settleFleetRecovery).not.toHaveBeenCalled();
+    await click("bound", "Confirm: let it continue");
+    expect(settleFleetRecovery).toHaveBeenCalledWith("space-1", {
+      requestId: expect.any(String),
+      basis: "owner-override",
+      kind: "run",
+      id: "bound",
+      expectedStatus: "maintenance_paused",
+    });
   });
 });

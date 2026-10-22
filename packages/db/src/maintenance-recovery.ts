@@ -5,12 +5,24 @@ import type {
   MaintenanceRecoveryResult,
 } from "@rakazo/contracts";
 import { MaintenanceRecoveryCommandSchema } from "@rakazo/contracts";
-import { SETTLED_EFFECT_STATUSES } from "@rakazo/core";
+import {
+  isOwnerHeldAuthorityReason,
+  isRetriedAuthorityReason,
+  maintenanceAttentionSentence,
+  OWNER_OVERRIDE_REASON,
+  SETTLED_EFFECT_STATUSES,
+} from "@rakazo/core";
 import type { Pool, PoolClient } from "pg";
 import type { CaseCoordination } from "./case-coordinators.js";
 import { caseCoordinatorOf, fleetCoordinatorOf } from "./case-coordinators.js";
 import { askCaseRef } from "./decisions.js";
-import { MaintenanceConflictError, MaintenanceOwnerRequiredError } from "./maintenance.js";
+import {
+  MAINTENANCE_ATTENTION_PREFIX,
+  MaintenanceConflictError,
+  MaintenanceOwnerRequiredError,
+  maintenanceAttention,
+  maintenanceAttentionReason,
+} from "./maintenance.js";
 
 export interface MaintenanceRecoveryStore {
   recoveryForOperator(operatorId: string): Promise<MaintenanceRecovery>;
@@ -308,6 +320,7 @@ async function accountFor(
     item.userActionNeeded =
       item.state === "settleable" ||
       item.ownerVerifiable ||
+      item.ownerActions.length > 0 ||
       (item.kind === "fleet-effect" && item.state === "unresolved");
   }
 }
@@ -332,6 +345,7 @@ export function createMaintenanceRecoveryStore(
           caseUnknown: false,
           coordinator: null,
           userActionNeeded: false,
+          ownerActions: [],
         } satisfies Partial<MaintenanceRecoveryItem>;
 
         const runs = await client.query(
@@ -360,6 +374,40 @@ export function createMaintenanceRecoveryStore(
             missing: live
               ? null
               : "A worker restart reclaims an expired lease; until then its progress is unknown.",
+          });
+        }
+
+        // Runs the pause or the Fleet's check holds, with the reason. A run the Fleet holds for a
+        // binding problem waits for the owner: let it continue once, or stop it.
+        const held = await client.query(
+          `SELECT r."id", r."status", r."error", ${utc('r."updatedAt"')} AS "updatedAt", b."name" AS "bot"
+           FROM "runs" r LEFT JOIN "bots" b ON b."id" = r."botId"
+           WHERE r."status" IN ('maintenance_paused', 'queued') AND r."error" LIKE $1
+             AND r."maintenanceCancelRequestedAt" IS NULL
+           ORDER BY r."id"`,
+          [`${MAINTENANCE_ATTENTION_PREFIX}%`],
+        );
+        for (const run of held.rows) {
+          const reason = maintenanceAttentionReason(run.error) ?? "";
+          const ownerHeld = isOwnerHeldAuthorityReason(reason);
+          const settles = isRetriedAuthorityReason(reason) || reason === OWNER_OVERRIDE_REASON;
+          items.push({
+            ...base,
+            kind: "run",
+            id: run.id,
+            status: run.status,
+            bot: run.bot ?? null,
+            runId: run.id,
+            runStatus: run.status,
+            operation: "held run",
+            startedAt: null,
+            lastEvidenceAt: run.updatedAt,
+            state: settles ? "draining" : "unresolved",
+            evidence: `${reason}: ${maintenanceAttentionSentence(reason)}`,
+            missing: ownerHeld
+              ? "Let it continue (it skips the Fleet's check once) or stop it."
+              : null,
+            ownerActions: ownerHeld ? ["continue", "stop"] : [],
           });
         }
 
@@ -587,6 +635,61 @@ export function createMaintenanceRecoveryStore(
           await client.query("COMMIT");
           return result;
         };
+
+        if (command.kind === "run") {
+          const found = await client.query<{ id: string; status: string; error: string | null }>(
+            `SELECT "id", "status", "error" FROM "runs"
+             WHERE "id" = $1 AND "maintenanceCancelRequestedAt" IS NULL FOR UPDATE`,
+            [command.id],
+          );
+          const run = found.rows[0];
+          if (!run) return done({ outcome: "refused", status: "missing", reason: "Run not found." });
+          if (run.status !== command.expectedStatus) {
+            return done({ outcome: "changed", status: run.status });
+          }
+          const heldFor = maintenanceAttentionReason(run.error);
+          if (!isOwnerHeldAuthorityReason(heldFor)) {
+            return done({
+              outcome: "refused",
+              status: run.status,
+              reason: "Only a run the Fleet holds for a binding problem takes this action.",
+            });
+          }
+          if (command.basis === "owner-stop") {
+            // The existing teardown path cancels it and retires its cards, pause or not.
+            await client.query(
+              `UPDATE "runs" SET "maintenanceCancelRequestedAt" = CURRENT_TIMESTAMP WHERE "id" = $1`,
+              [run.id],
+            );
+            return done(
+              { outcome: "settled", status: "stopping" },
+              { from: run.status, to: "stopping", evidence: { reason: "owner stop", heldFor } },
+            );
+          }
+          await client.query(`UPDATE "runs" SET "error" = $2 WHERE "id" = $1`, [
+            run.id,
+            maintenanceAttention(OWNER_OVERRIDE_REASON),
+          ]);
+          // The pause still holds: the override is used at the next resume, never sooner.
+          const paused = await client.query<{ active: boolean }>(
+            `SELECT "active" FROM "maintenance_state" WHERE "id" = 'default'`,
+          );
+          return done(
+            {
+              outcome: "settled",
+              status: run.status,
+              reason:
+                paused.rows[0]?.active === false
+                  ? "Recorded. It continues on the next pass."
+                  : "Recorded. Fleet is paused: it continues when you resume Fleet.",
+            },
+            {
+              from: run.status,
+              to: OWNER_OVERRIDE_REASON,
+              evidence: { reason: "owner override", heldFor },
+            },
+          );
+        }
 
         if (command.kind === "attempt") {
           const found = await client.query(

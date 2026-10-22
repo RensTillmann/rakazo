@@ -1,6 +1,7 @@
 import type { AdapterContext } from "@rakazo/adapter-kit";
 import { runContinueJob } from "@rakazo/adapter-kit";
-import { isOneShotRoutineCrons, isSettledEffectStatus } from "@rakazo/core";
+import { isOneShotRoutineCrons, isOwnerHeldAuthorityReason, isRetriedAuthorityReason,
+  isSettledEffectStatus, OWNER_OVERRIDE_REASON } from "@rakazo/core";
 import { stableJsonValue } from "@rakazo/core/node/approval-effect-key";
 import type { Prisma, Run } from "@rakazo/db";
 import { cancelRunsInTransaction, checkpointMaintenanceRun, expireComputerExecutionLeases,
@@ -88,18 +89,17 @@ async function authority(tx: Prisma.TransactionClient, runId: string) {
   return { run, snapshot };
 }
 
-export type FleetResumeAuthority = { reason?: string; resourceId?: string; resourceRevision?: number };
+export type FleetResumeAuthority = {
+  reason?: string; resourceId?: string; resourceRevision?: number;
+  /** The owner let this held run continue: the Fleet's check is skipped this once. */
+  overridden?: true;
+};
 /** How long the Fleet's maintenance_validate may take before the check counts as unavailable. */
 export const FLEET_AUTHORITY_TIMEOUT_MS = 90_000;
 /** A run held because the Fleet's check could not answer is checked again this often… */
 export const FLEET_AUTHORITY_RETRY_INTERVAL_MS = 5 * 60_000;
 /** …for this long after it was first held; then it waits for the owner. */
 export const FLEET_AUTHORITY_RETRY_WINDOW_MS = 24 * 60 * 60_000;
-/** The Fleet's check did not answer: a passing condition, retried automatically. */
-const RETRIED_AUTHORITY_REASONS: Record<string, true> = {
-  "fleet-authority-verifier-unavailable": true,
-  "fleet-authority-verification-failed": true,
-};
 
 /**
  * Whether a run held for maintenance attention is validated again now. A Fleet check that did not
@@ -114,8 +114,8 @@ export function authorityRetry(
   now: number,
 ): "now" | "later" | "never" {
   if (!reason) return "now";
-  if (/^(fleet-authority-)?binding-(unavailable|invalid)$/.test(reason)) return "never";
-  if (!RETRIED_AUTHORITY_REASONS[reason]) return "now";
+  if (isOwnerHeldAuthorityReason(reason)) return "never";
+  if (!isRetriedAuthorityReason(reason)) return "now";
   if (now - heldSince.getTime() > FLEET_AUTHORITY_RETRY_WINDOW_MS) return "never";
   return lastTried !== undefined && now - lastTried < FLEET_AUTHORITY_RETRY_INTERVAL_MS
     ? "later"
@@ -129,6 +129,8 @@ async function fleetAuthority(
 ): Promise<FleetResumeAuthority> {
   const bot = await deps.prisma.bot.findUnique({ where: { id: run.botId }, select: { spawnKey: true } });
   if (!bot?.spawnKey?.startsWith("fleet:")) return {};
+  // The owner's audited override is consumed by this resume: the error is cleared or replaced.
+  if (maintenanceAttentionReason(run.error) === OWNER_OVERRIDE_REASON) return { overridden: true };
   if (!deps.connector) return { reason: "fleet-authority-verifier-unavailable" };
   const assignments = await deps.prisma.botMcpServer.findMany({
     where: { botId: run.botId, userId: run.userId, spaceId: run.spaceId, server: {
@@ -203,7 +205,8 @@ async function validateAuthority(
   const current = await authority(tx, run.id);
   const currentRun = "run" in current ? current.run : undefined;
   let reason = await revalidateFleetResource(tx, run, checked) ?? current.reason;
-  if (!reason && currentRun?.bot.spawnKey?.startsWith("fleet:") && !checked.resourceId) {
+  if (!reason && currentRun?.bot.spawnKey?.startsWith("fleet:") && !checked.resourceId &&
+    !checked.overridden) {
     reason = "fleet-authority-verifier-unavailable";
   }
   if (!reason && (currentRun?.leaseFence !== run.leaseFence ||

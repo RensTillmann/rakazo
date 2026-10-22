@@ -30,6 +30,10 @@ export function FleetRecoveryList({
   const [verifying, setVerifying] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<"completed" | "failed" | null>(null);
   const [note, setNote] = useState("");
+  const [confirming, setConfirming] = useState<{
+    id: string;
+    basis: "owner-override" | "owner-stop";
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -65,6 +69,7 @@ export function FleetRecoveryList({
       setVerifying(null);
       setOutcome(null);
       setNote("");
+      setConfirming(null);
     } catch {
       setMessage(t`Outcome unknown. The list below shows the current state.`);
     } finally {
@@ -257,6 +262,57 @@ export function FleetRecoveryList({
                 >
                   <Trans>I checked it…</Trans>
                 </Button>
+              )
+            ) : null}
+            {item.ownerActions.length ? (
+              confirming?.id === item.id ? (
+                <div className="space-y-2 rounded-md border border-warning p-2">
+                  <p>
+                    {confirming.basis === "owner-override"
+                      ? t`It continues once without the Fleet's safety check, recorded as your override. While Fleet is paused it waits for Resume.`
+                      : t`It is cancelled and its open cards are closed. This cannot be undone.`}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant={confirming.basis === "owner-stop" ? "destructive" : "default"}
+                      disabled={busy}
+                      onClick={() =>
+                        void settle({
+                          requestId: newClientId(),
+                          basis: confirming.basis,
+                          kind: "run",
+                          id: item.id,
+                          expectedStatus: item.status,
+                        })
+                      }
+                    >
+                      {confirming.basis === "owner-override" ? t`Confirm: let it continue` : t`Confirm: stop it`}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirming(null)}>
+                      <Trans>Cancel</Trans>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setConfirming({ id: item.id, basis: "owner-override" })}
+                  >
+                    <Trans>Let it continue…</Trans>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setConfirming({ id: item.id, basis: "owner-stop" })}
+                  >
+                    <Trans>Stop it…</Trans>
+                  </Button>
+                </div>
               )
             ) : null}
           </li>

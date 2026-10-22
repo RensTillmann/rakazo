@@ -1546,6 +1546,14 @@ msgstr "Confirm password"
 msgid "Confirm the URL is reachable from this browser session, then test again."
 msgstr "Confirm the URL is reachable from this browser session, then test again."
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Confirm: let it continue"
+msgstr "Confirm: let it continue"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Confirm: stop it"
+msgstr "Confirm: stop it"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
 msgstr "Confirmations"
@@ -3218,8 +3226,16 @@ msgid "It changed meanwhile (now {0}); nothing was overwritten."
 msgstr "It changed meanwhile (now {0}); nothing was overwritten."
 
 #: src/components/FleetRecoveryList.tsx
+msgid "It continues once without the Fleet's safety check, recorded as your override. While Fleet is paused it waits for Resume."
+msgstr "It continues once without the Fleet's safety check, recorded as your override. While Fleet is paused it waits for Resume."
+
+#: src/components/FleetRecoveryList.tsx
 msgid "It did not take effect"
 msgstr "It did not take effect"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "It is cancelled and its open cards are closed. This cannot be undone."
+msgstr "It is cancelled and its open cards are closed. This cannot be undone."
 
 #: src/components/FleetRecoveryList.tsx
 msgid "It took effect"
@@ -3302,6 +3318,10 @@ msgstr "Leave"
 #: src/components/AskCard.tsx
 msgid "Leaves everything as is"
 msgstr "Leaves everything as is"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Let it continue…"
+msgstr "Let it continue…"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Lets this bot organize, retune and schedule the bots it creates. You approve each change."
@@ -5505,6 +5525,10 @@ msgstr "still missing: {detail}"
 #: src/pages/Shell.tsx
 msgid "Stop"
 msgstr "Stop"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Stop it…"
+msgstr "Stop it…"
 
 #: src/pages/Shell.tsx
 msgid "Stop speaking"

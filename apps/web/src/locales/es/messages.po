@@ -1546,6 +1546,14 @@ msgstr "Confirmar contraseña"
 msgid "Confirm the URL is reachable from this browser session, then test again."
 msgstr "Confirma que la URL es accesible desde esta sesión del navegador y vuelve a probar."
 
+#: src/components/FleetRecoveryList.tsx
+msgid "Confirm: let it continue"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Confirm: stop it"
+msgstr ""
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Confirmations"
 msgstr ""
@@ -3218,7 +3226,15 @@ msgid "It changed meanwhile (now {0}); nothing was overwritten."
 msgstr ""
 
 #: src/components/FleetRecoveryList.tsx
+msgid "It continues once without the Fleet's safety check, recorded as your override. While Fleet is paused it waits for Resume."
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
 msgid "It did not take effect"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "It is cancelled and its open cards are closed. This cannot be undone."
 msgstr ""
 
 #: src/components/FleetRecoveryList.tsx
@@ -3301,6 +3317,10 @@ msgstr "Salir"
 
 #: src/components/AskCard.tsx
 msgid "Leaves everything as is"
+msgstr ""
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Let it continue…"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -5505,6 +5525,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Stop"
 msgstr "Detener"
+
+#: src/components/FleetRecoveryList.tsx
+msgid "Stop it…"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Stop speaking"
