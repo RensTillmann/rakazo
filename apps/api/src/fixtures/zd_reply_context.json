@@ -1,5 +1,5 @@
 {
-  "_about": "Contract between Fleet's MCP tool zd_reply_context and Rakazo's zd_reply approval review (apps/api/src/approval-review.ts). Fleet pins it in tests/test_zendesk_read.py; change both sides together. `zendesk` is the fake Zendesk input, `structuredContent` the tool result; `source.version` is the version to compare with the reply card's source.version; `inquiry` is plain text.",
+  "_about": "Contract between Fleet's MCP tool zd_reply_context and Rakazo's zd_reply approval review (apps/api/src/approval-review.ts). Fleet pins it in tests/test_zendesk_read.py; change both sides together. `zendesk` is the fake Zendesk input, `structuredContent` the tool result; `source.version` is the version to compare with the reply card's source.version; `inquiry` is plain text; `marker` is the source marker line the drafter pastes under the Draft v<n> comment (the tracker binds the draft and QA pass to it; Rakazo ignores it).",
   "zendesk": {
     "ticket": {
       "id": 3529,
@@ -72,6 +72,7 @@
         "ref": "zendesk:3529",
         "version": "98123"
       },
+      "marker": "<!-- source: zendesk:3529 version:98123 comments:3 -->",
       "firstInquiry": "98100",
       "thread": [
         {
