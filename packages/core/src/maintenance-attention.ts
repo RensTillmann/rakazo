@@ -53,13 +53,16 @@ export const MAINTENANCE_ATTENTION_SENTENCES: Record<string, string> = {
   "runtime-continuation-invalid": "its saved progress cannot be continued",
   "runtime-tool-binding-changed": "a tool it was using changed while it was held",
   "owner-override": "you let it continue; it skips the Fleet's check once, when Fleet runs",
-  "owner-recheck": "you asked to check it again; the Fleet is asked within a minute while Fleet runs",
+  "owner-recheck":
+    "you asked to check it again; the Fleet is asked within a minute while Fleet runs",
 };
 
 /** Held because the Fleet's check did not answer: retried automatically. */
 export function isRetriedAuthorityReason(reason: string | undefined): boolean {
-  return reason === "fleet-authority-verifier-unavailable" ||
-    reason === "fleet-authority-verification-failed";
+  return (
+    reason === "fleet-authority-verifier-unavailable" ||
+    reason === "fleet-authority-verification-failed"
+  );
 }
 
 /**
@@ -90,6 +93,16 @@ export const OWNER_OVERRIDE_REASON = "owner-override";
 /** The owner asked to check a held run again: the next pass asks the Fleet, whatever the schedule. */
 export const OWNER_RECHECK_REASON = "owner-recheck";
 
+/** Fleet denials by prefix: the Fleet sends the exact case or job after it. */
+const FLEET_DENIAL_SENTENCES: ReadonlyArray<readonly [string, string]> = [
+  ["fleet-room-authority-changed-", "the Fleet says its room's authority changed"],
+  ["fleet-owner-or-state-changed-", "the Fleet says its case's owner or state changed"],
+  [
+    "fleet-claimed-job-no-longer-eligible-",
+    "the Fleet says the job it claimed is no longer eligible",
+  ],
+];
+
 /** What each `authority-changed-<part>` names. */
 const AUTHORITY_PART_NAMES: Record<string, string> = {
   owner: "its owner, bot or chat",
@@ -105,10 +118,22 @@ const AUTHORITY_PART_NAMES: Record<string, string> = {
 /** The plain sentence for one attention code. */
 export function maintenanceAttentionSentence(code: string): string {
   if (isWaitingAuthorityReason(code)) return "waiting on your answer to this case's card";
+  for (const [prefix, sentence] of FLEET_DENIAL_SENTENCES) {
+    if (code.startsWith(prefix)) return `${sentence}; it is checked again hourly, or stop it`;
+  }
   const changed = /^authority-changed-([a-z-]+)$/.exec(code);
   if (changed) {
     const parts = changed[1]!.split("-").map((part) => AUTHORITY_PART_NAMES[part] ?? part);
     return `${parts.join(", ")} changed while it was held; it is checked again hourly, or stop it`;
+  }
+  const known = MAINTENANCE_ATTENTION_SENTENCES[code];
+  if (known) return known;
+  if (
+    code.startsWith("fleet-") &&
+    !isRetriedAuthorityReason(code) &&
+    !isOwnerHeldAuthorityReason(code)
+  ) {
+    return `the Fleet holds it (${code}); it is checked again hourly, or stop it`;
   }
   return (
     MAINTENANCE_ATTENTION_SENTENCES[code] ??

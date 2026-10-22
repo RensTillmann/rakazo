@@ -373,6 +373,32 @@ describe("trusted Fleet continuation authority", () => {
     expect(held.run.status).toBe("maintenance_paused");
   });
 
+  it.each(["fleet-room-authority-changed-case-163", "fleet-owner-or-state-changed-case-163",
+    "fleet-claimed-job-no-longer-eligible-311"])(
+    "asks the Fleet again about %s hourly, not on every 30 s pass", async (reason) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        const f = await pausedFleet();
+        f.control.verify = async () => ({ allowed: false, reason });
+        await f.maintenance.reconcile(async () => undefined);
+        expect(maintenanceAttentionReason(f.run.error)).toBe(reason);
+        // Thirty passes over fifteen minutes ask the Fleet nothing more.
+        for (let pass = 0; pass < 30; pass += 1) {
+          vi.setSystemTime(Date.now() + 30_000);
+          await f.maintenance.reconcile(async () => undefined);
+        }
+        expect(f.deps.connector.execute).toHaveBeenCalledTimes(1);
+        vi.setSystemTime(Date.now() + FLEET_BINDING_RETRY_INTERVAL_MS);
+        f.control.verify = async () => ({ allowed: true });
+        await f.maintenance.reconcile(async () => undefined);
+        expect(f.deps.connector.execute).toHaveBeenCalledTimes(2);
+        expect(f.run.status).toBe("queued");
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("decides retries from the hold's reason, its age and the last try", () => {
     const now = Date.parse("2026-10-23T12:00:00Z");
     const since = new Date(now - 60 * 60_000);
@@ -386,6 +412,13 @@ describe("trusted Fleet continuation authority", () => {
     expect(authorityRetry("fleet-authority-binding-unavailable",
       new Date(now - FLEET_AUTHORITY_RETRY_WINDOW_MS - 1), undefined, now)).toBe("never");
     expect(authorityRetry("binding-invalid", since, undefined, now)).toBe("never");
+    expect(authorityRetry("fleet-owner-or-state-changed-case-1", since, now - 59 * 60_000, now)).toBe("later");
+    expect(authorityRetry("fleet-owner-or-state-changed-case-1",
+      new Date(now - FLEET_AUTHORITY_RETRY_WINDOW_MS - 1), undefined, now)).toBe("never");
+    // A card wait is asked about every few minutes while it waits, with no day limit.
+    expect(authorityRetry("fleet-current-card-wait-case-1", since, now - 60_000, now)).toBe("later");
+    expect(authorityRetry("fleet-current-card-wait-case-1",
+      new Date(now - 2 * FLEET_AUTHORITY_RETRY_WINDOW_MS), now - 6 * 60_000, now)).toBe("now");
     expect(authorityRetry("fleet-authority-binding-invalid", since, undefined, now)).toBe("never");
     expect(authorityRetry("fleet-authority-verifier-unavailable",
       new Date(now - FLEET_AUTHORITY_RETRY_WINDOW_MS - 1), undefined, now)).toBe("never");

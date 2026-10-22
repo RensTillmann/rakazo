@@ -1,6 +1,7 @@
 import type { AdapterContext } from "@rakazo/adapter-kit";
 import { runContinueJob } from "@rakazo/adapter-kit";
 import { isOneShotRoutineCrons, isOwnerHeldAuthorityReason, isRetriedAuthorityReason,
+  isWaitingAuthorityReason,
   isSettledEffectStatus, OWNER_OVERRIDE_REASON } from "@rakazo/core";
 import { stableJsonValue } from "@rakazo/core/node/approval-effect-key";
 import type { Prisma, Run } from "@rakazo/db";
@@ -104,7 +105,9 @@ export const FLEET_AUTHORITY_RETRY_WINDOW_MS = 24 * 60 * 60_000;
 export const FLEET_BINDING_RETRY_INTERVAL_MS = 60 * 60_000;
 
 /**
- * Whether a run held for maintenance attention is validated again now. A Fleet check that did not
+ * Whether a run held for maintenance attention is validated again now. Every Fleet denial other
+ * than a check that did not answer or a binding reported invalid is asked about hourly; a card wait
+ * every FLEET_AUTHORITY_RETRY_INTERVAL_MS while it waits. A Fleet check that did not
  * answer is retried every FLEET_AUTHORITY_RETRY_INTERVAL_MS, and a binding the Fleet could not find
  * (`binding-unavailable`) every FLEET_BINDING_RETRY_INTERVAL_MS, both for
  * FLEET_AUTHORITY_RETRY_WINDOW_MS from when it was first held (`heldSince`). A binding the Fleet
@@ -118,9 +121,17 @@ export function authorityRetry(
   now: number,
 ): "now" | "later" | "never" {
   if (!reason) return "now";
-  // Checked again hourly: a binding the Fleet could not find, or an authority that changed.
-  const hourly = /^(fleet-authority-)?binding-unavailable$/.test(reason) ||
-    reason.startsWith("authority-changed");
+  // A run waiting on the user's answer to its card: asked about every few minutes while it waits.
+  if (isWaitingAuthorityReason(reason)) {
+    return lastTried !== undefined && now - lastTried < FLEET_AUTHORITY_RETRY_INTERVAL_MS
+      ? "later" : "now";
+  }
+  // Checked again hourly: every other Fleet denial (a binding it could not find included) and
+  // an authority that changed. A binding it reports invalid is never retried.
+  const hourly = !isRetriedAuthorityReason(reason) &&
+    (/^(fleet-authority-)?binding-unavailable$/.test(reason) ||
+      (reason.startsWith("fleet-") && !isOwnerHeldAuthorityReason(reason)) ||
+      reason.startsWith("authority-changed"));
   if (isOwnerHeldAuthorityReason(reason) && !hourly) return "never";
   if (!hourly && !isRetriedAuthorityReason(reason)) return "now";
   if (now - heldSince.getTime() > FLEET_AUTHORITY_RETRY_WINDOW_MS) return "never";

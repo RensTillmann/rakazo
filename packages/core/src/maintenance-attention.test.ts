@@ -20,7 +20,7 @@ describe("maintenance attention sentences", () => {
     for (const sentence of Object.values(MAINTENANCE_ATTENTION_SENTENCES)) {
       expect(sentence.length).toBeGreaterThan(10);
     }
-    expect(maintenanceAttentionSentence("fleet-new-thing-unavailable")).toMatch(
+    expect(maintenanceAttentionSentence("mail-new-thing-unavailable")).toMatch(
       /could not be checked/,
     );
     expect(maintenanceAttentionSentence("something-new")).toMatch(/look at this/);
@@ -39,6 +39,18 @@ describe("maintenance attention sentences", () => {
   it("says what changed for a run held because its authority changed", () => {
     expect(maintenanceAttentionSentence("authority-changed-computer-instructions")).toBe(
       "its computer, its bot's instructions changed while it was held; it is checked again hourly, or stop it",
+    );
+  });
+
+  it("says what a Fleet denial means and that it is checked again hourly", () => {
+    expect(maintenanceAttentionSentence("fleet-room-authority-changed-case-163")).toBe(
+      "the Fleet says its room's authority changed; it is checked again hourly, or stop it",
+    );
+    expect(maintenanceAttentionSentence("fleet-something-new-4")).toBe(
+      "the Fleet holds it (fleet-something-new-4); it is checked again hourly, or stop it",
+    );
+    expect(maintenanceAttentionSentence("fleet-authority-verifier-unavailable")).toMatch(
+      /every 5 minutes/,
     );
   });
 
