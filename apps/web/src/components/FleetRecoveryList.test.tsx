@@ -113,7 +113,7 @@ describe("FleetRecoveryList", () => {
     ]);
   });
 
-  it("offers let-it-continue and stop only for a run the Fleet holds for a binding problem", async () => {
+  it("offers check, continue and stop for a binding hold, stop for other holds, nothing for a card wait", async () => {
     const held = (
       id: string,
       reason: string,
@@ -134,7 +134,8 @@ describe("FleetRecoveryList", () => {
     vi.mocked(readFleetRecovery).mockResolvedValue({
       items: [
         held("bound", "fleet-authority-binding-invalid", ["recheck", "continue", "stop"]),
-        held("retried", "fleet-authority-verifier-unavailable", []),
+        held("retried", "fleet-authority-verifier-unavailable", ["stop"]),
+        held("waiting", "fleet-current-card-wait-case-9", []),
       ],
     });
     vi.mocked(settleFleetRecovery).mockResolvedValue({
@@ -149,7 +150,9 @@ describe("FleetRecoveryList", () => {
     const buttons = (id: string) =>
       [...row(id).querySelectorAll("button")].map((b) => b.textContent);
     expect(buttons("bound")).toEqual(["Check again", "Let it continue…", "Stop it…"]);
-    expect(buttons("retried")).toEqual([]);
+    // Any run held for attention can be stopped; a card wait offers nothing.
+    expect(buttons("retried")).toEqual(["Stop it…"]);
+    expect(buttons("waiting")).toEqual([]);
 
     // Each asks first; confirming sends the owner's override for that run only.
     const click = async (id: string, text: string) => {

@@ -35,6 +35,8 @@ export interface MaintenanceRecoveryStore {
 }
 
 const TERMINAL_RUN_STATUSES = new Set(["completed", "failed", "cancelled"]);
+/** A run that is not running: it cannot settle its own actions until it starts again. */
+const HELD_RUN_STATUSES = new Set(["queued", "maintenance_paused"]);
 
 type Queryable = Pick<PoolClient, "query">;
 
@@ -413,7 +415,11 @@ export function createMaintenanceRecoveryStore(
             missing: ownerHeld
               ? "Check it again with the Fleet, let it continue (it skips the Fleet's check once), or stop it."
               : null,
-            ownerActions: ownerHeld ? ["recheck", "continue", "stop"] : [],
+            ownerActions: ownerHeld
+              ? ["recheck", "continue", "stop"]
+              : isWaitingAuthorityReason(reason)
+                ? []
+                : ["stop"],
           });
         }
 
@@ -473,6 +479,22 @@ export function createMaintenanceRecoveryStore(
             startedAt: effect.startedAt,
             lastEvidenceAt: effect.updatedAt,
           };
+          // A held run's uncertain action blocks its own start: only the owner can record it.
+          if (
+            !terminal &&
+            HELD_RUN_STATUSES.has(effect.runStatus) &&
+            effect.status === "uncertain"
+          ) {
+            items.push({
+              ...common,
+              state: "unresolved",
+              evidence: `Its run is ${effect.runStatus} and cannot settle this ${effect.kind}; the outcome is unknown.`,
+              missing:
+                "Check the destination, then record what happened. If it did not take effect, it is done again when the run resumes.",
+              ownerVerifiable: true,
+            });
+            continue;
+          }
           if (!terminal) {
             const stale = effect.stale === true;
             items.push({
@@ -655,11 +677,20 @@ export function createMaintenanceRecoveryStore(
             return done({ outcome: "changed", status: run.status });
           }
           const heldFor = maintenanceAttentionReason(run.error);
-          if (!isOwnerHeldAuthorityReason(heldFor)) {
+          // Any run held for attention can be stopped; only a binding hold can be overridden or
+          // checked again by the owner. A run waiting on a card answer is not held for attention.
+          const stoppable =
+            heldFor !== undefined &&
+            ["queued", "maintenance_paused"].includes(run.status) &&
+            !isWaitingAuthorityReason(heldFor);
+          if (command.basis === "owner-stop" ? !stoppable : !isOwnerHeldAuthorityReason(heldFor)) {
             return done({
               outcome: "refused",
               status: run.status,
-              reason: "Only a run the Fleet holds for a binding problem takes this action.",
+              reason:
+                command.basis === "owner-stop"
+                  ? "Only a run held for attention can be stopped here."
+                  : "Only a run the Fleet holds for a binding problem takes this action.",
             });
           }
           if (command.basis === "owner-stop") {
@@ -765,7 +796,11 @@ export function createMaintenanceRecoveryStore(
           return done({ outcome: "refused", status: "missing", reason: "Effect not found." });
         if (effect.status !== command.expectedStatus)
           return done({ outcome: "changed", status: effect.status });
-        if (!TERMINAL_RUN_STATUSES.has(effect.runStatus)) {
+        const held = HELD_RUN_STATUSES.has(effect.runStatus) && effect.status === "uncertain";
+        if (
+          !TERMINAL_RUN_STATUSES.has(effect.runStatus) &&
+          !(held && command.basis === "owner-verified")
+        ) {
           return done({
             outcome: "refused",
             status: effect.status,
@@ -806,7 +841,12 @@ export function createMaintenanceRecoveryStore(
           }
           to = command.outcome;
           record = { note: command.note.trim() };
-          if (to === "failed")
+          if (to === "failed" && held) {
+            // It did not happen and its run is waiting: back to intended, so the run's resume
+            // performs it once (same execution id), with its usual approval if it needs one.
+            to = "intended";
+            record = { ...record, redo: true };
+          } else if (to === "failed")
             error = `Owner verified it did not take effect: ${command.note.trim()}`;
         }
         const provenance = {

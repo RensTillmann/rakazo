@@ -4,7 +4,7 @@ import { isOneShotRoutineCrons, isOwnerHeldAuthorityReason, isRetriedAuthorityRe
   isSettledEffectStatus, OWNER_OVERRIDE_REASON } from "@rakazo/core";
 import { stableJsonValue } from "@rakazo/core/node/approval-effect-key";
 import type { Prisma, Run } from "@rakazo/db";
-import { cancelRunsInTransaction, checkpointMaintenanceRun, expireComputerExecutionLeases,
+import { cancelRunsInTransaction, checkpointMaintenanceRun, markStaleHeldEffectsUncertain, expireComputerExecutionLeases,
   lockMaintenanceAdmission, maintenanceAttention, maintenanceAttentionReason, resumeMaintenanceRun } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { cancelComputerRunWork } from "./computer-idle.js";
@@ -118,11 +118,13 @@ export function authorityRetry(
   now: number,
 ): "now" | "later" | "never" {
   if (!reason) return "now";
-  const bindingUnavailable = /^(fleet-authority-)?binding-unavailable$/.test(reason);
-  if (isOwnerHeldAuthorityReason(reason) && !bindingUnavailable) return "never";
-  if (!bindingUnavailable && !isRetriedAuthorityReason(reason)) return "now";
+  // Checked again hourly: a binding the Fleet could not find, or an authority that changed.
+  const hourly = /^(fleet-authority-)?binding-unavailable$/.test(reason) ||
+    reason.startsWith("authority-changed");
+  if (isOwnerHeldAuthorityReason(reason) && !hourly) return "never";
+  if (!hourly && !isRetriedAuthorityReason(reason)) return "now";
   if (now - heldSince.getTime() > FLEET_AUTHORITY_RETRY_WINDOW_MS) return "never";
-  const interval = bindingUnavailable
+  const interval = hourly
     ? FLEET_BINDING_RETRY_INTERVAL_MS
     : FLEET_AUTHORITY_RETRY_INTERVAL_MS;
   return lastTried !== undefined && now - lastTried < interval ? "later" : "now";
@@ -203,6 +205,50 @@ async function revalidateFleetResource(tx: Prisma.TransactionClient, run: Run, c
     ? undefined : "fleet-authority-verifier-changed";
 }
 
+/** Which part of a held run's authority changed, as one slug per part; see `authorityChangedReason`. */
+const AUTHORITY_PARTS: Record<string, string> = {
+  userId: "owner", spaceId: "owner", botId: "owner", taskId: "task", threadId: "owner",
+  sourceMessageId: "task", routineId: "routine", prompt: "task", spawnKey: "bot",
+  instructions: "instructions", disabledBuiltinTools: "tools", computer: "computer", routine: "routine",
+};
+
+/**
+ * The hold reason for a changed authority snapshot, naming what changed:
+ * `authority-changed-<part>[-<part>]` (owner, task, routine, bot, instructions, tools, computer).
+ */
+export function authorityChangedReason(saved: string, current: string | undefined): string {
+  let before: Record<string, unknown>;
+  let after: Record<string, unknown>;
+  try {
+    before = JSON.parse(saved) as Record<string, unknown>;
+    after = JSON.parse(current ?? "null") as Record<string, unknown>;
+  } catch {
+    return "authority-changed";
+  }
+  if (!before || !after || typeof before !== "object" || typeof after !== "object") return "authority-changed";
+  const parts = new Set<string>();
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) parts.add(AUTHORITY_PARTS[key] ?? "other");
+  }
+  return parts.size ? `authority-changed-${[...parts].sort().join("-")}` : "authority-changed";
+}
+
+/** The Fleet says this run's category no longer applies: it is obsolete, not waiting on anyone. */
+const FLEET_OBSOLETE_PREFIX = "fleet-category-no-longer-eligible";
+
+/**
+ * Cancels a run the Fleet declared obsolete instead of holding it for attention: its cards are
+ * retired with the run, and an audit row records the Fleet's reason. Inside the caller's locks.
+ */
+async function cancelObsoleteRun(tx: Prisma.TransactionClient, run: Run, reason: string) {
+  await cancelRunsInTransaction(tx, [run], new Date(), `No longer needed: the Fleet says ${reason}.`);
+  await tx.maintenanceRecovery.create({ data: {
+    requestId: `fleet-obsolete:${run.id}:${run.leaseFence}`, operatorId: "fleet", targetKind: "run",
+    targetId: run.id, basis: "fleet-obsolete", fromStatus: run.status, toStatus: "cancelled",
+    evidence: { reason },
+  } });
+}
+
 /** Common invariant at resume and lease claims, inside the caller's locks. */
 async function validateAuthority(
   tx: Prisma.TransactionClient, run: Run, continuation: ExecutorContinuation | undefined,
@@ -217,7 +263,9 @@ async function validateAuthority(
   }
   if (!reason && (currentRun?.leaseFence !== run.leaseFence ||
     currentRun?.maintenanceCheckpoint !== run.maintenanceCheckpoint)) reason = "continuation-already-consumed";
-  if (!reason && continuation && current.snapshot !== continuation.authority) reason = "authority-changed";
+  if (!reason && continuation && current.snapshot !== continuation.authority) {
+    reason = authorityChangedReason(continuation.authority, current.snapshot);
+  }
   if (!reason && continuation && run.leaseFence !== continuation.leaseFence) reason = "continuation-already-consumed";
   await tx.$queryRaw`SELECT id FROM external_effects WHERE "runId" = ${run.id} FOR SHARE`;
   const effects = await tx.externalEffect.findMany({ where: { runId: run.id } });
@@ -283,6 +331,10 @@ export function createExecutorMaintenance(
       } catch (error) {
         getLogger().warn("Maintenance lease authority unavailable", { runId: run.id, error });
         reason = "continuation-verification-unavailable";
+      }
+      if (reason?.startsWith(FLEET_OBSOLETE_PREFIX)) {
+        await cancelObsoleteRun(tx, run, reason);
+        return false;
       }
       if (reason) {
         // An unchanged hold is not rewritten, so `updatedAt` keeps when it was first held.
@@ -385,6 +437,9 @@ export function createExecutorMaintenance(
         }
       }
       await reconcileEffects?.();
+      // An action a queued or held run cannot settle becomes uncertain, for the owner to record.
+      await markStaleHeldEffectsUncertain(deps.prisma).catch((error) =>
+        getLogger().warn("Stale held-run actions not checked", { error }));
       if (!(await deps.prisma.$transaction((tx) => lockMaintenanceAdmission(tx))).admitted) return;
       for await (const run of pages((afterId) => deps.prisma.run.findMany({ where: {
         status: "maintenance_paused", maintenanceCancelRequestedAt: null,
@@ -402,6 +457,10 @@ export function createExecutorMaintenance(
             return resumeMaintenanceRun(tx, run.id, async (tx, locked) => {
             const reason = locked.leaseFence !== run.leaseFence || locked.checkpoint !== run.maintenanceCheckpoint
               ? "continuation-already-consumed" : await validateAuthority(tx, run, continuation, checked);
+            if (reason?.startsWith(FLEET_OBSOLETE_PREFIX)) {
+              await cancelObsoleteRun(tx, run, reason);
+              return false;
+            }
             if (reason) {
               // An unchanged hold is not rewritten, so `updatedAt` keeps when it was first held.
               if (run.error !== maintenanceAttention(reason)) {

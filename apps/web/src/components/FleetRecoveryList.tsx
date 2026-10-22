@@ -315,22 +315,26 @@ export function FleetRecoveryList({
                       <Trans>Check again</Trans>
                     </Button>
                   ) : null}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => setConfirming({ id: item.id, basis: "owner-override" })}
-                  >
-                    <Trans>Let it continue…</Trans>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => setConfirming({ id: item.id, basis: "owner-stop" })}
-                  >
-                    <Trans>Stop it…</Trans>
-                  </Button>
+                  {item.ownerActions.includes("continue") ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => setConfirming({ id: item.id, basis: "owner-override" })}
+                    >
+                      <Trans>Let it continue…</Trans>
+                    </Button>
+                  ) : null}
+                  {item.ownerActions.includes("stop") ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => setConfirming({ id: item.id, basis: "owner-stop" })}
+                    >
+                      <Trans>Stop it…</Trans>
+                    </Button>
+                  ) : null}
                 </div>
               )
             ) : null}

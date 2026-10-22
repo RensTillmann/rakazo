@@ -89,6 +89,59 @@ export type MaintenanceContinuation = {
   leaseFence: number;
 };
 
+/** How long an action may show no sign of life before a held run's claim on it is doubted. */
+export const HELD_EFFECT_STALE_MS = 10 * 60_000;
+
+/**
+ * An action still marked `executing` while its run is not running (queued or held by the pause)
+ * and nothing about it moved for HELD_EFFECT_STALE_MS: no worker is running it, and its run cannot
+ * start while it is unsettled, so neither settles it. It becomes `uncertain`, and the owner
+ * records what happened (Unfinished operations, "I checked it…"). Returns the actions changed.
+ */
+export async function markStaleHeldEffectsUncertain(
+  prisma: Pick<Prisma.TransactionClient, "externalEffect" | "event">,
+  now: Date = new Date(),
+): Promise<string[]> {
+  const cutoff = new Date(now.getTime() - HELD_EFFECT_STALE_MS);
+  const candidates = await prisma.externalEffect.findMany({
+    where: {
+      status: "executing",
+      updatedAt: { lt: cutoff },
+      run: { status: { in: ["queued", "maintenance_paused"] } },
+    },
+    select: { id: true, runId: true, result: true },
+  });
+  const changed: string[] = [];
+  for (const effect of candidates) {
+    // Any recent event of its run (a command's output, a tool result) means it may still be live.
+    const recent = await prisma.event.count({
+      where: { runId: effect.runId, createdAt: { gte: cutoff } },
+    });
+    if (recent > 0) continue;
+    const prior =
+      effect.result && typeof effect.result === "object" && !Array.isArray(effect.result)
+        ? effect.result
+        : {};
+    const updated = await prisma.externalEffect.updateMany({
+      where: { id: effect.id, status: "executing", updatedAt: { lt: cutoff } },
+      data: {
+        status: "uncertain",
+        result: {
+          ...prior,
+          uncertain: true,
+          reconciliation: {
+            basis: "held-run-stale",
+            at: now.toISOString(),
+            note: "Its run was not running and nothing moved for 10 minutes; the outcome is unknown.",
+          },
+        },
+      },
+    });
+    if (updated.count === 1) changed.push(effect.id);
+  }
+  return changed;
+}
+
 /**
  * Progress the pause kept: for each thread whose run the pause holds at a checkpoint, how many
  * tool calls that run completed before it was held. Threads without such a run are absent.

@@ -74,6 +74,7 @@ function harness() {
       effects.filter((effect) => !where.status || effect.status === where.status).map((effect) => ({ ...effect }))) },
     // Cancellation also invalidates source-bound approvals; this run's cards bind none.
     message: { findMany: vi.fn(async () => []) },
+    maintenanceRecovery: { create: vi.fn(async () => ({})) },
     attempt: {
       findMany: vi.fn(async () => attempt.status === "running" ? [{ id: attempt.id }] : []),
       updateMany: vi.fn(async ({ data }: { data: object }) => { Object.assign(attempt, data); return { count: 1 }; }),
@@ -180,8 +181,34 @@ describe("executor durable maintenance lifecycle", () => {
     f.control.screen = { computerId: "computer", runId: "unrelated-fresh-run", fence: 6 };
     Object.assign(f.state, { active: false, revision: 2 });
     await f.maintenance.reconcile(async () => undefined);
-    expect(f.run.error).toContain("authority-changed");
+    // The hold says what changed: the computer's screen went to other work.
+    expect(maintenanceAttentionReason(f.run.error)).toBe("authority-changed-computer");
     expect(f.deps.jobs.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("names a changed authority and checks it again hourly, not on every pass", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const f = harness();
+      await f.checkpoint();
+      f.bot.instructions = "Rewritten while held";
+      Object.assign(f.state, { active: false, revision: 2 });
+      const authority = vi.spyOn(f.prisma.run, "findUnique");
+      await f.maintenance.reconcile(async () => undefined);
+      expect(maintenanceAttentionReason(f.run.error)).toBe("authority-changed-instructions");
+      const checks = authority.mock.calls.length;
+      vi.setSystemTime(Date.now() + 30 * 60_000);
+      await f.maintenance.reconcile(async () => undefined);
+      expect(authority.mock.calls.length).toBe(checks);
+      // An hour on, checked again; restoring what changed lets it resume.
+      f.bot.instructions = "Keep exact context";
+      vi.setSystemTime(Date.now() + 31 * 60_000);
+      await f.maintenance.reconcile(async () => undefined);
+      expect(f.run.status).toBe("queued");
+      expect(f.run.error).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("runs already-started effect reconciliation while admission remains closed", async () => {
@@ -265,6 +292,19 @@ describe("trusted Fleet continuation authority", () => {
     Object.assign(f.state, { active: false, revision: 2 });
     return f;
   }
+
+  it("cancels a run the Fleet declares obsolete instead of holding it", async () => {
+    const f = await pausedFleet();
+    f.control.verify = async () => ({ allowed: false, reason: "fleet-category-no-longer-eligible-summary" });
+    await f.maintenance.reconcile(async () => undefined);
+    expect(f.run.status).toBe("cancelled");
+    expect(maintenanceAttentionReason(f.run.error)).toBeUndefined();
+    expect(f.prisma.maintenanceRecovery.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      targetKind: "run", targetId: "run", basis: "fleet-obsolete", operatorId: "fleet", toStatus: "cancelled",
+      evidence: { reason: "fleet-category-no-longer-eligible-summary" },
+    }) });
+    expect(f.deps.jobs.enqueue).not.toHaveBeenCalled();
+  });
 
   it("retries a Fleet check that did not answer on a schedule, and runs once it answers", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });

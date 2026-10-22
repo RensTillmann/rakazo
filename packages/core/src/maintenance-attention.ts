@@ -90,9 +90,26 @@ export const OWNER_OVERRIDE_REASON = "owner-override";
 /** The owner asked to check a held run again: the next pass asks the Fleet, whatever the schedule. */
 export const OWNER_RECHECK_REASON = "owner-recheck";
 
+/** What each `authority-changed-<part>` names. */
+const AUTHORITY_PART_NAMES: Record<string, string> = {
+  owner: "its owner, bot or chat",
+  task: "its task",
+  routine: "its routine",
+  bot: "its bot's Fleet role",
+  instructions: "its bot's instructions",
+  tools: "its bot's tools",
+  computer: "its computer",
+  other: "something it depends on",
+};
+
 /** The plain sentence for one attention code. */
 export function maintenanceAttentionSentence(code: string): string {
   if (isWaitingAuthorityReason(code)) return "waiting on your answer to this case's card";
+  const changed = /^authority-changed-([a-z-]+)$/.exec(code);
+  if (changed) {
+    const parts = changed[1]!.split("-").map((part) => AUTHORITY_PART_NAMES[part] ?? part);
+    return `${parts.join(", ")} changed while it was held; it is checked again hourly, or stop it`;
+  }
   return (
     MAINTENANCE_ATTENTION_SENTENCES[code] ??
     (code.endsWith("-unavailable")

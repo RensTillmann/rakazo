@@ -36,6 +36,12 @@ describe("maintenance attention sentences", () => {
     expect(isWaitingIssue("uncertain-effects")).toBe(false);
   });
 
+  it("says what changed for a run held because its authority changed", () => {
+    expect(maintenanceAttentionSentence("authority-changed-computer-instructions")).toBe(
+      "its computer, its bot's instructions changed while it was held; it is checked again hourly, or stop it",
+    );
+  });
+
   it("splits a held run's issue from status-wide codes", () => {
     expect(
       maintenanceIssueCode(

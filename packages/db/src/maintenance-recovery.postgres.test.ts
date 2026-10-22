@@ -100,6 +100,15 @@ suite("maintenance recovery against PostgreSQL", () => {
         "utf8",
       ),
     );
+    await pool.query(
+      await readFile(
+        new URL(
+          "../prisma/migrations/20261023140000_maintenance_recovery_fleet_obsolete/migration.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
   });
 
   beforeEach(async () => {
@@ -235,7 +244,7 @@ suite("maintenance recovery against PostgreSQL", () => {
       userActionNeeded: true,
     });
     // Retried automatically: listed, nothing for the owner to do.
-    expect(items.get("retried")).toMatchObject({ state: "draining", ownerActions: [] });
+    expect(items.get("retried")).toMatchObject({ state: "draining", ownerActions: ["stop"] });
 
     const store = createMaintenanceRecoveryStore(pool, noCoordinators);
     const run = (
@@ -330,11 +339,76 @@ suite("maintenance recovery against PostgreSQL", () => {
         evidence: { reason: "owner recheck", heldFor: "fleet-authority-binding-unavailable" },
       },
     ]);
-    expect((await byId()).get("again")).toMatchObject({ state: "draining", ownerActions: [] });
+    expect((await byId()).get("again")).toMatchObject({ state: "draining", ownerActions: ["stop"] });
     // Being stopped, it leaves the held list; the overridden one waits for the next resume.
     const after = await byId();
     expect(after.has("doomed")).toBe(false);
-    expect(after.get("bound")).toMatchObject({ state: "draining", ownerActions: [] });
+    expect(after.get("bound")).toMatchObject({ state: "draining", ownerActions: ["stop"] });
+  });
+
+  it("lets the owner record an action a held run cannot settle; failed means it is done again", async () => {
+    await pool.query(`
+      INSERT INTO "runs" ("id", "botId", "status", "error") VALUES
+        ('blocked', 'josy', 'queued', 'maintenance:attention:unsettled-effects'),
+        ('changed', 'jill', 'maintenance_paused', 'maintenance:attention:authority-changed-computer'),
+        ('waiting', 'elena', 'maintenance_paused', 'maintenance:attention:fleet-current-card-wait-case-9');
+      INSERT INTO "external_effects" ("id", "runId", "kind", "status", "request", "createdAt", "updatedAt") VALUES
+        ('stuck', 'blocked', 'shell', 'uncertain', '{"command": "tracker draft 311"}',
+          '2026-10-23 15:13:44', '2026-10-23 15:13:44');
+    `);
+    const items = await byId();
+    expect(items.get("stuck")).toMatchObject({
+      kind: "effect",
+      state: "unresolved",
+      ownerVerifiable: true,
+      userActionNeeded: true,
+      missing: expect.stringContaining("done again when the run resumes"),
+    });
+    // Any run held for attention can be stopped; one waiting on a card answer cannot.
+    expect(items.get("blocked")).toMatchObject({ ownerActions: ["stop"] });
+    expect(items.get("changed")).toMatchObject({
+      ownerActions: ["stop"],
+      evidence: expect.stringContaining("its computer changed while it was held"),
+    });
+    expect(items.get("waiting")).toMatchObject({ state: "draining", ownerActions: [] });
+
+    const store = createMaintenanceRecoveryStore(pool, noCoordinators);
+    const checked = {
+      requestId: "checked-stuck",
+      basis: "owner-verified",
+      kind: "effect",
+      id: "stuck",
+      expectedStatus: "uncertain",
+      outcome: "failed",
+      note: "No draft 311 comment on the tracker",
+    } as const;
+    expect(await store.settleRecovery("operator", checked)).toEqual({
+      outcome: "settled",
+      status: "intended",
+    });
+    const effect = (
+      await pool.query(`SELECT "status", "result" FROM "external_effects" WHERE "id" = 'stuck'`)
+    ).rows[0];
+    expect(effect.status).toBe("intended");
+    expect(effect.result).toMatchObject({
+      reconciliation: { basis: "owner-verified", from: "uncertain", to: "intended", redo: true },
+    });
+    expect(effect.result.error).toBeUndefined();
+    expect((await byId()).has("stuck")).toBe(false);
+
+    const stop = (id: string, status: string) =>
+      store.settleRecovery("operator", {
+        requestId: `stop:${id}`,
+        basis: "owner-stop",
+        kind: "run",
+        id,
+        expectedStatus: status,
+      });
+    expect(await stop("changed", "maintenance_paused")).toEqual({
+      outcome: "settled",
+      status: "stopping",
+    });
+    expect(await stop("waiting", "maintenance_paused")).toMatchObject({ outcome: "refused" });
   });
 
   it("names the Fleet coordinator for a Fleet service effect and how to settle it there", async () => {
