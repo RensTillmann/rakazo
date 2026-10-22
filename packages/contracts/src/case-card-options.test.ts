@@ -1,40 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { CASE_CARD_HEAD, caseCardOptionsRefusal } from "./events.js";
+import { askCaseRef, caseCardOptionsRefusal } from "./events.js";
 
 const REFUSED = /^ask_user refused \(rule D6, case decision cards\): /;
 
-describe("case decision cards (D6)", () => {
+describe("case card head (one rule for dedupe, recovery and D6)", () => {
   it.each([
-    ["Case 311 · reply: which fix?", true],
-    ["case 311 · lower case head", true],
-    ["URGENT · Case 311 · send now?", true],
-    ["urgent · case 7 · ...", true],
-    ["Case 311: no middle dot", false],
-    ["Room for case 311 · later", false],
-    ["Which city should I use?", false],
-  ])("recognises the card head of %j → %s", (question, isCase) => {
-    expect(CASE_CARD_HEAD.test(question)).toBe(isCase);
+    ["Case 78 · alert: Can you export the 403/4xx …", 78],
+    ["URGENT · case 78: export?", 78],
+    ["Case 311: no middle dot", 311],
+    ["case 311 · lower case head", 311],
+    ["Case 780 · other", 780],
+    ["Export the logs for case 78?", null],
+    ["Room for case 311 · later", null],
+    ["Which city should I use?", null],
+  ])("reads the case of %j → %s", (question, caseRef) => {
+    expect(askCaseRef(question)).toBe(caseRef);
   });
+});
 
+describe("case decision cards (D6)", () => {
   it("refuses a case card with no options or one option, naming the rule", () => {
     expect(caseCardOptionsRefusal("Case 311 · what should change?", [], false)).toMatch(REFUSED);
     expect(caseCardOptionsRefusal("Case 311 · what should change?", [], false)).toContain(
       "none were given",
     );
-    const one = caseCardOptionsRefusal("URGENT · Case 311 · send it?", ["Send"], false);
-    expect(one).toMatch(REFUSED);
-    expect(one).toContain("1 was given");
+    for (const question of ["URGENT · Case 311 · send it?", "Case 311: send it?"]) {
+      const one = caseCardOptionsRefusal(question, ["Send"], false);
+      expect(one).toMatch(REFUSED);
+      expect(one).toContain("1 was given");
+    }
   });
 
   it("does not count an option that only invites typing", () => {
     for (const filler of [
       "Type it here",
+      "Type your answer below",
       "Other",
+      "Other…",
       "Something else",
+      "Something else (describe it)",
       "Let me explain",
       "I'll describe it",
-      "Tell you in chat",
-      "Specify…",
+      "None of these",
+      "Free text",
     ]) {
       const refusal = caseCardOptionsRefusal(
         "Case 311 · reply change?",
@@ -46,17 +54,20 @@ describe("case decision cards (D6)", () => {
     }
   });
 
-  it("accepts two concrete options, including ones that merely contain such a verb", () => {
-    expect(
-      caseCardOptionsRefusal(
-        "Case 311 · reply: which fix?",
-        [
-          "Explain the 1 Oct bulk update and restore the licences",
-          "Ask the customer for the invoice",
-        ],
-        false,
-      ),
-    ).toBeNull();
+  it("counts short concrete options, including ones with a telling verb", () => {
+    for (const second of [
+      "Explain the delay",
+      "Specify SPF",
+      "Tell the customer",
+      "Describe the 1 Oct bulk update",
+      "Write off the invoice",
+      "Others pay",
+      "Hold",
+    ]) {
+      expect(
+        caseCardOptionsRefusal("Case 311 · reply: which fix?", ["Send as is", second], false),
+      ).toBeNull();
+    }
     expect(
       caseCardOptionsRefusal("Case 311 · send?", ["Send as is", "Type it here", "Hold"], false),
     ).toBeNull();

@@ -1,4 +1,4 @@
-import type { Actor, MessageBlock } from "@rakazo/contracts";
+import { type Actor, askCaseRef, type MessageBlock } from "@rakazo/contracts";
 import { isApprovalAskBlock, isOpenAskBlock, isSecretAskBlock } from "@rakazo/core";
 import type { Prisma, PrismaClient } from "./client.js";
 
@@ -108,12 +108,6 @@ export async function pendingDecisionCountsByThread(
     counts.set(threadId, (counts.get(threadId) ?? 0) + 1);
   }
   return counts;
-}
-
-/** Fleet: the case of a card head, the leading `Case <n>` (also after `URGENT · `); null when none. */
-export function askCaseRef(text: string): number | null {
-  const match = /^\s*(?:urgent\s*·\s*)?case\s+([1-9]\d*)\b/i.exec(text);
-  return match ? Number(match[1]) : null;
 }
 
 function sameQuestion(a: string, b: string): boolean {

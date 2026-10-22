@@ -163,10 +163,11 @@ describe("Pi choice asks", () => {
       expect(refusal).toMatch(/^ask_user refused \(rule D6, case decision cards\): /);
     });
 
-    it("refuses a case card with one option, also after URGENT and in lower case", async () => {
+    it("refuses a case card with one option, also after URGENT, in lower case or with a colon", async () => {
       for (const question of [
         "Case 311 · send the reply?",
         "URGENT · case 311 · send the reply?",
+        "Case 311: send the reply?",
       ]) {
         const { refusal, asked } = await ask(question, ["Send"]);
         expect(asked).toBe(false);
@@ -184,12 +185,17 @@ describe("Pi choice asks", () => {
       expect(refusal).toContain('"Type it here" only invites typing');
     });
 
-    it("asks a case card with two concrete options", async () => {
-      const { refusal, asked } = await ask("Case 311 · reply: which fix?", [
-        "Explain the 1 Oct bulk update and restore the licences",
-        "Ask the customer which domain to restore",
-      ]);
-      expect({ refusal, asked }).toEqual({ refusal: "", asked: true });
+    it("asks a case card with two concrete options, short ones too", async () => {
+      for (const options of [
+        [
+          "Explain the 1 Oct bulk update and restore the licences",
+          "Ask the customer which domain to restore",
+        ],
+        ["Send as is", "Explain the delay"],
+      ]) {
+        const { refusal, asked } = await ask("Case 311 · reply: which fix?", options);
+        expect({ refusal, asked }).toEqual({ refusal: "", asked: true });
+      }
     });
 
     it("leaves a to-do card with one option plus the to-do option alone", async () => {

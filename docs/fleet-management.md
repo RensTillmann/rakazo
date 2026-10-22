@@ -109,10 +109,12 @@ without such an envelope is never given a guessed source.
 
 ## Case decision cards offer real choices
 
-A question whose text starts with `Case <n> ·` (any letter case, also after `URGENT · `) is a decision
-card for that tracker case. It must offer at least two concrete options; an option that only invites
-typing ("Type it here", "Other", "Something else", "Let me explain", judged on the whole label by a
-documented heuristic, `FREE_TEXT_OPTION`) does not count. `ask_user` refuses such a card before it is
+A question whose head names a case (`Case <n>`, any letter case, also after `URGENT · `, e.g.
+"Case 311 · …" or "case 311: …", read by the same `askCaseRef` card dedupe uses) is a decision card for
+that tracker case. It must offer at least two concrete options; an option that only invites typing
+does not count: exactly "None of these" or "Free text", or a label starting with "Type", "Other",
+"Something else", "Let me" or "I'll describe" (the documented heuristic, `FREE_TEXT_OPTION`; a short
+concrete option such as "Explain the delay" counts). `ask_user` refuses such a card before it is
 stored, naming the rule (D6) and what was given, so a bot can never put an open "what should change?"
 question to the owner about a case: for a reply change it offers the draft, the customer's asks and 2–3
 concrete fixes. The one rule is `caseCardOptionsRefusal` in `packages/contracts/src/events.ts`; the Pi

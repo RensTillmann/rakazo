@@ -219,16 +219,24 @@ export const AskPrerequisitesInput = z.object({
 });
 export type AskPrerequisitesInput = z.infer<typeof AskPrerequisitesInput>;
 
-/** Fleet: the head of a case decision card, `Case <n> ·` (any letter case, also after `URGENT · `). */
-export const CASE_CARD_HEAD = /^\s*(?:urgent\s*·\s*)?case\s+[1-9]\d*\s*·/i;
+/**
+ * Fleet: the case of a card head, the leading `Case <n>` (any letter case, also after `URGENT · `,
+ * e.g. "Case 383 · …" or "case 78: …"); null when none. The one head rule: card dedupe, recovery
+ * accountability and D6 all read it.
+ */
+export function askCaseRef(text: string): number | null {
+  const match = /^\s*(?:urgent\s*·\s*)?case\s+([1-9]\d*)\b/i.exec(text);
+  return match ? Number(match[1]) : null;
+}
 
 /**
- * An option that only invites a typed answer instead of offering one: "Type it here", "Other",
- * "Something else", "Let me explain", "I'll describe it". A cheap heuristic on the whole label; a
- * concrete choice that merely contains such a verb ("Explain the bulk update to the customer") passes.
+ * An option that only invites a typed answer instead of offering one: exactly "None of these/the
+ * above" or "Free text", or a label starting with "Type", "Other", "Something else", "Let me" or
+ * "I'll/I will describe". Judged on the whole label; a short concrete option ("Explain the delay",
+ * "Specify SPF", "Tell the customer") passes.
  */
 const FREE_TEXT_OPTION =
-  /^(?:(?:other|something else|none of (?:these|the above|them)|neither|free text|custom(?: answer)?)|(?:(?:i(?:'ll| will) |let me |please )?(?:type|write|describe|explain|specify|tell (?:you|me))(?: it| that| this| the \w+| what [\w ]+)?(?: here| below| myself| in(?: the)? chat| in text)?))[\s.…!?]*$/i;
+  /^(?:none of (?:these|the above)|free text)[\s.…!?]*$|^(?:type|other|something else|let me|i(?:'ll| will) describe)\b/i;
 
 /**
  * D6: a case decision card needs at least two concrete options to choose from; an option that only
@@ -241,7 +249,7 @@ export function caseCardOptionsRefusal(
   options: readonly string[],
   todo: boolean,
 ): string | null {
-  if (todo || !CASE_CARD_HEAD.test(question)) return null;
+  if (todo || askCaseRef(question) === null) return null;
   const freeText = options.filter((option) => FREE_TEXT_OPTION.test(option));
   const concrete = options.length - freeText.length;
   if (concrete >= 2) return null;
@@ -255,7 +263,7 @@ export function caseCardOptionsRefusal(
                 freeText.length === 1 ? "invites" : "invite"
               } typing`
         }`;
-  return `ask_user refused (rule D6, case decision cards): a "Case <n> ·" card needs at least two concrete options to choose from, but ${given}. Offer the concrete choices (for a reply: the draft, the customer's asks and 2–3 concrete fixes), never "type it here" or an open question.`;
+  return `ask_user refused (rule D6, case decision cards): a "Case <n>" card needs at least two concrete options to choose from, but ${given}. Offer the concrete choices (for a reply: the draft, the customer's asks and 2–3 concrete fixes), never "type it here" or an open question.`;
 }
 
 export const MessageBlock = z.discriminatedUnion("kind", [

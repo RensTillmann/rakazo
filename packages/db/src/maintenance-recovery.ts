@@ -4,7 +4,7 @@ import type {
   MaintenanceRecoveryItem,
   MaintenanceRecoveryResult,
 } from "@rakazo/contracts";
-import { MaintenanceRecoveryCommandSchema } from "@rakazo/contracts";
+import { askCaseRef, MaintenanceRecoveryCommandSchema } from "@rakazo/contracts";
 import {
   isOwnerHeldAuthorityReason,
   isRetriedAuthorityReason,
@@ -17,7 +17,6 @@ import {
 import type { Pool, PoolClient } from "pg";
 import type { CaseCoordination } from "./case-coordinators.js";
 import { caseCoordinatorOf, fleetCoordinatorOf } from "./case-coordinators.js";
-import { askCaseRef } from "./decisions.js";
 import {
   MAINTENANCE_ATTENTION_PREFIX,
   MaintenanceConflictError,
