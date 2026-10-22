@@ -3,7 +3,8 @@ import type { Run } from "@rakazo/db";
 import { maintenanceAttention, maintenanceAttentionReason } from "@rakazo/db";
 import { createRunExecutor, type ExecutorDeps } from "./executor.js";
 import { authorityRetry, createExecutorMaintenance, FLEET_AUTHORITY_RETRY_INTERVAL_MS,
-  FLEET_AUTHORITY_RETRY_WINDOW_MS, readExecutorContinuation } from "./executor-maintenance.js";
+  FLEET_AUTHORITY_RETRY_WINDOW_MS, FLEET_BINDING_RETRY_INTERVAL_MS, readExecutorContinuation,
+} from "./executor-maintenance.js";
 
 function harness() {
   const state = { active: true, revision: 1 };
@@ -339,7 +340,12 @@ describe("trusted Fleet continuation authority", () => {
     expect(authorityRetry("dependencies-changed", since, now, now)).toBe("now");
     expect(authorityRetry("fleet-authority-verification-failed", since, undefined, now)).toBe("now");
     expect(authorityRetry("fleet-authority-verifier-unavailable", since, now - 60_000, now)).toBe("later");
-    expect(authorityRetry("binding-unavailable", since, undefined, now)).toBe("never");
+    expect(authorityRetry("binding-unavailable", since, undefined, now)).toBe("now");
+    expect(authorityRetry("fleet-authority-binding-unavailable", since, now - 30 * 60_000, now)).toBe("later");
+    expect(authorityRetry("fleet-authority-binding-unavailable", since, now - 61 * 60_000, now)).toBe("now");
+    expect(authorityRetry("fleet-authority-binding-unavailable",
+      new Date(now - FLEET_AUTHORITY_RETRY_WINDOW_MS - 1), undefined, now)).toBe("never");
+    expect(authorityRetry("binding-invalid", since, undefined, now)).toBe("never");
     expect(authorityRetry("fleet-authority-binding-invalid", since, undefined, now)).toBe("never");
     expect(authorityRetry("fleet-authority-verifier-unavailable",
       new Date(now - FLEET_AUTHORITY_RETRY_WINDOW_MS - 1), undefined, now)).toBe("never");
@@ -390,6 +396,38 @@ describe("trusted Fleet continuation authority", () => {
       expect(f.deps.jobs.enqueue).not.toHaveBeenCalled();
     },
   );
+
+  it("asks again hourly about a binding the Fleet could not find, and resumes once the Fleet allows it", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const f = await pausedFleet();
+      f.control.verify = async () => ({ allowed: false, reason: "fleet-authority-binding-unavailable" });
+      await f.maintenance.reconcile(async () => undefined);
+      expect(maintenanceAttentionReason(f.run.error)).toBe("fleet-authority-binding-unavailable");
+      // Within the hour, no new question.
+      vi.setSystemTime(Date.now() + 30 * 60_000);
+      await f.maintenance.reconcile(async () => undefined);
+      expect(f.deps.connector.execute).toHaveBeenCalledTimes(1);
+      // The Fleet's rule was fixed: the next hourly check lets it continue.
+      vi.setSystemTime(Date.now() + FLEET_BINDING_RETRY_INTERVAL_MS);
+      f.control.verify = async () => ({ allowed: true });
+      await f.maintenance.reconcile(async () => undefined);
+      expect(f.deps.connector.execute).toHaveBeenCalledTimes(2);
+      expect(f.run.status).toBe("queued");
+      expect(f.run.error).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("checks a run again as soon as the owner asks, through the Fleet", async () => {
+    const f = await pausedFleet();
+    f.run.error = maintenanceAttention("owner-recheck");
+    f.control.verify = async () => ({ allowed: false, reason: "fleet-authority-binding-invalid" });
+    await f.maintenance.reconcile(async () => undefined);
+    expect(f.deps.connector.execute).toHaveBeenCalledTimes(1);
+    expect(maintenanceAttentionReason(f.run.error)).toBe("fleet-authority-binding-invalid");
+  });
 
   it("keeps unbound legacy work visible without claiming it resumed", async () => {
     const f = await pausedFleet();

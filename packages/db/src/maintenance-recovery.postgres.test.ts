@@ -91,6 +91,15 @@ suite("maintenance recovery against PostgreSQL", () => {
         "utf8",
       ),
     );
+    await pool.query(
+      await readFile(
+        new URL(
+          "../prisma/migrations/20261023130000_maintenance_recovery_recheck/migration.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
   });
 
   beforeEach(async () => {
@@ -215,13 +224,14 @@ suite("maintenance recovery against PostgreSQL", () => {
       INSERT INTO "runs" ("id", "botId", "status", "error") VALUES
         ('bound', 'riona', 'maintenance_paused', 'maintenance:attention:fleet-authority-binding-invalid'),
         ('doomed', 'riona', 'queued', 'maintenance:attention:fleet-authority-binding-unavailable'),
-        ('retried', 'jill', 'maintenance_paused', 'maintenance:attention:fleet-authority-verifier-unavailable');
+        ('retried', 'jill', 'maintenance_paused', 'maintenance:attention:fleet-authority-verifier-unavailable'),
+        ('again', 'riona', 'queued', 'maintenance:attention:fleet-authority-binding-unavailable');
     `);
     const items = await byId();
     expect(items.get("bound")).toMatchObject({
       kind: "run",
       state: "unresolved",
-      ownerActions: ["continue", "stop"],
+      ownerActions: ["recheck", "continue", "stop"],
       userActionNeeded: true,
     });
     // Retried automatically: listed, nothing for the owner to do.
@@ -290,6 +300,37 @@ suite("maintenance recovery against PostgreSQL", () => {
         evidence: { reason: "owner stop", heldFor: "fleet-authority-binding-unavailable" },
       },
     ]);
+    // Check again: recorded, and the next pass asks the Fleet; while paused, at the next resume.
+    const recheck = {
+      requestId: "recheck:again",
+      basis: "owner-recheck",
+      kind: "run",
+      id: "again",
+      expectedStatus: "queued",
+    } as const;
+    await expect(store.settleRecovery("outsider", recheck)).rejects.toThrow("owner required");
+    expect(await store.settleRecovery("operator", recheck)).toEqual({
+      outcome: "settled",
+      status: "queued",
+      reason: "Recorded. Fleet is paused: it is checked when you resume Fleet.",
+    });
+    expect((await pool.query(`SELECT "error" FROM "runs" WHERE "id" = 'again'`)).rows[0]).toEqual({
+      error: "maintenance:attention:owner-recheck",
+    });
+    expect(
+      (
+        await pool.query(
+          `SELECT "basis", "toStatus", "evidence" FROM "maintenance_recovery" WHERE "targetId" = 'again'`,
+        )
+      ).rows,
+    ).toEqual([
+      {
+        basis: "owner-recheck",
+        toStatus: "owner-recheck",
+        evidence: { reason: "owner recheck", heldFor: "fleet-authority-binding-unavailable" },
+      },
+    ]);
+    expect((await byId()).get("again")).toMatchObject({ state: "draining", ownerActions: [] });
     // Being stopped, it leaves the held list; the overridden one waits for the next resume.
     const after = await byId();
     expect(after.has("doomed")).toBe(false);

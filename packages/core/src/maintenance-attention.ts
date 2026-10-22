@@ -53,6 +53,7 @@ export const MAINTENANCE_ATTENTION_SENTENCES: Record<string, string> = {
   "runtime-continuation-invalid": "its saved progress cannot be continued",
   "runtime-tool-binding-changed": "a tool it was using changed while it was held",
   "owner-override": "you let it continue; it skips the Fleet's check once, when Fleet runs",
+  "owner-recheck": "you asked to check it again; the Fleet is asked within a minute while Fleet runs",
 };
 
 /** Held because the Fleet's check did not answer: retried automatically. */
@@ -85,6 +86,9 @@ export function isWaitingIssue(issue: string): boolean {
 
 /** The owner let a held run continue: its next resume skips the Fleet's check, once. */
 export const OWNER_OVERRIDE_REASON = "owner-override";
+
+/** The owner asked to check a held run again: the next pass asks the Fleet, whatever the schedule. */
+export const OWNER_RECHECK_REASON = "owner-recheck";
 
 /** The plain sentence for one attention code. */
 export function maintenanceAttentionSentence(code: string): string {

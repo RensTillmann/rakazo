@@ -1257,6 +1257,7 @@ msgid "Chat Settings"
 msgstr "Chat-Einstellungen"
 
 #: src/components/ComputersUnavailableHint.tsx
+#: src/components/FleetRecoveryList.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr ""

@@ -214,7 +214,7 @@ describe("owner recovery of unfinished operations", () => {
 
   it("takes the owner's continue or stop for a held run, owner-only, and nothing else for a run", async () => {
     const f = fixture();
-    for (const basis of ["owner-override", "owner-stop"] as const) {
+    for (const basis of ["owner-recheck", "owner-override", "owner-stop"] as const) {
       const command = { requestId: `r-${basis}`, basis, kind: "run", id: "run-1", expectedStatus: "queued" };
       expect((await send(f, command)).status).toBe(200);
       expect(f.recovery.settleRecovery).toHaveBeenLastCalledWith("operator", command);
@@ -226,7 +226,7 @@ describe("owner recovery of unfinished operations", () => {
     expect((await send(f, {
       requestId: "r", basis: "owner-override", kind: "run", id: "run-1", expectedStatus: "queued", outcome: "completed",
     })).status).toBe(400);
-    expect(f.recovery.settleRecovery).toHaveBeenCalledTimes(4);
+    expect(f.recovery.settleRecovery).toHaveBeenCalledTimes(6);
   });
 
   it("rejects an owner check without a meaningful note before touching the store", async () => {

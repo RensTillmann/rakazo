@@ -71,7 +71,7 @@ export const MaintenanceRecoveryItemSchema = z.object({
   /** The bot accountable for following it up: the case coordinator, else the Fleet coordinator. */
   coordinator: z.string().nullable(),
   /** What the owner can do to a held run: let it continue once, past the Fleet's check, or stop it. */
-  ownerActions: z.array(z.enum(["continue", "stop"])),
+  ownerActions: z.array(z.enum(["recheck", "continue", "stop"])),
   /** Only the user can settle it (record an outcome or a checked result); otherwise the system or the coordinator acts. */
   userActionNeeded: z.boolean(),
 });
@@ -97,10 +97,10 @@ export const MaintenanceRecoveryCommandSchema = z.discriminatedUnion("basis", [
     outcome: z.enum(["completed", "failed"]),
     note: z.string().max(2000).refine((value) => value.trim().length >= 10),
   }),
-  // A run the Fleet holds for a binding problem: let it continue once, or stop it.
+  // A run the Fleet holds for a binding problem: check it again, let it continue once, or stop it.
   z.strictObject({
     requestId: z.string().max(128).refine((value) => value.trim().length > 0),
-    basis: z.enum(["owner-override", "owner-stop"]),
+    basis: z.enum(["owner-recheck", "owner-override", "owner-stop"]),
     kind: z.literal("run"),
     id: z.string().min(1).max(64),
     expectedStatus: z.string().min(1).max(32),

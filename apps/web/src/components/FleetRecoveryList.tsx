@@ -296,6 +296,25 @@ export function FleetRecoveryList({
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
+                  {item.ownerActions.includes("recheck") ? (
+                    // Asking the Fleet again changes nothing by itself; no confirmation needed.
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() =>
+                        void settle({
+                          requestId: newClientId(),
+                          basis: "owner-recheck",
+                          kind: "run",
+                          id: item.id,
+                          expectedStatus: item.status,
+                        })
+                      }
+                    >
+                      <Trans>Check again</Trans>
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     variant="outline"

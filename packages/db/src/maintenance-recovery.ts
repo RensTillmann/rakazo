@@ -11,6 +11,7 @@ import {
   isWaitingAuthorityReason,
   maintenanceAttentionSentence,
   OWNER_OVERRIDE_REASON,
+  OWNER_RECHECK_REASON,
   SETTLED_EFFECT_STATUSES,
 } from "@rakazo/core";
 import type { Pool, PoolClient } from "pg";
@@ -394,7 +395,8 @@ export function createMaintenanceRecoveryStore(
           const settles =
             isRetriedAuthorityReason(reason) ||
             isWaitingAuthorityReason(reason) ||
-            reason === OWNER_OVERRIDE_REASON;
+            reason === OWNER_OVERRIDE_REASON ||
+            reason === OWNER_RECHECK_REASON;
           items.push({
             ...base,
             kind: "run",
@@ -409,9 +411,9 @@ export function createMaintenanceRecoveryStore(
             state: settles ? "draining" : "unresolved",
             evidence: `${reason}: ${maintenanceAttentionSentence(reason)}`,
             missing: ownerHeld
-              ? "Let it continue (it skips the Fleet's check once) or stop it."
+              ? "Check it again with the Fleet, let it continue (it skips the Fleet's check once), or stop it."
               : null,
-            ownerActions: ownerHeld ? ["continue", "stop"] : [],
+            ownerActions: ownerHeld ? ["recheck", "continue", "stop"] : [],
           });
         }
 
@@ -647,7 +649,8 @@ export function createMaintenanceRecoveryStore(
             [command.id],
           );
           const run = found.rows[0];
-          if (!run) return done({ outcome: "refused", status: "missing", reason: "Run not found." });
+          if (!run)
+            return done({ outcome: "refused", status: "missing", reason: "Run not found." });
           if (run.status !== command.expectedStatus) {
             return done({ outcome: "changed", status: run.status });
           }
@@ -670,22 +673,43 @@ export function createMaintenanceRecoveryStore(
               { from: run.status, to: "stopping", evidence: { reason: "owner stop", heldFor } },
             );
           }
+          // The pause still holds: either is used at the next resume, never sooner.
+          const paused = await client.query<{ active: boolean }>(
+            `SELECT "active" FROM "maintenance_state" WHERE "id" = 'default'`,
+          );
+          const running = paused.rows[0]?.active === false;
+          if (command.basis === "owner-recheck") {
+            // The next reconcile pass (about every 30 s) asks the Fleet; allowed continues as usual.
+            await client.query(`UPDATE "runs" SET "error" = $2 WHERE "id" = $1`, [
+              run.id,
+              maintenanceAttention(OWNER_RECHECK_REASON),
+            ]);
+            return done(
+              {
+                outcome: "settled",
+                status: run.status,
+                reason: running
+                  ? "Checking with the Fleet; the result shows within a minute."
+                  : "Recorded. Fleet is paused: it is checked when you resume Fleet.",
+              },
+              {
+                from: run.status,
+                to: OWNER_RECHECK_REASON,
+                evidence: { reason: "owner recheck", heldFor },
+              },
+            );
+          }
           await client.query(`UPDATE "runs" SET "error" = $2 WHERE "id" = $1`, [
             run.id,
             maintenanceAttention(OWNER_OVERRIDE_REASON),
           ]);
-          // The pause still holds: the override is used at the next resume, never sooner.
-          const paused = await client.query<{ active: boolean }>(
-            `SELECT "active" FROM "maintenance_state" WHERE "id" = 'default'`,
-          );
           return done(
             {
               outcome: "settled",
               status: run.status,
-              reason:
-                paused.rows[0]?.active === false
-                  ? "Recorded. It continues on the next pass."
-                  : "Recorded. Fleet is paused: it continues when you resume Fleet.",
+              reason: running
+                ? "Recorded. It continues on the next pass."
+                : "Recorded. Fleet is paused: it continues when you resume Fleet.",
             },
             {
               from: run.status,

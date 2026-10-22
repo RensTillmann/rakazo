@@ -100,12 +100,16 @@ export const FLEET_AUTHORITY_TIMEOUT_MS = 90_000;
 export const FLEET_AUTHORITY_RETRY_INTERVAL_MS = 5 * 60_000;
 /** …for this long after it was first held; then it waits for the owner. */
 export const FLEET_AUTHORITY_RETRY_WINDOW_MS = 24 * 60 * 60_000;
+/** A binding the Fleet could not find is asked about again hourly, in case a Fleet rule changed. */
+export const FLEET_BINDING_RETRY_INTERVAL_MS = 60 * 60_000;
 
 /**
  * Whether a run held for maintenance attention is validated again now. A Fleet check that did not
- * answer is retried every FLEET_AUTHORITY_RETRY_INTERVAL_MS for FLEET_AUTHORITY_RETRY_WINDOW_MS
- * from when it was first held (`heldSince`); a binding the Fleet reports unavailable or invalid
- * is a real evidence problem and is never retried; any other hold is re-checked on every pass.
+ * answer is retried every FLEET_AUTHORITY_RETRY_INTERVAL_MS, and a binding the Fleet could not find
+ * (`binding-unavailable`) every FLEET_BINDING_RETRY_INTERVAL_MS, both for
+ * FLEET_AUTHORITY_RETRY_WINDOW_MS from when it was first held (`heldSince`). A binding the Fleet
+ * reports invalid is a real evidence problem and is never retried; any other hold is re-checked
+ * on every pass.
  */
 export function authorityRetry(
   reason: string | undefined,
@@ -114,12 +118,14 @@ export function authorityRetry(
   now: number,
 ): "now" | "later" | "never" {
   if (!reason) return "now";
-  if (isOwnerHeldAuthorityReason(reason)) return "never";
-  if (!isRetriedAuthorityReason(reason)) return "now";
+  const bindingUnavailable = /^(fleet-authority-)?binding-unavailable$/.test(reason);
+  if (isOwnerHeldAuthorityReason(reason) && !bindingUnavailable) return "never";
+  if (!bindingUnavailable && !isRetriedAuthorityReason(reason)) return "now";
   if (now - heldSince.getTime() > FLEET_AUTHORITY_RETRY_WINDOW_MS) return "never";
-  return lastTried !== undefined && now - lastTried < FLEET_AUTHORITY_RETRY_INTERVAL_MS
-    ? "later"
-    : "now";
+  const interval = bindingUnavailable
+    ? FLEET_BINDING_RETRY_INTERVAL_MS
+    : FLEET_AUTHORITY_RETRY_INTERVAL_MS;
+  return lastTried !== undefined && now - lastTried < interval ? "later" : "now";
 }
 // The Fleet service's documented private deployment endpoint, not a model/tool-provided URL.
 const FLEET_AUTHORITY_ENDPOINT = "http://fleet-service:8790/mcp";

@@ -133,7 +133,7 @@ describe("FleetRecoveryList", () => {
       });
     vi.mocked(readFleetRecovery).mockResolvedValue({
       items: [
-        held("bound", "fleet-authority-binding-invalid", ["continue", "stop"]),
+        held("bound", "fleet-authority-binding-invalid", ["recheck", "continue", "stop"]),
         held("retried", "fleet-authority-verifier-unavailable", []),
       ],
     });
@@ -148,7 +148,7 @@ describe("FleetRecoveryList", () => {
       [...container.querySelectorAll("li")].find((li) => li.textContent?.includes(`run ${id}`))!;
     const buttons = (id: string) =>
       [...row(id).querySelectorAll("button")].map((b) => b.textContent);
-    expect(buttons("bound")).toEqual(["Let it continue…", "Stop it…"]);
+    expect(buttons("bound")).toEqual(["Check again", "Let it continue…", "Stop it…"]);
     expect(buttons("retried")).toEqual([]);
 
     // Each asks first; confirming sends the owner's override for that run only.
@@ -156,6 +156,16 @@ describe("FleetRecoveryList", () => {
       const button = [...row(id).querySelectorAll("button")].find((b) => b.textContent === text)!;
       await act(async () => button.click());
     };
+    // Checking again needs no confirmation: it only asks the Fleet.
+    await click("bound", "Check again");
+    expect(settleFleetRecovery).toHaveBeenLastCalledWith("space-1", {
+      requestId: expect.any(String),
+      basis: "owner-recheck",
+      kind: "run",
+      id: "bound",
+      expectedStatus: "maintenance_paused",
+    });
+    vi.mocked(settleFleetRecovery).mockClear();
     await click("bound", "Let it continue…");
     expect(settleFleetRecovery).not.toHaveBeenCalled();
     await click("bound", "Confirm: let it continue");
