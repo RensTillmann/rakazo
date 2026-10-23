@@ -232,67 +232,19 @@ export function askCaseRef(text: string): number | null {
 }
 
 /**
- * Words of an option that only invites a typed answer instead of offering one. A label counts as
- * free text when every word is in this set ("Type it here", "Please type it here", "Other",
- * "Something else (describe it)", "Let me explain", "Tell you in chat", "Specify…", "None of
- * these"); one word outside it makes the label concrete ("Explain the delay", "Specify SPF",
- * "Tell the customer", "Hold").
- */
-const FREE_TEXT_WORDS: Record<string, true> = Object.fromEntries(
-  "type typing write describe explain specify tell say let me you i i'll will it this that here below please your own words answer in the chat text free other others something else none of these above custom myself"
-    .split(" ")
-    .map((word) => [word, true]),
-);
-
-function invitesTyping(option: string): boolean {
-  const words = option
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}']+/gu, " ")
-    .trim()
-    .split(/\s+/);
-  return words[0] !== "" && words.every((word) => FREE_TEXT_WORDS[word] === true);
-}
-
-/** Question text that asks the user to type instead of choosing (D8: never to Rens). */
-const OPEN_QUESTION_TEXT = /type it here|type your answer|what should change/i;
-
-/** A listed item: a line starting with "- " or "1." / "1)". */
-const LISTED_ITEM = /^\s*(?:-\s+|\d+[.)]\s+)\S/gm;
-
-/**
- * D6: a case decision card needs at least two concrete options to choose from; an option that only
- * invites free text does not count. A question that asks the user to type ("type it here", "type your
- * answer", "what should change") is allowed only with two concrete options and a listed set of fixes
- * in the text (two "- " or numbered lines). To-do cards (`prerequisites`) are unaffected: their options
- * are the to-do option and whatever else the bot offers. Secret cards come from `request_secret`, not
- * here. Returns the refusal, naming the rule, or null when the card may be asked.
+ * D6: a case decision card (head read by `askCaseRef`) needs at least two options, whatever their
+ * labels; no check reads the wording of the question or the options (Rens, 23 Oct 2026). To-do cards
+ * (`prerequisites`) are unaffected; secret cards come from `request_secret`, not here. Returns the
+ * refusal, naming the rule, or null when the card may be asked.
  */
 export function caseCardOptionsRefusal(
   question: string,
   options: readonly string[],
   todo: boolean,
 ): string | null {
-  if (todo || askCaseRef(question) === null) return null;
-  const freeText = options.filter(invitesTyping);
-  const concrete = options.length - freeText.length;
-  const openQuestion = OPEN_QUESTION_TEXT.exec(question)?.[0];
-  const listed = (question.match(LISTED_ITEM) ?? []).length >= 2;
-  if (concrete >= 2 && (openQuestion === undefined || listed)) return null;
-  const given =
-    options.length === 0
-      ? "none were given"
-      : `${concrete} ${concrete === 1 ? "was" : "were"} given${
-          freeText.length === 0
-            ? ""
-            : `; ${freeText.map((option) => `"${option}"`).join(", ")} only ${
-                freeText.length === 1 ? "invites" : "invite"
-              } typing`
-        }`;
-  const open =
-    openQuestion === undefined
-      ? ""
-      : ` The question says "${openQuestion}", so it must also list the concrete fixes (two or more "- " or numbered lines)${concrete >= 2 ? ", which it does not" : ""}.`;
-  return `ask_user refused (rule D6, case decision cards): a "Case <n>" card needs at least two concrete options to choose from, but ${given}.${open} Offer the concrete choices (for a reply: the draft, the customer's asks and 2–3 concrete fixes), never "type it here" or an open question.`;
+  if (todo || askCaseRef(question) === null || options.length >= 2) return null;
+  const given = options.length === 0 ? "none were given" : "only one was given";
+  return `ask_user refused (rule D6, case decision cards): a "Case <n>" card needs at least two options to choose from, but ${given}. Offer the concrete choices (for a reply: the draft, the customer's asks and 2–3 concrete fixes).`;
 }
 
 export const MessageBlock = z.discriminatedUnion("kind", [

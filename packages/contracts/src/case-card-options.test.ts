@@ -20,96 +20,33 @@ describe("case card head (one rule for dedupe, recovery and D6)", () => {
 
 describe("case decision cards (D6)", () => {
   it("refuses a case card with no options or one option, naming the rule", () => {
-    expect(caseCardOptionsRefusal("Case 311 · what should change?", [], false)).toMatch(REFUSED);
-    expect(caseCardOptionsRefusal("Case 311 · what should change?", [], false)).toContain(
-      "none were given",
-    );
+    const none = caseCardOptionsRefusal("Case 311 · what should change?", [], false);
+    expect(none).toMatch(REFUSED);
+    expect(none).toContain("none were given");
     for (const question of ["URGENT · Case 311 · send it?", "Case 311: send it?"]) {
       const one = caseCardOptionsRefusal(question, ["Send"], false);
       expect(one).toMatch(REFUSED);
-      expect(one).toContain("1 was given");
+      expect(one).toContain("only one was given");
     }
   });
 
-  it("does not count an option that only invites typing", () => {
-    for (const filler of [
-      "Type it here",
-      "Type your answer below",
-      "Other",
-      "Other…",
-      "Something else",
-      "Something else (describe it)",
-      "Let me explain",
-      "I'll describe it",
-      "None of these",
-      "Free text",
-      "Please type it here",
-      "Tell you in chat",
-      "Specify…",
-    ]) {
-      const refusal = caseCardOptionsRefusal(
-        "Case 311 · reply change?",
-        ["Send as is", filler],
-        false,
-      );
-      expect(refusal).toMatch(REFUSED);
-      expect(refusal).toContain(`"${filler}" only invites typing`);
-    }
-  });
-
-  it("counts short concrete options, including ones with a telling verb", () => {
-    for (const second of [
-      "Explain the delay",
-      "Specify SPF",
-      "Tell the customer",
-      "Describe the 1 Oct bulk update",
-      "Write off the invoice",
-      "Others pay",
-      "Hold",
+  it("accepts two options whatever their labels, and never reads the wording", () => {
+    for (const options of [
+      [
+        "Explain the 1 Oct bulk update and restore the licences",
+        "Ask the customer for the invoice",
+      ],
+      ["Send as is", "Type it here"],
+      ["Other", "Something else"],
     ]) {
       expect(
-        caseCardOptionsRefusal("Case 311 · reply: which fix?", ["Send as is", second], false),
+        caseCardOptionsRefusal(
+          "Case 311 · reply: what should change? Type it here.",
+          options,
+          false,
+        ),
       ).toBeNull();
     }
-    expect(
-      caseCardOptionsRefusal("Case 311 · send?", ["Send as is", "Type it here", "Hold"], false),
-    ).toBeNull();
-  });
-
-  const fixes =
-    "Case 311 · reply: what should change?\n- Explain the 1 Oct bulk update\n- Restore the 23 licences";
-  const concrete = ["Explain the bulk update", "Restore the licences"];
-
-  it.each(["Type it here", "type your answer", "What should change"])(
-    "refuses a question saying %j unless the text lists concrete fixes",
-    (phrase) => {
-      const bare = caseCardOptionsRefusal(`Case 311 · reply: ${phrase}?`, concrete, false);
-      expect(bare).toMatch(REFUSED);
-      expect(bare).toContain(`The question says "${phrase}"`);
-      expect(bare).toContain("which it does not");
-      expect(
-        caseCardOptionsRefusal(`Case 311 · reply: ${phrase}?\n1. Fix A\n2. Fix B`, concrete, false),
-      ).toBeNull();
-    },
-  );
-
-  it("refuses an open question with listed fixes but a free-text option, naming both", () => {
-    const refusal = caseCardOptionsRefusal(fixes, ["Send as is", "Type it here"], false);
-    expect(refusal).toMatch(REFUSED);
-    expect(refusal).toContain('"Type it here" only invites typing');
-    expect(refusal).toContain('The question says "what should change"');
-    expect(refusal).not.toContain("which it does not");
-  });
-
-  it("asks an open question whose text lists two fixes with concrete options", () => {
-    expect(caseCardOptionsRefusal(fixes, concrete, false)).toBeNull();
-    expect(
-      caseCardOptionsRefusal(
-        "Case 311 · reply: what should change?\n- only one fix",
-        concrete,
-        false,
-      ),
-    ).toMatch(REFUSED);
   });
 
   it("leaves to-do cards and ordinary questions alone", () => {
